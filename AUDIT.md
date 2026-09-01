@@ -437,17 +437,105 @@ these six names, so no change to the data model is required.
 
 ---
 
-## 16. Still not covered
+## 16. Design mapping — swept from the live catalogue
 
-- **Design to collection mapping.** 106 of 188 designs are attributable to a
-  collection from the ten landing pages. The remaining 82 - including everything
-  in Fruit Punch, Stripes and Linea - have no landing page to read it from.
-  Needed before a faithful seed.
-- **Per-design case-type availability.** Which of the six constructions each
-  design is actually sold in. The seed currently assumes it.
+Rather than infer collection membership from the ten landing pages (which only
+covered 106 designs), the whole catalogue was swept through the public Store
+API. `_fields` keeps each page small and every product exposes its design, case
+type, device and categories:
+
+```
+/wp-json/wc/store/v1/products?per_page=100&page=N
+  &_fields=name,attributes,categories
+```
+
+**133 pages, 13,281 products, 181 designs.** Read-only throughout.
+
+### Case types per design, from live products
+
+| Case type | Designs sold in it |
+| --- | --- |
+| Signature | 165 |
+| Elite Clear | 131 |
+| Armor Black | 109 |
+| Armor Clear | 104 |
+| Alcantara | 11 |
+| Essentials | **5** |
+
+Essentials is nearly unused — five designs. Worth knowing before it is treated
+as a headline construction.
+
+Designs by how many constructions they are sold in: 103 in four, 7 in three,
+21 in two, **50 in only one**.
+
+### Collections, with design counts
+
+| Collection | Designs |
+| --- | --- |
+| Florayn Garage, Frequency, Muse Marvel, Van Gogh Dreams | 12 each |
+| Alcantara, Leopard, Wild Instinct | 11 each |
+| Fruit Punch | 10 |
+| Bug Life, Checkmate, Florayn Blooms | 8 each |
+| Stripes | 7 |
+
+**Twelve, not eleven.** "Alcantara" is a collection of 11 colourways
+(Alcantara Black, Brown, Cyan, Dark Green, Dirty Pink, Gray, Orange, Purple
+Blue, Sea Blue, Sierra Blue, Wine Red) *and* a case type. Both are real and
+they are different things.
+
+**60 of the 181 designs are filed under no collection at all.** They are live
+and sold; they simply have no collection category. They seed without one.
+
+---
+
+## 17. Seeded
+
+`designs.ts` is now generated from the sweep. Seed result:
+
+| | Live | Seeded |
+| --- | --- | --- |
+| Designs | 181 | **181** |
+| Case types | 6 | **6** |
+| Products | 13,281 flat | **525** (design × case type) |
+| Collections | 12 | **12** |
+
+Products per case type match the live distribution exactly: Signature 165,
+Elite Clear 131, Armor Black 109, Armor Clear 104, Alcantara 11, Essentials 5.
+525 = the sum of each design's real case-type count, so no product exists that
+the live site does not sell.
+
+22,718 variants across 525 products, versus 13,281 flat products live.
+
+Excluded and verified absent: the 7 Linea designs and "Sunny Streett".
+
+### Count reconciliation
+
+The brief said 180 designs. It is **181**:
+
+```
+189  terms in pa_more-designs
+  -1  Sunny Streett (typo, no products)
+= 188
+  -7  Linea (never launched, no products)
+= 181
+```
+
+181 is also exactly the number of terms with at least one product, which is an
+independent check. The 180 figure looks like 188 − 8, where the 8 empty terms
+already included Sunny Streett, subtracting it twice.
+
+---
+
+## 18. Still not covered
+
+- **Design descriptions.** The live site holds copy per product, not per
+  design, so there is nothing design-level to import. Seeded designs have no
+  description.
 - **Alcantara price.**
-- **WooCommerce email settings** and **hand-made coupons** - options/posts
+- **WooCommerce email settings** and **hand-made coupons** — options/posts
   tables, not exposed read-only. Left as gaps by instruction.
-- **Product page section behaviour** - Pairs well with, Frequently bought
+- **Product page section behaviour** — Pairs well with, Frequently bought
   together, bundle offers, gallery/video.
 - **Account and blog page copy.**
+- **Per-design device availability.** The sweep collected it; the seed still
+  derives devices from case-type compatibility rather than per design.

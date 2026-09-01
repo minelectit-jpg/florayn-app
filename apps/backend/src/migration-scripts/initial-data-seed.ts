@@ -285,9 +285,9 @@ export default async function initialDataSeed({
     DESIGNS.map((design, index) => ({
       slug: design.slug,
       name: design.name,
-      description: design.description,
+      description: null,
       theme: design.theme,
-      artist: design.artist,
+      artist: null,
       sku_code: design.sku_code,
       sort_order: index,
       hero_image_url: placeholderImage(design.slug, design.name),
@@ -321,7 +321,15 @@ export default async function initialDataSeed({
     categories.map((category: any) => [category.handle, category])
   )
 
-  const themes = [...new Set(DESIGNS.map((design) => design.theme))]
+  // 60 of the 181 designs are filed under no collection on the live site, so
+  // only the real collection names become Medusa collections.
+  const themes = [
+    ...new Set(
+      DESIGNS.map((design) => design.theme).filter(
+        (theme): theme is string => Boolean(theme)
+      )
+    ),
+  ]
   const { result: collections } = await createCollectionsWorkflow(container).run(
     {
       input: {
@@ -361,10 +369,12 @@ export default async function initialDataSeed({
         // This handle is the /product/<slug>/ URL. Keep the shape stable.
         handle: `${design.slug}-${caseTypeSlug}`,
         subtitle: caseTypeSeed.name,
-        description: `${design.description}\n\n${caseTypeSeed.description}`,
+        description: caseTypeSeed.description,
         status: ProductStatus.PUBLISHED,
         shipping_profile_id: shippingProfile.id,
-        collection_id: collectionByTitle.get(design.theme)!.id,
+        ...(design.theme
+          ? { collection_id: collectionByTitle.get(design.theme)!.id }
+          : {}),
         category_ids: [
           categoryByHandle.get(caseTypeSlug)!.id,
           ...families.map(
@@ -381,8 +391,7 @@ export default async function initialDataSeed({
           design_name: design.name,
           case_type_slug: caseTypeSlug,
           case_type_name: caseTypeSeed.name,
-          theme: design.theme,
-          artist: design.artist,
+          ...(design.theme ? { theme: design.theme } : {}),
         },
         options: [
           {

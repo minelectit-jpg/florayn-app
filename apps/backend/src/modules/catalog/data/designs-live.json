@@ -1,963 +1,2408 @@
 {
-  "source": "florayn.com pa_more-designs via WooCommerce Store API (read-only)",
-  "endpoint": "/wp-json/wc/store/v1/products/attributes/2/terms?hide_empty=false",
-  "terms_in_taxonomy": 189,
-  "excluded": [
-    {
-      "name": "Sunny Streett",
-      "reason": "typo duplicate of Sunny Street; has no products"
-    }
-  ],
-  "designs": 188,
-  "without_products": [
-    "Linea Espresso",
-    "Linea Heather",
-    "Linea Ivory",
-    "Linea Mint",
-    "Linea Olive",
-    "Linea Periwinkle",
-    "Linea Ruby"
-  ],
-  "list": [
-    {
-      "name": "Alcantara Black",
-      "slug": "alcantara-black",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Brown",
-      "slug": "alcantara-brown",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Cyan",
-      "slug": "alcantara-cyan",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Dark Green",
-      "slug": "alcantara-dark-green",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Dirty Pink",
-      "slug": "alcantara-dirty-pink",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Gray",
-      "slug": "alcantara-gray",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Orange",
-      "slug": "alcantara-orange",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Purple Blue",
-      "slug": "alcantara-purple-blue",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Sea Blue",
-      "slug": "alcantara-sea-blue",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Sierra Blue",
-      "slug": "alcantara-sierra-blue",
-      "has_products": true
-    },
-    {
-      "name": "Alcantara Wine Red",
-      "slug": "alcantara-wine-red",
-      "has_products": true
-    },
-    {
-      "name": "Alien Abduction",
-      "slug": "alien-abduction",
-      "has_products": true
-    },
-    {
-      "name": "Amber Leopard",
-      "slug": "amber-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Amplitude",
-      "slug": "amplitude",
-      "has_products": true
-    },
-    {
-      "name": "Ant Stripes",
-      "slug": "ant-stripes",
-      "has_products": true
-    },
-    {
-      "name": "Arctic Leopard",
-      "slug": "arctic-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Banana Bliss",
-      "slug": "banana-bliss",
-      "has_products": true
-    },
-    {
-      "name": "Beacon of Dusk",
-      "slug": "beacon-of-dusk",
-      "has_products": true
-    },
-    {
-      "name": "Beetle Shadow",
-      "slug": "beetle-shadow",
-      "has_products": true
-    },
-    {
-      "name": "Berry Pop",
-      "slug": "berry-pop",
-      "has_products": true
-    },
-    {
-      "name": "Blackberry Pinstripe",
-      "slug": "blackberry-pinstripe",
-      "has_products": true
-    },
-    {
-      "name": "Blackout",
-      "slug": "blackout",
-      "has_products": true
-    },
-    {
-      "name": "Blue Belle",
-      "slug": "blue-belle",
-      "has_products": true
-    },
-    {
-      "name": "Blue Bloom",
-      "slug": "blue-bloom",
-      "has_products": true
-    },
-    {
-      "name": "Blush Leopard",
-      "slug": "blush-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Blush Poppy",
-      "slug": "blush-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Candy Hills",
-      "slug": "candy-hills",
-      "has_products": true
-    },
-    {
-      "name": "Caterpillar Maze",
-      "slug": "caterpillar-maze",
-      "has_products": true
-    },
-    {
-      "name": "Celestial Silence",
-      "slug": "celestial-silence",
-      "has_products": true
-    },
-    {
-      "name": "Cherry Cordial",
-      "slug": "cherry-cordial",
-      "has_products": true
-    },
-    {
-      "name": "Cherry Swirl",
-      "slug": "cherry-swirl",
-      "has_products": true
-    },
-    {
-      "name": "Citrus Splash",
-      "slug": "citrus-splash",
-      "has_products": true
-    },
-    {
-      "name": "City Lights",
-      "slug": "city-lights",
-      "has_products": true
-    },
-    {
-      "name": "Classic Leopard",
-      "slug": "classic-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Clay",
-      "slug": "clay",
-      "has_products": true
-    },
-    {
-      "name": "Cloudwalker",
-      "slug": "cloudwalker",
-      "has_products": true
-    },
-    {
-      "name": "Clover Field",
-      "slug": "clover-field",
-      "has_products": true
-    },
-    {
-      "name": "Cobalt Nova",
-      "slug": "cobalt-nova",
-      "has_products": true
-    },
-    {
-      "name": "Coco Vibe",
-      "slug": "coco-vibe",
-      "has_products": true
-    },
-    {
-      "name": "Coral Crush",
-      "slug": "coral-crush",
-      "has_products": true
-    },
-    {
-      "name": "Cottage Glow",
-      "slug": "cottage-glow",
-      "has_products": true
-    },
-    {
-      "name": "Cow Hide",
-      "slug": "cow-hide",
-      "has_products": true
-    },
-    {
-      "name": "Crimson Pop",
-      "slug": "crimson-pop",
-      "has_products": true
-    },
-    {
-      "name": "Croc Scale",
-      "slug": "croc-scale",
-      "has_products": true
-    },
-    {
-      "name": "Crossing Dreams",
-      "slug": "crossing-dreams",
-      "has_products": true
-    },
-    {
-      "name": "Dalmatian Dot",
-      "slug": "dalmatian-dot",
-      "has_products": true
-    },
-    {
-      "name": "Dark Muse",
-      "slug": "dark-muse",
-      "has_products": true
-    },
-    {
-      "name": "Dark Waves",
-      "slug": "dark-waves",
-      "has_products": true
-    },
-    {
-      "name": "Date Night",
-      "slug": "date-night",
-      "has_products": true
-    },
-    {
-      "name": "Dream Grove",
-      "slug": "dream-grove",
-      "has_products": true
-    },
-    {
-      "name": "Drift Dynasty",
-      "slug": "drift-dynasty",
-      "has_products": true
-    },
-    {
-      "name": "Edge of Light",
-      "slug": "edge-of-light",
-      "has_products": true
-    },
-    {
-      "name": "Elderberry",
-      "slug": "elderberry",
-      "has_products": true
-    },
-    {
-      "name": "Emerald Muse",
-      "slug": "emerald-muse",
-      "has_products": true
-    },
-    {
-      "name": "Evergreen",
-      "slug": "evergreen",
-      "has_products": true
-    },
-    {
-      "name": "Floral Leopard",
-      "slug": "floral-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Floral Pop",
-      "slug": "floral-pop",
-      "has_products": true
-    },
-    {
-      "name": "Forest Poppy",
-      "slug": "forest-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Frostbite",
-      "slug": "frostbite",
-      "has_products": true
-    },
-    {
-      "name": "Fur Friends",
-      "slug": "fur-friends",
-      "has_products": true
-    },
-    {
-      "name": "Game Night",
-      "slug": "game-night",
-      "has_products": true
-    },
-    {
-      "name": "Gear Heads",
-      "slug": "gear-heads",
-      "has_products": true
-    },
-    {
-      "name": "Giraffe Earth",
-      "slug": "giraffe-earth",
-      "has_products": true
-    },
-    {
-      "name": "Golden Hour",
-      "slug": "golden-hour",
-      "has_products": true
-    },
-    {
-      "name": "Golden Hour Street",
-      "slug": "golden-hour-street",
-      "has_products": true
-    },
-    {
-      "name": "Good Things Are Coming",
-      "slug": "good-things-are-coming",
-      "has_products": true
-    },
-    {
-      "name": "Grape Goo",
-      "slug": "grape-goo",
-      "has_products": true
-    },
-    {
-      "name": "Green Lotus",
-      "slug": "green-lotus",
-      "has_products": true
-    },
-    {
-      "name": "Heartbeat",
-      "slug": "heartbeat",
-      "has_products": true
-    },
-    {
-      "name": "Heartstorm",
-      "slug": "heartstorm",
-      "has_products": true
-    },
-    {
-      "name": "Hertz",
-      "slug": "hertz",
-      "has_products": true
-    },
-    {
-      "name": "Home Above",
-      "slug": "home-above",
-      "has_products": true
-    },
-    {
-      "name": "Honey Glow",
-      "slug": "honey-glow",
-      "has_products": true
-    },
-    {
-      "name": "Honeycomb Bee",
-      "slug": "honeycomb-bee",
-      "has_products": true
-    },
-    {
-      "name": "Indigo Leopard",
-      "slug": "indigo-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Jackfruit Jungle",
-      "slug": "jackfruit-jungle",
-      "has_products": true
-    },
-    {
-      "name": "Jade Coil",
-      "slug": "jade-coil",
-      "has_products": true
-    },
-    {
-      "name": "Legends",
-      "slug": "legends",
-      "has_products": true
-    },
-    {
-      "name": "Lemon Drip",
-      "slug": "lemon-drip",
-      "has_products": true
-    },
-    {
-      "name": "Lemon Drop",
-      "slug": "lemon-drop",
-      "has_products": true
-    },
-    {
-      "name": "Leopard Spots",
-      "slug": "leopard-spots",
-      "has_products": true
-    },
-    {
-      "name": "Lilac Dream",
-      "slug": "lilac-dream",
-      "has_products": true
-    },
-    {
-      "name": "Lime Sorbet",
-      "slug": "lime-sorbet",
-      "has_products": true
-    },
-    {
-      "name": "Linea Espresso",
-      "slug": "linea-espresso",
-      "has_products": false
-    },
-    {
-      "name": "Linea Heather",
-      "slug": "linea-heather",
-      "has_products": false
-    },
-    {
-      "name": "Linea Ivory",
-      "slug": "linea-ivory",
-      "has_products": false
-    },
-    {
-      "name": "Linea Mint",
-      "slug": "linea-mint",
-      "has_products": false
-    },
-    {
-      "name": "Linea Olive",
-      "slug": "linea-olive",
-      "has_products": false
-    },
-    {
-      "name": "Linea Periwinkle",
-      "slug": "linea-periwinkle",
-      "has_products": false
-    },
-    {
-      "name": "Linea Ruby",
-      "slug": "linea-ruby",
-      "has_products": false
-    },
-    {
-      "name": "Lone Spirit",
-      "slug": "lone-spirit",
-      "has_products": true
-    },
-    {
-      "name": "Look for the Good",
-      "slug": "look-for-the-good",
-      "has_products": true
-    },
-    {
-      "name": "Love is simple",
-      "slug": "love-is-simple",
-      "has_products": true
-    },
-    {
-      "name": "Love Notes",
-      "slug": "love-notes",
-      "has_products": true
-    },
-    {
-      "name": "Love Spell",
-      "slug": "love-spell",
-      "has_products": true
-    },
-    {
-      "name": "Lychee Love",
-      "slug": "lychee-love",
-      "has_products": true
-    },
-    {
-      "name": "Mango Stamp",
-      "slug": "mango-stamp",
-      "has_products": true
-    },
-    {
-      "name": "Mauve Mood",
-      "slug": "mauve-mood",
-      "has_products": true
-    },
-    {
-      "name": "Mauve Poppy",
-      "slug": "mauve-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Midnight Leopard",
-      "slug": "midnight-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Midnight Riders",
-      "slug": "midnight-riders",
-      "has_products": true
-    },
-    {
-      "name": "Midnight Sprinkle",
-      "slug": "midnight-sprinkle",
-      "has_products": true
-    },
-    {
-      "name": "Mint Melt",
-      "slug": "mint-melt",
-      "has_products": true
-    },
-    {
-      "name": "Mint Muse",
-      "slug": "mint-muse",
-      "has_products": true
-    },
-    {
-      "name": "Misty Poppy",
-      "slug": "misty-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Mocha Dot",
-      "slug": "mocha-dot",
-      "has_products": true
-    },
-    {
-      "name": "Moon Drift",
-      "slug": "moon-drift",
-      "has_products": true
-    },
-    {
-      "name": "Moon Kiss",
-      "slug": "moon-kiss",
-      "has_products": true
-    },
-    {
-      "name": "Moonwatcher",
-      "slug": "moonwatcher",
-      "has_products": true
-    },
-    {
-      "name": "Morning Sky",
-      "slug": "morning-sky",
-      "has_products": true
-    },
-    {
-      "name": "Moth Dust",
-      "slug": "moth-dust",
-      "has_products": true
-    },
-    {
-      "name": "Mount Glow",
-      "slug": "mount-glow",
-      "has_products": true
-    },
-    {
-      "name": "Night Hibiscus",
-      "slug": "night-hibiscus",
-      "has_products": true
-    },
-    {
-      "name": "Night Out",
-      "slug": "night-out",
-      "has_products": true
-    },
-    {
-      "name": "Night Sparks",
-      "slug": "night-sparks",
-      "has_products": true
-    },
-    {
-      "name": "Night’s Whisper",
-      "slug": "nights-whisper",
-      "has_products": true
-    },
-    {
-      "name": "No Limits",
-      "slug": "no-limits",
-      "has_products": true
-    },
-    {
-      "name": "Noir Bold",
-      "slug": "noir-bold",
-      "has_products": true
-    },
-    {
-      "name": "Obsidian Leopard",
-      "slug": "obsidian-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Olive Grove",
-      "slug": "olive-grove",
-      "has_products": true
-    },
-    {
-      "name": "Opening Night",
-      "slug": "opening-night",
-      "has_products": true
-    },
-    {
-      "name": "Orchid Leopard",
-      "slug": "orchid-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Oscillate",
-      "slug": "oscillate",
-      "has_products": true
-    },
-    {
-      "name": "Oxblood",
-      "slug": "oxblood",
-      "has_products": true
-    },
-    {
-      "name": "Peach Blossom",
-      "slug": "peach-blossom",
-      "has_products": true
-    },
-    {
-      "name": "Peppermint Twist",
-      "slug": "peppermint-twist",
-      "has_products": true
-    },
-    {
-      "name": "Phase",
-      "slug": "phase",
-      "has_products": true
-    },
-    {
-      "name": "Pineapple Bloom",
-      "slug": "pineapple-bloom",
-      "has_products": true
-    },
-    {
-      "name": "Pink Lemonade",
-      "slug": "pink-lemonade",
-      "has_products": true
-    },
-    {
-      "name": "Pink Muse",
-      "slug": "pink-muse",
-      "has_products": true
-    },
-    {
-      "name": "Pink Plumeria",
-      "slug": "pink-plumeria",
-      "has_products": true
-    },
-    {
-      "name": "Positive Heart",
-      "slug": "positive-heart",
-      "has_products": true
-    },
-    {
-      "name": "Pulse",
-      "slug": "pulse",
-      "has_products": true
-    },
-    {
-      "name": "Pure Heart",
-      "slug": "pure-heart",
-      "has_products": true
-    },
-    {
-      "name": "Purple Reign",
-      "slug": "purple-reign",
-      "has_products": true
-    },
-    {
-      "name": "Rain Ride",
-      "slug": "rain-ride",
-      "has_products": true
-    },
-    {
-      "name": "Raspberry Ripple",
-      "slug": "raspberry-ripple",
-      "has_products": true
-    },
-    {
-      "name": "Rebel Society",
-      "slug": "rebel-society",
-      "has_products": true
-    },
-    {
-      "name": "Red Lily",
-      "slug": "red-lily",
-      "has_products": true
-    },
-    {
-      "name": "Redshift",
-      "slug": "redshift",
-      "has_products": true
-    },
-    {
-      "name": "Reverb",
-      "slug": "reverb",
-      "has_products": true
-    },
-    {
-      "name": "Riptide",
-      "slug": "riptide",
-      "has_products": true
-    },
-    {
-      "name": "Road Trip",
-      "slug": "road-trip",
-      "has_products": true
-    },
-    {
-      "name": "Rose Fizz",
-      "slug": "rose-fizz",
-      "has_products": true
-    },
-    {
-      "name": "Ruby Poppy",
-      "slug": "ruby-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Safari Dusk",
-      "slug": "safari-dusk",
-      "has_products": true
-    },
-    {
-      "name": "Sahara Leopard",
-      "slug": "sahara-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Sandstone",
-      "slug": "sandstone",
-      "has_products": true
-    },
-    {
-      "name": "Sandstone Poppy",
-      "slug": "sandstone-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Sea Voyage",
-      "slug": "sea-voyage",
-      "has_products": true
-    },
-    {
-      "name": "Self Love",
-      "slug": "self-love",
-      "has_products": true
-    },
-    {
-      "name": "Shadow Leopard",
-      "slug": "shadow-leopard",
-      "has_products": true
-    },
-    {
-      "name": "Signal",
-      "slug": "signal",
-      "has_products": true
-    },
-    {
-      "name": "Silver Haze",
-      "slug": "silver-haze",
-      "has_products": true
-    },
-    {
-      "name": "Snow Speckle",
-      "slug": "snow-speckle",
-      "has_products": true
-    },
-    {
-      "name": "Soft Ivory Mist",
-      "slug": "soft-ivory-mist",
-      "has_products": true
-    },
-    {
-      "name": "Sonar",
-      "slug": "sonar",
-      "has_products": true
-    },
-    {
-      "name": "Star Village",
-      "slug": "star-village",
-      "has_products": true
-    },
-    {
-      "name": "Starlit Date",
-      "slug": "starlit-date",
-      "has_products": true
-    },
-    {
-      "name": "Static",
-      "slug": "static",
-      "has_products": true
-    },
-    {
-      "name": "Still Reflections",
-      "slug": "still-reflections",
-      "has_products": true
-    },
-    {
-      "name": "Strawberry Blush",
-      "slug": "strawberry-blush",
-      "has_products": true
-    },
-    {
-      "name": "Strawberry Melt",
-      "slug": "strawberry-melt",
-      "has_products": true
-    },
-    {
-      "name": "Sunburst",
-      "slug": "sunburst",
-      "has_products": true
-    },
-    {
-      "name": "Sunflower Bay",
-      "slug": "sunflower-bay",
-      "has_products": true
-    },
-    {
-      "name": "Sunny Street",
-      "slug": "sunny-street",
-      "has_products": true
-    },
-    {
-      "name": "Sunset Sunflowers",
-      "slug": "sunset-sunflowers",
-      "has_products": true
-    },
-    {
-      "name": "Sweet Crush",
-      "slug": "sweet-crush",
-      "has_products": true
-    },
-    {
-      "name": "The Getaway",
-      "slug": "the-getaway",
-      "has_products": true
-    },
-    {
-      "name": "Tiger Ash",
-      "slug": "tiger-ash",
-      "has_products": true
-    },
-    {
-      "name": "Timeless",
-      "slug": "timeless",
-      "has_products": true
-    },
-    {
-      "name": "Tiny Hearts",
-      "slug": "tiny-hearts",
-      "has_products": true
-    },
-    {
-      "name": "Tremor",
-      "slug": "tremor",
-      "has_products": true
-    },
-    {
-      "name": "Two Wheels",
-      "slug": "two-wheels",
-      "has_products": true
-    },
-    {
-      "name": "Urban Solitude",
-      "slug": "urban-solitude",
-      "has_products": true
-    },
-    {
-      "name": "Vertigo",
-      "slug": "vertigo",
-      "has_products": true
-    },
-    {
-      "name": "Violet Horizon",
-      "slug": "violet-horizon",
-      "has_products": true
-    },
-    {
-      "name": "Violet Veil",
-      "slug": "violet-veil",
-      "has_products": true
-    },
-    {
-      "name": "Watermelon Crush",
-      "slug": "watermelon-crush",
-      "has_products": true
-    },
-    {
-      "name": "Waveform",
-      "slug": "waveform",
-      "has_products": true
-    },
-    {
-      "name": "Wavelength",
-      "slug": "wavelength",
-      "has_products": true
-    },
-    {
-      "name": "White Magnolia",
-      "slug": "white-magnolia",
-      "has_products": true
-    },
-    {
-      "name": "Wild Orchid",
-      "slug": "wild-orchid",
-      "has_products": true
-    },
-    {
-      "name": "Winter Poppy",
-      "slug": "winter-poppy",
-      "has_products": true
-    },
-    {
-      "name": "Yellow Marigold",
-      "slug": "yellow-marigold",
-      "has_products": true
-    },
-    {
-      "name": "Zebra Rust",
-      "slug": "zebra-rust",
-      "has_products": true
-    },
-    {
-      "name": "Zebra Shadow",
-      "slug": "zebra-shadow",
-      "has_products": true
-    },
-    {
-      "name": "Zebra Stark",
-      "slug": "zebra-stark",
-      "has_products": true
-    }
-  ]
+ "source": "florayn.com, swept read-only via the public WooCommerce Store API",
+ "swept": {
+  "products": 13281,
+  "pages": 133
+ },
+ "designs": 181,
+ "note": "Reference data behind designs.ts. Linea and Sunny Streett are excluded there.",
+ "list": [
+  {
+   "name": "Alcantara Black",
+   "slug": "alcantara-black",
+   "products": 17,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Brown",
+   "slug": "alcantara-brown",
+   "products": 17,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Cyan",
+   "slug": "alcantara-cyan",
+   "products": 16,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Alcantara Dark Green",
+   "slug": "alcantara-dark-green",
+   "products": 17,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Dirty Pink",
+   "slug": "alcantara-dirty-pink",
+   "products": 16,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Alcantara Gray",
+   "slug": "alcantara-gray",
+   "products": 18,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Orange",
+   "slug": "alcantara-orange",
+   "products": 16,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Alcantara Purple Blue",
+   "slug": "alcantara-purple-blue",
+   "products": 15,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 15
+  },
+  {
+   "name": "Alcantara Sea Blue",
+   "slug": "alcantara-sea-blue",
+   "products": 17,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Sierra Blue",
+   "slug": "alcantara-sierra-blue",
+   "products": 17,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 17
+  },
+  {
+   "name": "Alcantara Wine Red",
+   "slug": "alcantara-wine-red",
+   "products": 16,
+   "collections": [
+    "Alcantara"
+   ],
+   "case_types": [
+    "Alcantara"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Alien Abduction",
+   "slug": "alien-abduction",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Amber Leopard",
+   "slug": "amber-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Amplitude",
+   "slug": "amplitude",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Ant Stripes",
+   "slug": "ant-stripes",
+   "products": 101,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Arctic Leopard",
+   "slug": "arctic-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Banana Bliss",
+   "slug": "banana-bliss",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Beacon of Dusk",
+   "slug": "beacon-of-dusk",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Beetle Shadow",
+   "slug": "beetle-shadow",
+   "products": 102,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Berry Pop",
+   "slug": "berry-pop",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Blackberry Pinstripe",
+   "slug": "blackberry-pinstripe",
+   "products": 86,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Blackout",
+   "slug": "blackout",
+   "products": 106,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 45
+  },
+  {
+   "name": "Blue Belle",
+   "slug": "blue-belle",
+   "products": 107,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Blue Bloom",
+   "slug": "blue-bloom",
+   "products": 108,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Blush Leopard",
+   "slug": "blush-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Blush Poppy",
+   "slug": "blush-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Candy Hills",
+   "slug": "candy-hills",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Caterpillar Maze",
+   "slug": "caterpillar-maze",
+   "products": 100,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 42
+  },
+  {
+   "name": "Celestial Silence",
+   "slug": "celestial-silence",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Cherry Cordial",
+   "slug": "cherry-cordial",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Cherry Swirl",
+   "slug": "cherry-swirl",
+   "products": 23,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 22
+  },
+  {
+   "name": "Citrus Splash",
+   "slug": "citrus-splash",
+   "products": 104,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "City Lights",
+   "slug": "city-lights",
+   "products": 105,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Classic Leopard",
+   "slug": "classic-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Clay",
+   "slug": "clay",
+   "products": 12,
+   "collections": [],
+   "case_types": [
+    "Essentials"
+   ],
+   "device_count": 12
+  },
+  {
+   "name": "Cloudwalker",
+   "slug": "cloudwalker",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Clover Field",
+   "slug": "clover-field",
+   "products": 101,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Cobalt Nova",
+   "slug": "cobalt-nova",
+   "products": 107,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 44
+  },
+  {
+   "name": "Coco Vibe",
+   "slug": "coco-vibe",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Coral Crush",
+   "slug": "coral-crush",
+   "products": 107,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Cottage Glow",
+   "slug": "cottage-glow",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Cow Hide",
+   "slug": "cow-hide",
+   "products": 76,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Crimson Pop",
+   "slug": "crimson-pop",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Croc Scale",
+   "slug": "croc-scale",
+   "products": 80,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Crossing Dreams",
+   "slug": "crossing-dreams",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Dalmatian Dot",
+   "slug": "dalmatian-dot",
+   "products": 79,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Dark Muse",
+   "slug": "dark-muse",
+   "products": 107,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Dark Waves",
+   "slug": "dark-waves",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Date Night",
+   "slug": "date-night",
+   "products": 48,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Dream Grove",
+   "slug": "dream-grove",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Drift Dynasty",
+   "slug": "drift-dynasty",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Edge of Light",
+   "slug": "edge-of-light",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Elderberry",
+   "slug": "elderberry",
+   "products": 12,
+   "collections": [],
+   "case_types": [
+    "Essentials"
+   ],
+   "device_count": 12
+  },
+  {
+   "name": "Emerald Muse",
+   "slug": "emerald-muse",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Evergreen",
+   "slug": "evergreen",
+   "products": 106,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Floral Leopard",
+   "slug": "floral-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Floral Pop",
+   "slug": "floral-pop",
+   "products": 101,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Forest Poppy",
+   "slug": "forest-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Frostbite",
+   "slug": "frostbite",
+   "products": 105,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Fur Friends",
+   "slug": "fur-friends",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Game Night",
+   "slug": "game-night",
+   "products": 48,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Gear Heads",
+   "slug": "gear-heads",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Giraffe Earth",
+   "slug": "giraffe-earth",
+   "products": 79,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Golden Hour",
+   "slug": "golden-hour",
+   "products": 48,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Golden Hour Street",
+   "slug": "golden-hour-street",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Good Things Are Coming",
+   "slug": "good-things-are-coming",
+   "products": 16,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Grape Goo",
+   "slug": "grape-goo",
+   "products": 23,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 22
+  },
+  {
+   "name": "Green Lotus",
+   "slug": "green-lotus",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Heartbeat",
+   "slug": "heartbeat",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Heartstorm",
+   "slug": "heartstorm",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Hertz",
+   "slug": "hertz",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Home Above",
+   "slug": "home-above",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Honey Glow",
+   "slug": "honey-glow",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Honeycomb Bee",
+   "slug": "honeycomb-bee",
+   "products": 100,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Indigo Leopard",
+   "slug": "indigo-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Jackfruit Jungle",
+   "slug": "jackfruit-jungle",
+   "products": 106,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Jade Coil",
+   "slug": "jade-coil",
+   "products": 106,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Legends",
+   "slug": "legends",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Lemon Drip",
+   "slug": "lemon-drip",
+   "products": 23,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 22
+  },
+  {
+   "name": "Lemon Drop",
+   "slug": "lemon-drop",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Leopard Spots",
+   "slug": "leopard-spots",
+   "products": 78,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Lilac Dream",
+   "slug": "lilac-dream",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Lime Sorbet",
+   "slug": "lime-sorbet",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Lone Spirit",
+   "slug": "lone-spirit",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Look for the Good",
+   "slug": "look-for-the-good",
+   "products": 16,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Love is simple",
+   "slug": "love-is-simple",
+   "products": 16,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Love Notes",
+   "slug": "love-notes",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Love Spell",
+   "slug": "love-spell",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Lychee Love",
+   "slug": "lychee-love",
+   "products": 104,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Mango Stamp",
+   "slug": "mango-stamp",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Mauve Mood",
+   "slug": "mauve-mood",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Mauve Poppy",
+   "slug": "mauve-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Midnight Leopard",
+   "slug": "midnight-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Midnight Riders",
+   "slug": "midnight-riders",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Midnight Sprinkle",
+   "slug": "midnight-sprinkle",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Mint Melt",
+   "slug": "mint-melt",
+   "products": 23,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 22
+  },
+  {
+   "name": "Mint Muse",
+   "slug": "mint-muse",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Misty Poppy",
+   "slug": "misty-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Mocha Dot",
+   "slug": "mocha-dot",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Moon Drift",
+   "slug": "moon-drift",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Moon Kiss",
+   "slug": "moon-kiss",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Moonwatcher",
+   "slug": "moonwatcher",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Morning Sky",
+   "slug": "morning-sky",
+   "products": 12,
+   "collections": [],
+   "case_types": [
+    "Essentials"
+   ],
+   "device_count": 12
+  },
+  {
+   "name": "Moth Dust",
+   "slug": "moth-dust",
+   "products": 101,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Mount Glow",
+   "slug": "mount-glow",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Night Hibiscus",
+   "slug": "night-hibiscus",
+   "products": 102,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Night Out",
+   "slug": "night-out",
+   "products": 48,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Night Sparks",
+   "slug": "night-sparks",
+   "products": 100,
+   "collections": [
+    "Bug Life"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Night’s Whisper",
+   "slug": "nights-whisper",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "No Limits",
+   "slug": "no-limits",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Noir Bold",
+   "slug": "noir-bold",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Obsidian Leopard",
+   "slug": "obsidian-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Olive Grove",
+   "slug": "olive-grove",
+   "products": 12,
+   "collections": [],
+   "case_types": [
+    "Essentials"
+   ],
+   "device_count": 12
+  },
+  {
+   "name": "Opening Night",
+   "slug": "opening-night",
+   "products": 49,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Orchid Leopard",
+   "slug": "orchid-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Oscillate",
+   "slug": "oscillate",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Oxblood",
+   "slug": "oxblood",
+   "products": 106,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Peach Blossom",
+   "slug": "peach-blossom",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Peppermint Twist",
+   "slug": "peppermint-twist",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Phase",
+   "slug": "phase",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Pineapple Bloom",
+   "slug": "pineapple-bloom",
+   "products": 93,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Pink Lemonade",
+   "slug": "pink-lemonade",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Pink Muse",
+   "slug": "pink-muse",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Pink Plumeria",
+   "slug": "pink-plumeria",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Positive Heart",
+   "slug": "positive-heart",
+   "products": 16,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Pulse",
+   "slug": "pulse",
+   "products": 100,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Pure Heart",
+   "slug": "pure-heart",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Purple Reign",
+   "slug": "purple-reign",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Rain Ride",
+   "slug": "rain-ride",
+   "products": 106,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Raspberry Ripple",
+   "slug": "raspberry-ripple",
+   "products": 90,
+   "collections": [
+    "Stripes"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 41
+  },
+  {
+   "name": "Rebel Society",
+   "slug": "rebel-society",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Red Lily",
+   "slug": "red-lily",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Redshift",
+   "slug": "redshift",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Reverb",
+   "slug": "reverb",
+   "products": 89,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Riptide",
+   "slug": "riptide",
+   "products": 107,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Road Trip",
+   "slug": "road-trip",
+   "products": 51,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Rose Fizz",
+   "slug": "rose-fizz",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Ruby Poppy",
+   "slug": "ruby-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Safari Dusk",
+   "slug": "safari-dusk",
+   "products": 80,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Sahara Leopard",
+   "slug": "sahara-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Sandstone",
+   "slug": "sandstone",
+   "products": 12,
+   "collections": [],
+   "case_types": [
+    "Essentials"
+   ],
+   "device_count": 12
+  },
+  {
+   "name": "Sandstone Poppy",
+   "slug": "sandstone-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Sea Voyage",
+   "slug": "sea-voyage",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Self Love",
+   "slug": "self-love",
+   "products": 16,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 16
+  },
+  {
+   "name": "Shadow Leopard",
+   "slug": "shadow-leopard",
+   "products": 107,
+   "collections": [
+    "Leopard"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Signal",
+   "slug": "signal",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Silver Haze",
+   "slug": "silver-haze",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Snow Speckle",
+   "slug": "snow-speckle",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Soft Ivory Mist",
+   "slug": "soft-ivory-mist",
+   "products": 50,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Sonar",
+   "slug": "sonar",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Star Village",
+   "slug": "star-village",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Starlit Date",
+   "slug": "starlit-date",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Static",
+   "slug": "static",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Still Reflections",
+   "slug": "still-reflections",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Strawberry Blush",
+   "slug": "strawberry-blush",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Strawberry Melt",
+   "slug": "strawberry-melt",
+   "products": 23,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 22
+  },
+  {
+   "name": "Sunburst",
+   "slug": "sunburst",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Sunflower Bay",
+   "slug": "sunflower-bay",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Sunny Street",
+   "slug": "sunny-street",
+   "products": 30,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 29
+  },
+  {
+   "name": "Sunset Sunflowers",
+   "slug": "sunset-sunflowers",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams",
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Sweet Crush",
+   "slug": "sweet-crush",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "The Getaway",
+   "slug": "the-getaway",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Tiger Ash",
+   "slug": "tiger-ash",
+   "products": 80,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Timeless",
+   "slug": "timeless",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Tiny Hearts",
+   "slug": "tiny-hearts",
+   "products": 52,
+   "collections": [],
+   "case_types": [
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 30
+  },
+  {
+   "name": "Tremor",
+   "slug": "tremor",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Two Wheels",
+   "slug": "two-wheels",
+   "products": 110,
+   "collections": [
+    "Florayn Garage"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Urban Solitude",
+   "slug": "urban-solitude",
+   "products": 28,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 27
+  },
+  {
+   "name": "Vertigo",
+   "slug": "vertigo",
+   "products": 107,
+   "collections": [
+    "Checkmate"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 46
+  },
+  {
+   "name": "Violet Horizon",
+   "slug": "violet-horizon",
+   "products": 107,
+   "collections": [
+    "Van Gogh Dreams"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 42
+  },
+  {
+   "name": "Violet Veil",
+   "slug": "violet-veil",
+   "products": 101,
+   "collections": [
+    "Muse Marvel"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Watermelon Crush",
+   "slug": "watermelon-crush",
+   "products": 107,
+   "collections": [
+    "Fruit Punch"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Waveform",
+   "slug": "waveform",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Wavelength",
+   "slug": "wavelength",
+   "products": 95,
+   "collections": [
+    "Frequency"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "White Magnolia",
+   "slug": "white-magnolia",
+   "products": 100,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Wild Orchid",
+   "slug": "wild-orchid",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Winter Poppy",
+   "slug": "winter-poppy",
+   "products": 29,
+   "collections": [],
+   "case_types": [
+    "Signature"
+   ],
+   "device_count": 28
+  },
+  {
+   "name": "Yellow Marigold",
+   "slug": "yellow-marigold",
+   "products": 101,
+   "collections": [
+    "Florayn Blooms"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Armor Clear",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 43
+  },
+  {
+   "name": "Zebra Rust",
+   "slug": "zebra-rust",
+   "products": 77,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  },
+  {
+   "name": "Zebra Shadow",
+   "slug": "zebra-shadow",
+   "products": 77,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 32
+  },
+  {
+   "name": "Zebra Stark",
+   "slug": "zebra-stark",
+   "products": 79,
+   "collections": [
+    "Wild Instinct"
+   ],
+   "case_types": [
+    "Armor Black",
+    "Elite Clear",
+    "Signature"
+   ],
+   "device_count": 34
+  }
+ ]
 }
