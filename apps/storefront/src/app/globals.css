@@ -150,3 +150,307 @@
     border-color: var(--color-danger);
   }
 }
+
+/*
+ * Product card, transcribed from the .florayn-shopcard rules measured on the
+ * live florayn.com collection pages. Kept as plain CSS rather than utility
+ * strings so the values stay legible against the source.
+ *
+ * Measured on the live site and matched here:
+ *   border      1px solid #E9E6EF, radius 10px, no shadow at rest
+ *   hover       translateY(-5px) + 0 18px 34px -18px rgba(26,22,37,.28)
+ *   summary     padding 12px 12px 16px, gap 2px, centred
+ *   title       17.5px / 600 / 1.3 / #1A1625
+ *   meta        13.5px / 400 / 1.45 / #6B6478, margin 2px 0 6px
+ *   price       17px / 700 / #1A1625
+ *   price row   flex, price flex:1 with padding-left 28px + centred text, so
+ *               the price is optically centred against the icon on the right
+ *   quick add   28px box, 23px glyph, transparent, hover #7C3AED
+ *   badges      absolute 15px/15px, 29px tall, radius 30px, 13px/500
+ *
+ * Two values below follow the spec given to me rather than the live site,
+ * which currently differs - see the README note:
+ *   image ratio 112% with contain + scale(.86), .9 on hover  (live: 1:1, 1.05)
+ *   gutters     14px                                          (live: 16/12/10)
+ */
+@layer components {
+  .fl-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  @media (min-width: 768px) {
+    .fl-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .fl-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  .fl-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    /* Equal height across the row. */
+    height: 100%;
+    background: #fff;
+    border: 1px solid #e9e6ef;
+    border-radius: 10px;
+    overflow: hidden;
+    transition:
+      transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .fl-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 18px 34px -18px rgba(26, 22, 37, 0.28);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fl-card,
+    .fl-card:hover,
+    .fl-card__img {
+      transition: none;
+      transform: none;
+    }
+  }
+
+  /* Ratio 112%: taller than square, so the phone sits in air. */
+  .fl-card__media {
+    position: relative;
+    width: 100%;
+    padding-top: 112%;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .fl-card__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* contain, not cover - the whole case must be visible, uncropped. */
+    object-fit: contain;
+    transform: scale(0.86);
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .fl-card:hover .fl-card__img {
+    transform: scale(0.9);
+  }
+
+  .fl-card__badges {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-start;
+  }
+
+  .fl-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 29px;
+    padding: 0 15px;
+    border-radius: 30px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .fl-badge--hot {
+    background: #ff7402;
+  }
+
+  .fl-badge--soldout {
+    background: #666;
+  }
+
+  .fl-badge--sale {
+    background: var(--color-purple);
+  }
+
+  .fl-card__summary {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 12px 16px;
+    text-align: center;
+  }
+
+  .fl-card__title {
+    margin: 0;
+    font-size: 17.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #1a1625;
+    /* One line only; long design names ellipsise. */
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+  }
+
+  .fl-card__meta {
+    margin: 2px 0 6px;
+    font-size: 13.5px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: #6b6478;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* Price row: price optically centred, icon flush right. */
+  .fl-card__price-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-top: auto;
+    padding-top: 2px;
+  }
+
+  .fl-card__price {
+    flex: 1 1 auto;
+    padding-left: 28px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+    color: #1a1625;
+    line-height: 1.2;
+  }
+
+  .fl-qadd-wrap {
+    flex: 0 0 28px;
+    display: flex;
+    justify-content: flex-end;
+    line-height: 0;
+  }
+
+  .fl-qadd {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    color: #1a1625;
+    cursor: pointer;
+    transition:
+      color 0.2s,
+      opacity 0.2s,
+      transform 0.2s;
+  }
+
+  .fl-qadd:hover,
+  .fl-qadd:focus-visible {
+    color: var(--color-purple);
+    transform: translateY(-1px) scale(1.06);
+  }
+
+  .fl-qadd.is-loading {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .fl-qadd.is-added {
+    color: var(--color-purple);
+  }
+
+  .fl-qadd__icon {
+    display: block;
+    width: 23px;
+    height: 23px;
+  }
+
+  /* Transparent 44x44 hit area for WCAG 2.5.8 without growing the glyph. */
+  .fl-qadd::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  @media (max-width: 767px) {
+    .fl-card__price {
+      padding-left: 22px;
+    }
+
+    .fl-qadd-wrap {
+      flex-basis: 22px;
+    }
+
+    .fl-qadd {
+      width: 22px;
+      height: 22px;
+    }
+
+    .fl-qadd__icon {
+      width: 19px;
+      height: 19px;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Filter pills. One shape for all three dropdowns so the row reads as a set,
+   * matching the Device / Case Type / Sort row on the live collection pages.
+   */
+  .fl-pill {
+    appearance: none;
+    width: 100%;
+    min-width: 10.5rem;
+    padding: 0.5rem 2rem 0.5rem 0.875rem;
+    background-color: #fff;
+    border: 1px solid #e9e6ef;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: #1a1625;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B6478' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1rem 1rem;
+    transition: border-color 0.15s;
+  }
+
+  .fl-pill:hover {
+    border-color: #d6d1e0;
+  }
+
+  .fl-pill:focus-visible {
+    border-color: var(--color-purple);
+  }
+
+  /* On a phone the pills wrap and sort takes its own full row. */
+  @media (max-width: 639px) {
+    .fl-pill {
+      min-width: 0;
+    }
+  }
+}

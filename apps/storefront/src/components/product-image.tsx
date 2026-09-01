@@ -8,8 +8,13 @@ import { useState } from "react"
  *
  * Three cases are handled: no image at all, an inline SVG data URI (what the
  * seed produces), and a real remote image. A remote image that fails to load -
- * an unreachable host, a dead URL - falls back to the same tinted block rather
- * than leaving a hole in the grid, which is how the picsum outage showed up.
+ * an unreachable host, a dead URL - falls back to a tinted block rather than
+ * leaving a hole in the grid, which is how the picsum outage showed up.
+ *
+ * `fillMode` decides who owns layout. "cover" is the default and applies the
+ * usual absolute/object-cover treatment. "absolute" hands positioning and
+ * object-fit entirely to `className`, which is what the product card needs so
+ * .fl-card__img can apply contain + scale without fighting a utility class.
  */
 export default function ProductImage({
   src,
@@ -18,6 +23,7 @@ export default function ProductImage({
   sizes,
   priority,
   className = "",
+  fillMode = "cover",
 }: {
   src?: string | null
   alt: string
@@ -26,11 +32,18 @@ export default function ProductImage({
   sizes?: string
   priority?: boolean
   className?: string
+  fillMode?: "cover" | "absolute"
 }) {
   const [failed, setFailed] = useState(false)
+  const owned = fillMode === "absolute"
 
   if (!src || failed) {
-    return <ImageFallback label={label ?? alt} className={className} />
+    return (
+      <ImageFallback
+        label={label ?? alt}
+        className={owned ? className : `absolute inset-0 ${className}`}
+      />
+    )
   }
 
   // next/image cannot optimise data URIs, and there is nothing to optimise.
@@ -40,7 +53,9 @@ export default function ProductImage({
       <img
         src={src}
         alt={alt}
-        className={`absolute inset-0 h-full w-full object-cover ${className}`}
+        className={
+          owned ? className : `absolute inset-0 h-full w-full object-cover ${className}`
+        }
         onError={() => setFailed(true)}
       />
     )
@@ -53,7 +68,7 @@ export default function ProductImage({
       fill
       sizes={sizes}
       priority={priority}
-      className={`object-cover ${className}`}
+      className={owned ? className : `object-cover ${className}`}
       onError={() => setFailed(true)}
     />
   )
@@ -92,7 +107,7 @@ function ImageFallback({
     <div
       role="img"
       aria-label={label}
-      className={`absolute inset-0 flex items-center justify-center ${className}`}
+      className={`flex items-center justify-center ${className}`}
       style={{
         backgroundImage: `linear-gradient(145deg, hsl(${hue} 18% ${lightness + 22}%), hsl(${hue} 24% ${lightness}%))`,
       }}

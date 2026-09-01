@@ -3,3 +3,7 @@ out/
 next-env.d.ts
 .env.local
 *.tsbuildinfo
+
+# Windows creates a file literally named "nul" if a command redirects to
+# /dev/null. It is a reserved device name and git cannot index it.
+nul

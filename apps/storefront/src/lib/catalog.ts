@@ -86,3 +86,9 @@ export async function getDeviceFamilyMap(): Promise<Record<string, string>> {
 
   return map
 }
+
+/** The full device list, in catalogue order, for the collection filter bar. */
+export async function getDeviceCatalog(): Promise<DeviceRecord[]> {
+  const data = await storeFetch<{ devices: DeviceRecord[] }>("/store/devices")
+  return data?.devices ?? []
+}

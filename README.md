@@ -309,3 +309,48 @@ font by name.
   system.
 - `components/ui/button.tsx` - every button and button-styled link. Variants:
   `primary` (purple), `ink`, `secondary` (outline), `ghost`.
+
+## Collection page and product card
+
+The card is transcribed from the `.florayn-shopcard` rules measured on the live
+florayn.com collection pages, not approximated. Values verified identical in
+both:
+
+| | Value |
+| --- | --- |
+| Card | `#fff`, 1px `#E9E6EF`, radius 10px, no shadow at rest |
+| Hover | `translateY(-5px)` + `0 18px 34px -18px rgba(26,22,37,.28)` |
+| Summary | padding `12px 12px 16px`, gap 2px, centred |
+| Title | 17.5px / 600 / 1.3 / `#1A1625`, clamped to one line |
+| Meta | 13.5px / 400 / 1.45 / `#6B6478`, margin `2px 0 6px`, one line |
+| Price | 17px / 700 / `#1A1625` |
+| Price row | price `flex:1` + `padding-left:28px` + centred, so it is optically centred against the icon |
+| Quick add | 28px box, 23px glyph, transparent, hover `#7C3AED` + `translateY(-1px) scale(1.06)` |
+| Tap target | transparent 44×44 `::before` (WCAG 2.5.8) |
+| Badges | absolute 15px/15px, 29px tall, radius 30px, 13px/500; Hot `#FF7402`, Sold out `#666` |
+
+**Two values follow the spec rather than the live site**, which currently
+differs:
+
+| | Spec (implemented) | Live site today |
+| --- | --- | --- |
+| Image | ratio 112%, `contain`, `scale(.86)` → `.9` hover | 1:1, `contain`, `scale(1.05)` hover |
+| Gutters | 14px at every breakpoint | 16px / 12px / 10px |
+
+Columns are 4 / 3 / 2, matching the live breakpoints.
+
+### Title splitting
+
+Product titles are `Design Name – Device Model` (live) or `Design Name - Case
+Type` (here). `lib/product-title.ts` splits on a dash **only when it has
+whitespace on both sides**, so `T-Shirt`, `Anti-Gravity Case` and `Cox's
+Bazar-1` survive intact. En dash, em dash and hyphen are all accepted.
+
+### Filter bar
+
+Device, Case Type and Sort as identical pills. Case Type is hidden for devices
+made in a single construction - AirPods, watch bands, wallets - rather than
+shown with one option. The device list is restricted to devices the collection
+actually stocks, and defaults to iPhone 17 Pro Max like the live site, which is
+what lets the meta line read "iPhone 17 Pro Max Case • Signature". Selecting a
+device also decides which variant the quick-add button adds.

@@ -59,7 +59,7 @@ export default async function HomePage() {
             <h2 className="display text-2xl md:text-3xl">New designs</h2>
             <span className="eyebrow">{count} products</span>
           </header>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="fl-grid">
             {featured.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
