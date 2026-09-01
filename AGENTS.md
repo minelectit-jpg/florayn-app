@@ -152,6 +152,30 @@ claude mcp add --transport http medusa https://docs.medusajs.com/mcp # or agent 
 - Running the test task without a reachable PostgreSQL — integration suites need a live DB.
 - Silencing `@medusajs/*` ESLint rules instead of fixing the underlying pattern.
 
+## The florayn.com MCP connector is READ-ONLY
+
+A Novamira WordPress MCP connector is attached to this session and it points
+at **florayn.com, the live production store** - not a staging copy. Use it to
+read only: products, orders, files, CSS, settings, design tokens.
+
+**Never write, edit, create, delete or execute anything through it.** The
+connector exposes unrestricted control of the live site, including
+`novamira/execute-php`, `novamira/write-file`, `novamira/edit-file`,
+`novamira/delete-file`, `novamira/run-wp-cli`, `woocommerce/product-create`,
+`woocommerce/product-update`, `woocommerce/product-delete`,
+`woocommerce/order-update-status`, `rank-math/fix-site-seo`, and the `set-*`,
+`save-design` and `skill-write` abilities. One call can damage live inventory
+or orders, and there is no undo.
+
+Safe to call: `*-query`, `novamira/read-file`, `novamira/list-directory`,
+`get-*`, `discover-abilities`, `novamira/agent-context`, `novamira/skill-get`,
+`gutenberg-get-*`, `gutenberg-list-*`, `novamira/list-design-library`.
+
+Reading the live site to copy its CSS or catalogue into this repo is the
+intended use. Changes belong in this repo, never on the live site. If a task
+looks like it needs a write, stop and ask - "make the live site match" is not
+authorisation.
+
 ## Off-Limits
 
 - `apps/backend/.medusa/`, `.next/`, `dist/`, `out/`, `.turbo/` — build output, excluded from the workspace and regenerated.
