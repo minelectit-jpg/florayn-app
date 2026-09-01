@@ -1,9 +1,10 @@
 import Link from "next/link"
 
+import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
 import QuickAdd from "@/components/quick-add"
 import type { StoreProduct, StoreVariant } from "@/lib/medusa"
-import { formatPrice, priceRange } from "@/lib/money"
+import { priceRange } from "@/lib/money"
 import { buildMetaLine, splitProductTitle } from "@/lib/product-title"
 
 export type CardBadge = { label: string; tone: "hot" | "soldout" | "sale" }
@@ -70,16 +71,25 @@ export default function ProductCard({
         </div>
 
         <div className="fl-card__summary">
-          <h3 className="fl-card__title">{designName}</h3>
-          {meta ? <p className="fl-card__meta">{meta}</p> : null}
+          {/* Title and meta share a wrapper, as they do on the live site,
+              so the summary has two flex children and therefore one 2px gap
+              rather than two. */}
+          <div className="fl-card__titles">
+            <h3 className="fl-card__title">{designName}</h3>
+            {meta ? <p className="fl-card__meta">{meta}</p> : null}
+          </div>
 
           <div className="fl-card__price-row">
             <span className="fl-card__price">
-              {range
-                ? range.min === range.max
-                  ? formatPrice(range.min)
-                  : `From ${formatPrice(range.min)}`
-                : "-"}
+              {range ? (
+                range.min === range.max ? (
+                  <Price amount={range.min} />
+                ) : (
+                  <>From <Price amount={range.min} /></>
+                )
+              ) : (
+                "-"
+              )}
             </span>
 
             <QuickAdd

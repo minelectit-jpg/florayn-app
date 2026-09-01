@@ -38,3 +38,32 @@ export function priceRange(
 
   return { min: Math.min(...amounts), max: Math.max(...amounts) }
 }
+
+/**
+ * Splits a price into the number and its currency symbol so the card can style
+ * them separately - florayn.com renders the symbol at weight 500 and .75
+ * opacity, lighter than the figure it follows.
+ *
+ * The live site writes the symbol after the number with two decimals
+ * ("1,400.00৳"), which is the WooCommerce/Bangladesh convention, so that is
+ * what this returns.
+ */
+export function splitPrice(
+  amount: number | null | undefined,
+  currencyCode = "bdt"
+): { value: string; symbol: string; suffix: boolean } {
+  if (amount == null || Number.isNaN(amount)) {
+    return { value: "-", symbol: "", suffix: true }
+  }
+
+  const value = amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+  if (currencyCode.toLowerCase() === "bdt") {
+    return { value, symbol: "৳", suffix: true }
+  }
+
+  return { value, symbol: currencyCode.toUpperCase(), suffix: false }
+}

@@ -21,7 +21,7 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur-sm">
-      <div className="mx-auto flex w-full max-w-[1180px] items-center gap-6 px-5 py-4 md:px-8">
+      <div className="mx-auto flex w-full max-w-[1470px] items-center gap-6 px-[15px] py-4 md:px-[30px]">
         <Link
           href="/"
           className="display shrink-0 text-[1.6rem] leading-none tracking-[0.02em]"
@@ -88,7 +88,7 @@ export default function SiteHeader() {
 
       {/* The case-type rail collapses to a scroller rather than a burger, so
           the constructions stay one tap away on a phone. */}
-      <nav className="flex gap-6 overflow-x-auto border-t border-line px-5 py-2.5 lg:hidden">
+      <nav className="flex gap-6 overflow-x-auto border-t border-line px-[15px] py-2.5 lg:hidden">
         {NAV.map((item) => {
           const isActive = pathname === item.href || `${pathname}/` === item.href
           return (

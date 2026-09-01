@@ -312,45 +312,58 @@ font by name.
 
 ## Collection page and product card
 
-The card is transcribed from the `.florayn-shopcard` rules measured on the live
-florayn.com collection pages, not approximated. Values verified identical in
-both:
+Transcribed from the CSS running on florayn.com's shop page, then verified by
+measuring both at a 1280px viewport. Every value below reads identically in
+both.
 
 | | Value |
 | --- | --- |
-| Card | `#fff`, 1px `#E9E6EF`, radius 10px, no shadow at rest |
-| Hover | `translateY(-5px)` + `0 18px 34px -18px rgba(26,22,37,.28)` |
-| Summary | padding `12px 12px 16px`, gap 2px, centred |
-| Title | 17.5px / 600 / 1.3 / `#1A1625`, clamped to one line |
-| Meta | 13.5px / 400 / 1.45 / `#6B6478`, margin `2px 0 6px`, one line |
-| Price | 17px / 700 / `#1A1625` |
-| Price row | price `flex:1` + `padding-left:28px` + centred, so it is optically centred against the icon |
-| Quick add | 28px box, 23px glyph, transparent, hover `#7C3AED` + `translateY(-1px) scale(1.06)` |
-| Tap target | transparent 44×44 `::before` (WCAG 2.5.8) |
-| Badges | absolute 15px/15px, 29px tall, radius 30px, 13px/500; Hot `#FF7402`, Sold out `#666` |
+| Grid | 4 cols / 16px; ≤1024px 3 cols / 12px; ≤767px 2 cols / 10px |
+| Card | `#FFFFFF`, 1px `#E9E6EF`, radius 10px, overflow hidden, flex column, height 100% |
+| Card transition | `transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s` |
+| Card hover | `translateY(-5px)`, `0 18px 34px -18px rgba(26,22,37,.28)` |
+| Image | no transform at rest, `scale(1.05)` on card hover, `transition transform .5s cubic-bezier(.2,.8,.2,1)` |
+| Thumbnail | background `#FFFFFF`, no radius |
+| Summary | `12px 12px 16px`, gap 2px, centred column; mobile `10px 8px 13px` |
+| Title | 600 / 17.5px / 1.3 / `#1A1625`, margin 0; mobile 15.5px |
+| Meta | 13.5px / 1.45 / `#6B6478`, margin `2px 0 6px` |
+| Price row | flex, align centre, width 100%, margin-top 2px |
+| Price | `flex 1 1 auto`, `padding-left 28px`, centred, 700 / 17px / `#1A1625` |
+| Currency symbol | weight 500, opacity .75 |
+| Icon wrap | `flex 0 0 28px`, justify flex-end, line-height 0 |
+| Bag button | 28×28, no background/border/radius/shadow, `#1A1625` at opacity .72 |
+| Bag transition | `color .2s, opacity .2s, transform .2s` |
+| Bag hover/focus | `#7C3AED`, opacity 1, `translateY(-1px) scale(1.06)` |
+| Added state | `#7C3AED` |
+| Glyph | 23×23; mobile button 22×22, glyph 19×19, price padding-left 22px, wrap basis 22px |
+| Tap target | invisible 44×44 `::before`, centred (WCAG 2.5.8) |
+| Badges | absolute 15/15, 29px tall, radius 30px, 13px/500; Hot `#FF7402`, Sold out `#666` |
 
-**Two values follow the spec rather than the live site**, which currently
-differs:
+Measured side by side at 1280px: card **289.17 × 399.49** here against
+**289.2 × 399.5** live.
 
-| | Spec (implemented) | Live site today |
-| --- | --- | --- |
-| Image | ratio 112%, `contain`, `scale(.86)` → `.9` hover | 1:1, `contain`, `scale(1.05)` hover |
-| Gutters | 14px at every breakpoint | 16px / 12px / 10px |
+Two structural details are load-bearing and easy to undo by accident:
 
-Columns are 4 / 3 / 2, matching the live breakpoints.
+- **Title and meta share a wrapper.** That gives the summary two flex children
+  and therefore one 2px gap. Making them direct children adds a second gap and
+  the card grows 2px taller.
+- **The page container is `max-width: 1470px` with 30px padding**, matching the
+  live `.container-xxl`. The card width falls out of this, so narrowing the
+  container changes the card.
 
 ### Title splitting
 
-Product titles are `Design Name – Device Model` (live) or `Design Name - Case
-Type` (here). `lib/product-title.ts` splits on a dash **only when it has
-whitespace on both sides**, so `T-Shirt`, `Anti-Gravity Case` and `Cox's
-Bazar-1` survive intact. En dash, em dash and hyphen are all accepted.
+Titles are `Design Name – Device Model` (live) or `Design Name - Case Type`
+(here). `lib/product-title.ts` splits on a dash **only when it has whitespace
+on both sides**, so `T-Shirt`, `Anti-Gravity Case` and `Cox's Bazar-1` survive.
+En dash, em dash and hyphen are all accepted.
 
 ### Filter bar
 
 Device, Case Type and Sort as identical pills. Case Type is hidden for devices
-made in a single construction - AirPods, watch bands, wallets - rather than
-shown with one option. The device list is restricted to devices the collection
-actually stocks, and defaults to iPhone 17 Pro Max like the live site, which is
-what lets the meta line read "iPhone 17 Pro Max Case • Signature". Selecting a
-device also decides which variant the quick-add button adds.
+made in one construction - AirPods, watch bands, wallets. The device list only
+offers devices the collection stocks and defaults to iPhone 17 Pro Max like the
+live site, which is what lets the meta line read
+"iPhone 17 Pro Max Case • Signature": a product here spans many devices, so
+without that choice there is no device to name. The chosen device also decides
+which variant quick-add adds.

@@ -20,7 +20,7 @@ const DEVICES = [
 export default function SiteFooter() {
   return (
     <footer className="mt-24 border-t border-line bg-surface">
-      <div className="mx-auto w-full max-w-[1180px] px-5 py-14 md:px-8">
+      <div className="mx-auto w-full max-w-[1470px] px-[15px] py-14 md:px-[30px]">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-3">
             <p className="display text-2xl leading-none">Florayn</p>

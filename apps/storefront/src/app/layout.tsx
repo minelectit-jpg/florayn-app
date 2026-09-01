@@ -53,7 +53,7 @@ export default function RootLayout({
         <CartProvider>
           <SiteHeader />
 
-          <main className="mx-auto min-h-[60vh] w-full max-w-[1180px] px-5 py-12 md:px-8 md:py-16">
+          <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-12 md:px-[30px] md:py-16">
             {children}
           </main>
 
