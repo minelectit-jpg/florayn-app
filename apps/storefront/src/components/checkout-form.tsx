@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import { Button, Spinner } from "@/components/ui/button"
 import { submitOrder } from "@/lib/cart"
 import type { DistrictsResponse } from "@/lib/checkout"
 import { formatPrice } from "@/lib/money"
@@ -156,14 +157,13 @@ export default function CheckoutForm({
     el?.scrollIntoView({ block: "center", behavior: "smooth" })
   }
 
-  const inputClass =
-    "mt-1 w-full border border-[var(--color-line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-ink)]"
+  const inputClass = "field-input mt-1.5"
 
   return (
     <form onSubmit={onSubmit} className="grid gap-10 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-6">
         <section className="space-y-4">
-          <h2 className="display text-xl">Delivery details</h2>
+          <h2 className="display text-2xl">Delivery details</h2>
 
           <Field
             id="full_name"
@@ -294,16 +294,16 @@ export default function CheckoutForm({
           </Field>
         </section>
 
-        <section className="space-y-3 border-t border-[var(--color-line)] pt-6">
-          <h2 className="display text-xl">Payment</h2>
-          <div className="flex items-start gap-3 border border-[var(--color-ink)] bg-white p-4">
+        <section className="space-y-4 border-t border-line pt-8">
+          <h2 className="display text-2xl">Payment</h2>
+          <div className="flex items-start gap-3 border border-purple bg-purple-tint p-5">
             <span
               aria-hidden="true"
-              className="mt-1 h-3 w-3 shrink-0 rounded-full bg-[var(--color-ink)]"
+              className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-purple"
             />
             <div>
               <p className="text-sm font-medium">Cash on Delivery</p>
-              <p className="text-xs text-[var(--color-ink-soft)]">
+              <p className="pt-0.5 text-xs text-ink-muted">
                 Pay the courier when your order arrives. No advance payment.
               </p>
             </div>
@@ -311,21 +311,19 @@ export default function CheckoutForm({
         </section>
       </div>
 
-      <aside className="space-y-4 self-start border border-[var(--color-line)] bg-white p-5">
-        <h2 className="display text-lg">Order summary</h2>
+      <aside className="space-y-5 self-start border border-line bg-surface p-6 lg:sticky lg:top-28">
+        <h2 className="eyebrow">Order summary</h2>
 
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <dt className="text-[var(--color-ink-soft)]">Subtotal</dt>
+            <dt className="text-ink-muted">Subtotal</dt>
             <dd>{formatPrice(subtotal, currencyCode)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-[var(--color-ink-soft)]">Delivery</dt>
+            <dt className="text-ink-muted">Delivery</dt>
             <dd>
               {!shippingKnown ? (
-                <span className="text-[var(--color-ink-soft)]">
-                  Select a district
-                </span>
+                <span className="text-ink-faint">Select a district</span>
               ) : shipping === 0 ? (
                 "Free"
               ) : (
@@ -333,47 +331,43 @@ export default function CheckoutForm({
               )}
             </dd>
           </div>
-          <div className="flex justify-between border-t border-[var(--color-line)] pt-2">
+          <div className="flex justify-between border-t border-line pt-3">
             <dt className="font-medium">Total</dt>
-            <dd className="display text-xl">
+            <dd className="display text-2xl tabular-nums">
               {formatPrice(total, currencyCode)}
             </dd>
           </div>
         </dl>
 
         {!freeShipping && remainingForFree > 0 ? (
-          <p className="text-xs text-[var(--color-ink-soft)]">
+          <p className="text-xs text-ink-muted">
             Add {formatPrice(remainingForFree, currencyCode)} more for free
             delivery.
           </p>
         ) : null}
         {freeShipping ? (
-          <p className="text-xs text-green-800">
+          <p className="text-xs text-success">
             Free delivery applied to this order.
           </p>
         ) : null}
 
         {errors.form ? (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             {errors.form}
           </p>
         ) : null}
 
-        <button
+        <Button
           type="submit"
           disabled={submitting}
-          className="flex w-full items-center justify-center gap-2 bg-[var(--color-ink)] px-6 py-3 text-sm text-white disabled:opacity-60"
+          size="lg"
+          fullWidth
         >
-          {submitting ? (
-            <span
-              aria-hidden="true"
-              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
-            />
-          ) : null}
+          {submitting ? <Spinner /> : null}
           {submitting ? "Placing order..." : "Place order"}
-        </button>
+        </Button>
 
-        <p className="text-xs text-[var(--color-ink-soft)]">
+        <p className="text-xs text-ink-muted">
           You pay {formatPrice(total, currencyCode)} in cash when the order is
           delivered.
         </p>
@@ -403,10 +397,10 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="text-sm font-medium">
+      <label htmlFor={id} className="field-label">
         {label}
         {required ? (
-          <span aria-hidden="true" className="text-[var(--color-ink-soft)]">
+          <span aria-hidden="true" className="text-purple">
             {" "}
             *
           </span>
@@ -415,11 +409,11 @@ function Field({
         )}
       </label>
       {hint ? (
-        <p className="text-xs text-[var(--color-ink-soft)]">{hint}</p>
+        <p className="pt-0.5 text-xs text-ink-faint">{hint}</p>
       ) : null}
       {children}
       {error ? (
-        <p role="alert" className="pt-1 text-xs text-red-700">
+        <p role="alert" className="pt-1.5 text-xs text-danger">
           {error}
         </p>
       ) : null}

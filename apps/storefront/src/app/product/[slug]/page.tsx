@@ -34,6 +34,7 @@ export default async function ProductPage({ params }: Params) {
 
   const designSlug = product.metadata?.design_slug as string | undefined
   const caseTypeSlug = product.metadata?.case_type_slug as string | undefined
+  const designName = (product.metadata?.design_name as string) ?? product.title
 
   const [families, designData] = await Promise.all([
     getDeviceFamilyMap(),
@@ -46,15 +47,15 @@ export default async function ProductPage({ params }: Params) {
   const images = product.images ?? []
 
   return (
-    <article className="space-y-14">
-      <div className="grid gap-10 lg:grid-cols-2">
+    <article className="space-y-20">
+      <div className="grid gap-10 lg:grid-cols-2 lg:gap-14">
         <div className="space-y-3">
           {images.length ? (
-            <div className="relative aspect-square overflow-hidden border border-[var(--color-line)] bg-white">
+            <div className="relative aspect-square overflow-hidden border border-line bg-surface">
               <ProductImage
                 src={images[0].url}
                 alt={product.title}
-                label={product.title}
+                label={designName}
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
               />
@@ -66,12 +67,12 @@ export default async function ProductPage({ params }: Params) {
               {images.slice(1, 4).map((image) => (
                 <div
                   key={image.id}
-                  className="relative aspect-square overflow-hidden border border-[var(--color-line)] bg-white"
+                  className="relative aspect-square overflow-hidden border border-line bg-surface"
                 >
                   <ProductImage
                     src={image.url}
                     alt=""
-                    label={product.title}
+                    label={designName}
                     sizes="16vw"
                   />
                 </div>
@@ -80,26 +81,26 @@ export default async function ProductPage({ params }: Params) {
           ) : null}
         </div>
 
-        <div className="space-y-7">
-          <div className="space-y-2">
+        <div className="space-y-8">
+          <header className="space-y-3">
             {product.collection ? (
               <Link
                 href={`/collection/${product.collection.handle}/`}
-                className="text-xs uppercase tracking-wider text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                className="eyebrow transition-colors hover:text-purple"
               >
                 {product.collection.title}
               </Link>
             ) : null}
-            <h1 className="display text-4xl leading-tight">
-              {(product.metadata?.design_name as string) ?? product.title}
+            <h1 className="display text-[2.5rem] leading-[1.06] md:text-[3rem]">
+              {designName}
             </h1>
-            <p className="text-sm text-[var(--color-ink-soft)]">
+            <p className="text-sm text-ink-muted">
               {product.subtitle}
               {product.metadata?.artist
                 ? ` - artwork by ${product.metadata.artist as string}`
                 : ""}
             </p>
-          </div>
+          </header>
 
           <DevicePicker
             variants={product.variants ?? []}
@@ -109,7 +110,7 @@ export default async function ProductPage({ params }: Params) {
           />
 
           {product.description ? (
-            <div className="space-y-3 border-t border-[var(--color-line)] pt-6 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            <div className="space-y-3 border-t border-line pt-7 text-sm leading-relaxed text-ink-muted">
               {product.description.split("\n\n").map((para, i) => (
                 <p key={i}>{para}</p>
               ))}
@@ -119,30 +120,32 @@ export default async function ProductPage({ params }: Params) {
       </div>
 
       {siblings.length ? (
-        <section className="space-y-4 border-t border-[var(--color-line)] pt-10">
-          <h2 className="display text-2xl">
-            {designData?.design.name} in other finishes
-          </h2>
-          <p className="text-sm text-[var(--color-ink-soft)]">
-            The same artwork, built as a different case.
-          </p>
+        <section className="space-y-6 border-t border-line pt-14">
+          <header className="space-y-2">
+            <p className="eyebrow">Same artwork</p>
+            <h2 className="display text-2xl md:text-3xl">
+              {designData?.design.name} in other finishes
+            </h2>
+          </header>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {siblings.map((sibling) => (
               <Link
                 key={sibling.id}
                 href={`/product/${sibling.handle}/`}
-                className="group block border border-[var(--color-line)] bg-white hover:border-[var(--color-ink)]"
+                className="group block border border-line bg-surface transition-colors hover:border-ink"
               >
-                <div className="relative aspect-square overflow-hidden bg-[var(--color-paper)]">
+                <div className="relative aspect-square overflow-hidden bg-paper">
                   <ProductImage
                     src={sibling.thumbnail}
                     alt={sibling.title}
                     label={sibling.case_type_name ?? sibling.title}
                     sizes="20vw"
-                    className="transition-transform duration-500 group-hover:scale-105"
+                    className="transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]"
                   />
                 </div>
-                <p className="p-3 text-sm">{sibling.case_type_name}</p>
+                <p className="eyebrow border-t border-line px-3 py-3 text-center">
+                  {sibling.case_type_name}
+                </p>
               </Link>
             ))}
           </div>
@@ -153,7 +156,7 @@ export default async function ProductPage({ params }: Params) {
         <p className="text-sm">
           <Link
             href={`/collection/${caseTypeSlug}/`}
-            className="underline underline-offset-4"
+            className="text-ink-muted underline underline-offset-4 transition-colors hover:text-purple"
           >
             See every design in {product.metadata?.case_type_name as string}
           </Link>

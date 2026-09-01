@@ -76,8 +76,11 @@ function ImageFallback({
   className?: string
 }) {
   const hash = hashOf(label)
-  const hue = hash % 360
-  const hue2 = (hue + 40 + (hash % 60)) % 360
+  // Kept inside a narrow band around Florayn Purple at low saturation. A full
+  // rainbow of placeholder tiles reads playful; the brand is premium minimal,
+  // so these stay close to the palette and differ mostly in value.
+  const hue = 252 + ((hash % 40) - 20)
+  const lightness = 26 + (hash % 10)
   const initials = label
     .split(/[\s-]+/)
     .filter(Boolean)
@@ -91,10 +94,10 @@ function ImageFallback({
       aria-label={label}
       className={`absolute inset-0 flex items-center justify-center ${className}`}
       style={{
-        backgroundImage: `linear-gradient(135deg, hsl(${hue} 48% 64%), hsl(${hue2} 42% 34%))`,
+        backgroundImage: `linear-gradient(145deg, hsl(${hue} 18% ${lightness + 22}%), hsl(${hue} 24% ${lightness}%))`,
       }}
     >
-      <span className="display text-3xl text-white/90">
+      <span className="display text-3xl tracking-wide text-white/85">
         {initials}
       </span>
     </div>

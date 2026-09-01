@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react"
 
 import { useCart } from "@/components/cart-provider"
 import ProductImage from "@/components/product-image"
+import { ButtonLink } from "@/components/ui/button"
 import { formatPrice } from "@/lib/money"
 
 export default function CartDrawer() {
@@ -67,7 +68,7 @@ export default function CartDrawer() {
         aria-hidden="true"
         onClick={closeDrawer}
         className={[
-          "fixed inset-0 z-40 bg-black/30 transition-opacity duration-300",
+          "fixed inset-0 z-40 bg-ink/40 transition-opacity duration-300",
           isDrawerOpen
             ? "opacity-100"
             : "pointer-events-none opacity-0",
@@ -83,27 +84,27 @@ export default function CartDrawer() {
         aria-hidden={!isDrawerOpen}
         className={[
           "fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col",
-          "border-l border-[var(--color-line)] bg-[var(--color-paper)] shadow-xl outline-none",
+          "border-l border-line bg-paper shadow-2xl outline-none",
           "transition-transform duration-300 ease-out motion-reduce:transition-none",
           isDrawerOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between border-b border-[var(--color-line)] px-5 py-4">
-          <p className="text-sm font-medium">Added to cart</p>
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <p className="eyebrow">Added to cart</p>
           <button
             type="button"
             onClick={closeDrawer}
             aria-label="Close"
-            className="px-2 py-1 text-xl leading-none text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+            className="px-2 py-1 text-xl leading-none text-ink-faint transition-colors hover:text-ink"
           >
             &times;
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           {lastAdded ? (
             <div className="flex gap-4">
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden border border-[var(--color-line)] bg-white">
+              <div className="relative h-24 w-24 shrink-0 overflow-hidden border border-line bg-paper">
                 <ProductImage
                   src={lastAdded.thumbnail}
                   alt=""
@@ -112,14 +113,14 @@ export default function CartDrawer() {
                 />
               </div>
               <div className="min-w-0 space-y-1">
-                <p className="text-sm font-medium leading-snug">
+                <p className="display text-base leading-snug">
                   {lastAdded.productTitle}
                 </p>
-                <p className="text-xs text-[var(--color-ink-soft)]">
+                <p className="text-sm text-ink-muted">
                   {lastAdded.variantTitle}
                 </p>
                 {lastAdded.sku ? (
-                  <p className="text-xs text-[var(--color-ink-soft)]">
+                  <p className="eyebrow">
                     {lastAdded.sku}
                   </p>
                 ) : null}
@@ -128,7 +129,7 @@ export default function CartDrawer() {
                     lastAdded.unitPrice,
                     summary?.currencyCode
                   )}
-                  <span className="text-[var(--color-ink-soft)]">
+                  <span className="text-ink-faint">
                     {" "}
                     &times; {lastAdded.quantity}
                   </span>
@@ -138,9 +139,9 @@ export default function CartDrawer() {
           ) : null}
         </div>
 
-        <div className="space-y-4 border-t border-[var(--color-line)] px-5 py-5">
+        <div className="space-y-4 border-t border-line bg-surface px-6 py-6">
           <div className="flex items-baseline justify-between">
-            <span className="text-sm text-[var(--color-ink-soft)]">
+            <span className="text-sm text-ink-muted">
               Subtotal
               {summary ? (
                 <span>
@@ -150,23 +151,19 @@ export default function CartDrawer() {
                 </span>
               ) : null}
             </span>
-            <span className="display text-xl">
+            <span className="display text-xl tabular-nums">
               {formatPrice(summary?.subtotal, summary?.currencyCode)}
             </span>
           </div>
 
-          <Link
-            href="/cart/"
-            onClick={closeDrawer}
-            className="block bg-[var(--color-ink)] px-6 py-3 text-center text-sm text-white"
-          >
+          <ButtonLink href="/cart/" onClick={closeDrawer} size="lg" fullWidth>
             View cart
-          </Link>
+          </ButtonLink>
 
           <button
             type="button"
             onClick={closeDrawer}
-            className="w-full text-center text-sm underline underline-offset-4"
+            className="w-full text-center text-sm text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
           >
             Continue shopping
           </button>

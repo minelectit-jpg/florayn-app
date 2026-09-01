@@ -1,28 +1,152 @@
 @import "tailwindcss";
 
+/*
+ * Florayn brand tokens.
+ *
+ * This block is the single source of truth for brand colour and type. Change a
+ * value here and it propagates everywhere - nothing below or in any component
+ * should hardcode a hex value or a font stack.
+ *
+ * Tailwind v4 generates utilities from these automatically, so
+ * `--color-purple` gives you `bg-purple` / `text-purple` / `border-purple`.
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    sans-serif;
-  --font-display: "Georgia", "Times New Roman", serif;
+  /* ---- Brand palette ---------------------------------------------------- */
 
-  --color-ink: #16150f;
-  --color-ink-soft: #5c584c;
-  --color-paper: #faf8f3;
-  --color-line: #e3ded1;
-  --color-accent: #7a5c2e;
+  /* Florayn Purple. Accent only: buttons, active states, focus rings. */
+  --color-purple: #7c3aed;
+  --color-purple-deep: #6127c8; /* hover/pressed, derived from Purple */
+  --color-purple-tint: #f2ecfd; /* faint wash for selected rows */
+
+  /* Near-black. Body text and dark surfaces. */
+  --color-ink: #1a1625;
+  --color-ink-muted: #6b6577; /* secondary text, derived from Ink */
+  --color-ink-faint: #9a94a6; /* micro-labels, placeholders */
+
+  /* Warm off-white. Page ground. */
+  --color-paper: #faf9f7;
+  --color-surface: #ffffff; /* cards and panels sitting on Paper */
+  --color-line: #e8e4de; /* hairline rules, warm to match Paper */
+  --color-line-strong: #d6d1c9;
+
+  /*
+   * Gold. Reserved for premium and limited-edition treatments only - never for
+   * ordinary buttons, links or borders. Used once, on the Limited badge.
+   * TODO: confirm the exact gold with the brand guide; this is a placeholder
+   * warm gold chosen to sit against Ink, not a supplied brand value.
+   */
+  --color-gold: #b8934f;
+  --color-gold-tint: #f6efe1;
+
+  /* Kept semantic rather than raw red/green so they can be tuned centrally. */
+  --color-danger: #a4283a;
+  --color-success: #2f6b4f;
+
+  /* ---- Type ------------------------------------------------------------- */
+
+  /*
+   * TODO: swap in the licensed brand faces when the files arrive.
+   *
+   *   Headings/wordmark -> ABC Arizona Flare Medium (Dinamo)
+   *   Body/UI           -> Aeonik (CoType)
+   *
+   * Until then these are the closest free stand-ins, loaded and self-hosted by
+   * next/font in app/layout.tsx:
+   *
+   *   Fraunces - a flared display serif; its wonk/soft axes are the nearest
+   *              free approximation of Arizona Flare's flared terminals.
+   *   Figtree  - a geometric humanist sans in the same proportions as Aeonik.
+   *
+   * To switch, drop the licensed woff2 files in and point these two variables
+   * at the new families. Nothing else needs to change.
+   */
+  --font-display: var(--font-fraunces), "Georgia", "Times New Roman", serif;
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+
+  /* ---- Motion ----------------------------------------------------------- */
+  --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html {
-  background: var(--color-paper);
-  color: var(--color-ink);
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+
+  /* One visible focus treatment for the whole store, in brand purple. */
+  :focus-visible {
+    outline: 2px solid var(--color-purple);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-purple);
+    color: #fff;
+  }
 }
 
-body {
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
+@layer components {
+  /* Display type: the wordmark and every heading. */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.08;
+  }
 
-.display {
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
+  /*
+   * The small uppercase label used for case types, section eyebrows and
+   * metadata. Premium minimal leans on this a lot, so it is a single class
+   * rather than five near-identical utility strings.
+   */
+  .eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .field-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  /* Inputs share one look so forms read as one system. */
+  .field-input {
+    width: 100%;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+    transition: border-color 150ms var(--ease-brand);
+  }
+
+  .field-input::placeholder {
+    color: var(--color-ink-faint);
+  }
+
+  .field-input:hover {
+    border-color: var(--color-line-strong);
+  }
+
+  .field-input:focus {
+    border-color: var(--color-purple);
+    outline-offset: 0;
+  }
+
+  .field-input[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
 }

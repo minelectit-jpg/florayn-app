@@ -20,11 +20,11 @@ export default async function CheckoutPage() {
     return (
       <div className="space-y-4">
         <h1 className="display text-4xl">Checkout</h1>
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-danger">
           Could not load delivery districts. The backend may be down - please
           try again in a moment.
         </p>
-        <Link href="/cart/" className="text-sm underline underline-offset-4">
+        <Link href="/cart/" className="text-sm text-ink-muted underline underline-offset-4 hover:text-ink">
           Back to cart
         </Link>
       </div>
@@ -34,26 +34,26 @@ export default async function CheckoutPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="display text-4xl">Checkout</h1>
+        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">Checkout</h1>
         <Link
           href="/cart/"
-          className="text-sm text-[var(--color-ink-soft)] underline underline-offset-4 hover:text-[var(--color-ink)]"
+          className="eyebrow transition-colors hover:text-ink"
         >
           Back to cart
         </Link>
       </div>
 
-      <ul className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)] text-sm">
+      <ul className="divide-y divide-line border-y border-line text-sm">
         {items.map((item) => (
           <li key={item.id} className="flex items-center gap-3 py-3">
             <span className="min-w-0 flex-1">
               {item.variant?.product?.title ?? item.title}
-              <span className="text-[var(--color-ink-soft)]">
+              <span className="text-ink-muted">
                 {" "}
                 - {item.variant?.title}
               </span>
             </span>
-            <span className="text-[var(--color-ink-soft)]">
+            <span className="eyebrow">
               &times; {item.quantity}
             </span>
           </li>

@@ -85,29 +85,28 @@ export default async function CollectionPage({ params }: Params) {
   )
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-2 border-b border-[var(--color-line)] pb-6">
-        <h1 className="display text-4xl">{group.title}</h1>
+    <div className="space-y-10">
+      <header className="space-y-3 border-b border-line pb-6">
+        <p className="eyebrow">Collection</p>
+        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
+          {group.title}
+        </h1>
         {group.description ? (
-          <p className="max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
-            {group.description}
-          </p>
+          <p className="max-w-2xl text-ink-muted">{group.description}</p>
         ) : null}
-        <p className="text-xs uppercase tracking-wider text-[var(--color-ink-soft)]">
+        <p className="eyebrow">
           {count} {count === 1 ? "product" : "products"}
         </p>
       </header>
 
       {products.length ? (
-        <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--color-ink-soft)]">
-          Nothing published here yet.
-        </p>
+        <p className="text-sm text-ink-muted">Nothing published here yet.</p>
       )}
     </div>
   )

@@ -4,7 +4,7 @@ export default function LoadingProduct() {
   return (
     <div className="grid gap-10 lg:grid-cols-2">
       <div className="space-y-3">
-        <Skeleton className="aspect-square w-full border border-[var(--color-line)]" />
+        <Skeleton className="aspect-square w-full border border-line" />
         <div className="grid grid-cols-3 gap-3">
           <Skeleton className="aspect-square w-full" />
           <Skeleton className="aspect-square w-full" />
@@ -20,7 +20,7 @@ export default function LoadingProduct() {
         </div>
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-72 w-full" />
-        <div className="flex items-center gap-4 border-t border-[var(--color-line)] pt-5">
+        <div className="flex items-center gap-4 border-t border-line pt-5">
           <Skeleton className="h-8 w-28" />
           <Skeleton className="ml-auto h-11 w-32" />
         </div>

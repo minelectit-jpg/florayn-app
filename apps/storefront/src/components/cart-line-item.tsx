@@ -65,17 +65,17 @@ export default function CartLineItem({
   return (
     <li
       className={[
-        "flex flex-wrap items-center gap-4 py-4 transition-opacity",
+        "flex flex-wrap items-center gap-4 py-5 transition-opacity",
         busy ? "opacity-50" : "opacity-100",
       ].join(" ")}
       aria-busy={busy}
     >
-      <div className="relative h-16 w-16 shrink-0 overflow-hidden border border-[var(--color-line)] bg-white">
+      <div className="relative h-20 w-20 shrink-0 overflow-hidden border border-line bg-paper">
         <ProductImage
           src={thumbnail}
           alt=""
           label={productTitle}
-          sizes="64px"
+          sizes="80px"
         />
       </div>
 
@@ -83,27 +83,27 @@ export default function CartLineItem({
         {handle ? (
           <Link
             href={`/product/${handle}/`}
-            className="text-sm font-medium hover:underline"
+            className="display text-base transition-colors hover:text-purple"
           >
             {productTitle}
           </Link>
         ) : (
-          <p className="text-sm font-medium">{productTitle}</p>
+          <p className="display text-base">{productTitle}</p>
         )}
-        <p className="text-xs text-[var(--color-ink-soft)]">
+        <p className="eyebrow pt-1">
           {item.variant?.title}
-          {item.variant?.sku ? ` - ${item.variant.sku}` : ""}
+          {item.variant?.sku ? ` · ${item.variant.sku}` : ""}
         </p>
-        {error ? <p className="pt-1 text-xs text-red-700">{error}</p> : null}
+        {error ? <p className="pt-1 text-xs text-danger">{error}</p> : null}
       </div>
 
-      <div className="flex items-center border border-[var(--color-line)] bg-white">
+      <div className="flex items-center border border-line bg-surface">
         <button
           type="button"
           onClick={() => commit(quantity - 1)}
           disabled={busy || quantity <= 1}
           aria-label={`Decrease quantity of ${productTitle}`}
-          className="px-3 py-1 text-sm disabled:opacity-30"
+          className="px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
         >
           &minus;
         </button>
@@ -113,7 +113,7 @@ export default function CartLineItem({
           onClick={() => commit(quantity + 1)}
           disabled={busy}
           aria-label={`Increase quantity of ${productTitle}`}
-          className="px-3 py-1 text-sm disabled:opacity-30"
+          className="px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
         >
           +
         </button>
@@ -127,7 +127,7 @@ export default function CartLineItem({
         type="button"
         onClick={remove}
         disabled={busy}
-        className="text-xs text-[var(--color-ink-soft)] underline underline-offset-4 hover:text-[var(--color-ink)] disabled:opacity-40"
+        className="eyebrow transition-colors hover:text-danger disabled:opacity-40"
       >
         Remove
       </button>

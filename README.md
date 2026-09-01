@@ -259,3 +259,53 @@ Orders are created through `completeCartWorkflow`, so they are ordinary Medusa
 orders: visible under Orders, fulfillable, refundable. The district, area,
 delivery note and the COD marker are on the order metadata, and the phone is on
 the shipping address.
+
+## Brand
+
+Everything visual is defined in one place: the `@theme` block at the top of
+`apps/storefront/src/app/globals.css`. Change a value there and it propagates
+across the store - no component hardcodes a hex value or a font stack.
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--color-purple` | `#7C3AED` | accent: buttons, active nav, focus rings, selected device |
+| `--color-ink` | `#1A1625` | text and dark surfaces |
+| `--color-paper` | `#FAF9F7` | page ground |
+| `--color-gold` | `#B8934F` | **reserved** - premium / limited edition only |
+
+`--color-purple-deep`, `--color-ink-muted`, `--color-ink-faint`, `--color-line`
+and `--color-surface` are derived from those four so the palette stays
+coherent. Tailwind v4 generates utilities from each token automatically, so
+`--color-purple` gives you `bg-purple` / `text-purple` / `border-purple`.
+
+**Gold is currently unused in the UI.** No hex was supplied for it, so
+`#B8934F` is a placeholder chosen to sit against Ink - confirm it against the
+brand guide before shipping anything that uses it.
+
+### Fonts are substitutes
+
+The licensed faces are not in the repo yet. `globals.css` and
+`apps/storefront/src/app/layout.tsx` both carry a TODO, and the stand-ins are
+loaded by `next/font` (self-hosted at build time, not fetched from Google at
+runtime):
+
+| Role | Licensed face | Stand-in | Why |
+| --- | --- | --- | --- |
+| Headings, wordmark | ABC Arizona Flare Medium | Fraunces | closest free flared serif; its wonk/soft axes approximate Arizona Flare's flared terminals |
+| Body, UI | Aeonik | Figtree | geometric humanist sans with similar proportions |
+
+To swap them in: drop the woff2 files into the app, change the two
+`next/font/google` calls in `layout.tsx` to `next/font/local`, and point
+`--font-display` / `--font-sans` at the new families. Nothing else refers to a
+font by name.
+
+### Conventions
+
+- `.display` - headings and the wordmark, in the display face.
+- `.eyebrow` - the small uppercase letter-spaced label used for case types,
+  section labels and metadata. Premium minimal leans on this heavily, so it is
+  one class rather than repeated utility strings.
+- `.field-input` / `.field-label` - all form controls, so checkout reads as one
+  system.
+- `components/ui/button.tsx` - every button and button-styled link. Variants:
+  `primary` (purple), `ink`, `secondary` (outline), `ghost`.

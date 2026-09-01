@@ -20,15 +20,17 @@ export default function SiteHeader() {
   const itemCount = summary?.itemCount ?? 0
 
   return (
-    <header className="border-b border-[var(--color-line)]">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
-        <Link href="/" className="display text-2xl font-semibold">
+    <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur-sm">
+      <div className="mx-auto flex w-full max-w-[1180px] items-center gap-6 px-5 py-4 md:px-8">
+        <Link
+          href="/"
+          className="display shrink-0 text-[1.6rem] leading-none tracking-[0.02em]"
+        >
           Florayn
         </Link>
 
-        <nav className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <nav className="hidden flex-1 items-center justify-center gap-7 lg:flex">
           {NAV.map((item) => {
-            // Trailing slashes are canonical, so compare with one either way.
             const isActive =
               pathname === item.href || `${pathname}/` === item.href
             return (
@@ -36,11 +38,12 @@ export default function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
-                className={
+                className={[
+                  "eyebrow transition-colors",
                   isActive
-                    ? "text-[var(--color-ink)] underline underline-offset-4"
-                    : "text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
-                }
+                    ? "text-purple"
+                    : "text-ink-muted hover:text-ink",
+                ].join(" ")}
               >
                 {item.label}
               </Link>
@@ -48,13 +51,12 @@ export default function SiteHeader() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
-          {/* Reopening the drawer is useful right after adding something. */}
+        <div className="ml-auto flex items-center gap-5 lg:ml-0">
           {itemCount > 0 ? (
             <button
               type="button"
               onClick={openDrawer}
-              className="text-sm text-[var(--color-ink-soft)] underline underline-offset-4 hover:text-[var(--color-ink)]"
+              className="eyebrow hidden text-ink-muted transition-colors hover:text-ink sm:block"
             >
               Recent
             </button>
@@ -62,19 +64,19 @@ export default function SiteHeader() {
 
           <Link
             href="/cart/"
-            className="flex items-center gap-2 text-sm underline underline-offset-4"
+            className="group flex items-center gap-2 text-ink transition-colors hover:text-purple"
           >
-            Cart
-            {/* summary is null until hydrated, so nothing flashes in as 0. */}
+            <span className="eyebrow text-inherit">Cart</span>
+            {/* Hidden until hydrated so it never flashes in as a zero. */}
             {summary ? (
               <span
                 aria-label={`${itemCount} ${itemCount === 1 ? "item" : "items"} in cart`}
                 className={[
-                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5",
-                  "text-xs no-underline transition-colors",
+                  "inline-flex h-[1.35rem] min-w-[1.35rem] items-center justify-center",
+                  "rounded-full px-1.5 text-[0.6875rem] font-medium tabular-nums transition-colors",
                   itemCount > 0
-                    ? "bg-[var(--color-ink)] text-white"
-                    : "bg-[var(--color-line)] text-[var(--color-ink-soft)]",
+                    ? "bg-purple text-white"
+                    : "bg-line text-ink-faint",
                 ].join(" ")}
               >
                 {itemCount}
@@ -83,6 +85,27 @@ export default function SiteHeader() {
           </Link>
         </div>
       </div>
+
+      {/* The case-type rail collapses to a scroller rather than a burger, so
+          the constructions stay one tap away on a phone. */}
+      <nav className="flex gap-6 overflow-x-auto border-t border-line px-5 py-2.5 lg:hidden">
+        {NAV.map((item) => {
+          const isActive = pathname === item.href || `${pathname}/` === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isActive ? "page" : undefined}
+              className={[
+                "eyebrow whitespace-nowrap transition-colors",
+                isActive ? "text-purple" : "text-ink-muted",
+              ].join(" ")}
+            >
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
     </header>
   )
 }

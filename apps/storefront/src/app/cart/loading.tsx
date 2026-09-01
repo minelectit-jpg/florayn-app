@@ -4,7 +4,7 @@ export default function LoadingCart() {
   return (
     <div className="space-y-8">
       <Skeleton className="h-10 w-40" />
-      <div className="divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">
+      <div className="divide-y divide-line border-y border-line">
         {[0, 1].map((i) => (
           <div key={i} className="flex items-center gap-4 py-4">
             <Skeleton className="h-16 w-16" />
