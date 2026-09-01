@@ -12,13 +12,18 @@ export type CaseTypeSeed = {
   name: string
   description: string
   sku_code: string
-  /** Floor price in BDT, before the device's `price_delta`. */
-  base_price: number
+  /**
+   * The price in BDT. Price is flat per case type - it does not vary by
+   * device, so this is the price of every variant of every product built in
+   * this construction.
+   */
+  price: number
   fits_families: DeviceFamily[]
   /** Device slugs this construction is not tooled for. */
   excludes_devices?: string[]
 }
 
+// Ordered cheapest first; this is also the order they appear in the admin.
 export const CASE_TYPES: CaseTypeSeed[] = [
   {
     slug: "essentials",
@@ -26,16 +31,25 @@ export const CASE_TYPES: CaseTypeSeed[] = [
     description:
       "A slim flexible shell with a soft-touch finish. The everyday case, and the widest device coverage we offer.",
     sku_code: "ESS",
-    base_price: 1290,
+    price: 1400,
     fits_families: ["iphone", "samsung", "airpods"],
   },
   {
-    slug: "armor-clear",
-    name: "Armor Clear",
+    slug: "signature",
+    name: "Signature",
     description:
-      "Shock-absorbing bumper with a rigid clear back that holds the artwork without yellowing.",
-    sku_code: "ARMCLR",
-    base_price: 1690,
+      "Our full-wrap print finish, available across phones, AirPods, watch bands and wallets.",
+    sku_code: "SIG",
+    price: 1400,
+    fits_families: ["iphone", "samsung", "airpods", "watch", "wallet"],
+  },
+  {
+    slug: "elite-clear",
+    name: "Elite Clear",
+    description:
+      "Optically clear polycarbonate with a hardened anti-scratch coat, cut thin enough to disappear.",
+    sku_code: "ELTCLR",
+    price: 1600,
     fits_families: ["iphone", "samsung"],
   },
   {
@@ -44,26 +58,17 @@ export const CASE_TYPES: CaseTypeSeed[] = [
     description:
       "Dual-layer drop protection in a matte black frame. Raised lips over the camera and screen.",
     sku_code: "ARMBLK",
-    base_price: 1790,
+    price: 1950,
     fits_families: ["iphone", "samsung"],
   },
   {
-    slug: "elite-clear",
-    name: "Elite Clear",
+    slug: "armor-clear",
+    name: "Armor Clear",
     description:
-      "Optically clear polycarbonate with a hardened anti-scratch coat, cut thin enough to disappear.",
-    sku_code: "ELTCLR",
-    base_price: 1990,
+      "Shock-absorbing bumper with a rigid clear back that holds the artwork without yellowing.",
+    sku_code: "ARMCLR",
+    price: 1950,
     fits_families: ["iphone", "samsung"],
-  },
-  {
-    slug: "signature",
-    name: "Signature",
-    description:
-      "Our full-wrap print finish, available across phones, AirPods, watch bands and wallets.",
-    sku_code: "SIG",
-    base_price: 2290,
-    fits_families: ["iphone", "samsung", "airpods", "watch", "wallet"],
   },
   {
     slug: "alcantara",
@@ -71,19 +76,18 @@ export const CASE_TYPES: CaseTypeSeed[] = [
     description:
       "Italian Alcantara bonded to a rigid core. Warm to hold, and it does not slip out of a pocket.",
     sku_code: "ALC",
-    base_price: 2990,
+    // Alcantara varies by device in the real store; held flat here until the
+    // per-device figures are confirmed.
+    price: 3800,
     fits_families: ["iphone", "samsung", "airpods", "wallet"],
-    // Alcantara tooling was never cut for the small and discontinued bodies.
+    // Alcantara tooling was never cut for the small and oldest bodies.
     excludes_devices: [
       "iphone-11",
       "iphone-11-pro",
       "iphone-11-pro-max",
       "iphone-12-mini",
       "iphone-13-mini",
-      "iphone-se-2020",
-      "iphone-se-2022",
-      "airpods-1",
-      "airpods-2",
+      "airpods-1-2",
     ],
   },
 ]

@@ -4,11 +4,10 @@ const nextConfig: NextConfig = {
   // Product and collection URLs must end in a slash:
   //   /product/<slug>/   /collection/<slug>/
   trailingSlash: true,
+  // Seed artwork is inline SVG, so no remote image host is needed yet. Add the
+  // CDN host here once real artwork is uploaded through a file provider.
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "picsum.photos" },
-      { protocol: "https", hostname: "fastly.picsum.photos" },
-    ],
+    remotePatterns: [],
   },
 }
 

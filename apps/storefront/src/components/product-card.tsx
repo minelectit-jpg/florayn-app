@@ -1,5 +1,6 @@
-import Image from "next/image"
 import Link from "next/link"
+
+import ProductImage from "@/components/product-image"
 
 import type { StoreProduct } from "@/lib/medusa"
 import { formatPrice, priceRange } from "@/lib/money"
@@ -17,15 +18,13 @@ export default function ProductCard({ product }: { product: StoreProduct }) {
       className="group block border border-[var(--color-line)] bg-white transition-colors hover:border-[var(--color-ink)]"
     >
       <div className="relative aspect-square overflow-hidden bg-[var(--color-paper)]">
-        {image ? (
-          <Image
-            src={image}
-            alt={product.title}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : null}
+        <ProductImage
+          src={image}
+          alt={product.title}
+          label={designName ?? product.title}
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
       </div>
 
       <div className="space-y-1 p-4">
@@ -40,7 +39,9 @@ export default function ProductCard({ product }: { product: StoreProduct }) {
         <p className="pt-1 text-sm">
           {range ? (
             <>
-              From {formatPrice(range.min)}
+              {range.min === range.max
+                ? formatPrice(range.min)
+                : `From ${formatPrice(range.min)}`}
               <span className="text-[var(--color-ink-soft)]">
                 {" "}
                 &middot; {variantCount} devices

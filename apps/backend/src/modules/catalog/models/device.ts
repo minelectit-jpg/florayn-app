@@ -16,8 +16,6 @@ const Device = model.define("device", {
   brand: model.text(),
   // Short code used when building variant SKUs, e.g. IP17PM.
   sku_code: model.text(),
-  // Added to the case type's base price to get the variant price, in BDT.
-  price_delta: model.number().default(0),
   sort_order: model.number().default(0),
   is_active: model.boolean().default(true),
   case_types: model.manyToMany(() => CaseType, {

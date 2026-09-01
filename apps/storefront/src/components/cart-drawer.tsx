@@ -1,10 +1,10 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useRef } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import ProductImage from "@/components/product-image"
 import { formatPrice } from "@/lib/money"
 
 export default function CartDrawer() {
@@ -104,15 +104,12 @@ export default function CartDrawer() {
           {lastAdded ? (
             <div className="flex gap-4">
               <div className="relative h-24 w-24 shrink-0 overflow-hidden border border-[var(--color-line)] bg-white">
-                {lastAdded.thumbnail ? (
-                  <Image
-                    src={lastAdded.thumbnail}
-                    alt=""
-                    fill
-                    sizes="96px"
-                    className="object-cover"
-                  />
-                ) : null}
+                <ProductImage
+                  src={lastAdded.thumbnail}
+                  alt=""
+                  label={lastAdded.productTitle}
+                  sizes="96px"
+                />
               </div>
               <div className="min-w-0 space-y-1">
                 <p className="text-sm font-medium leading-snug">

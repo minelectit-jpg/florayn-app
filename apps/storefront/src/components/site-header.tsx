@@ -7,10 +7,10 @@ import { useCart } from "@/components/cart-provider"
 
 const NAV = [
   { href: "/collection/essentials/", label: "Essentials" },
+  { href: "/collection/signature/", label: "Signature" },
+  { href: "/collection/elite-clear/", label: "Elite Clear" },
   { href: "/collection/armor-black/", label: "Armor Black" },
   { href: "/collection/armor-clear/", label: "Armor Clear" },
-  { href: "/collection/elite-clear/", label: "Elite Clear" },
-  { href: "/collection/signature/", label: "Signature" },
   { href: "/collection/alcantara/", label: "Alcantara" },
 ]
 

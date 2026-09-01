@@ -30,7 +30,7 @@ design in a finish is a single page a customer picks their device on.
 ### Case types
 
 Six constructions, in `apps/backend/src/modules/catalog/data/case-types.ts`:
-Essentials, Armor Clear, Armor Black, Elite Clear, Signature, Alcantara.
+Essentials, Signature, Elite Clear, Armor Black, Armor Clear, Alcantara.
 
 Each declares which device families it is tooled for, plus any individual
 devices it is not made for. That is what decides a product's variant list at
@@ -40,15 +40,37 @@ fits, so nothing needs to be greyed out in the storefront.
 ### Devices
 
 `apps/backend/src/modules/catalog/data/devices.ts` is the single source of truth
-for the variant axis: iPhone 11 through 17 Pro Max, Galaxy S22-S25, AirPods
-1/2/3/4/Pro/Pro 2/Pro 3/Max, Apple Watch bands and the Card Wallet.
+for the variant axis - 50 devices taken from the live florayn.com list:
 
-**This file currently holds 62 devices, not 126.** The families and ranges you
-named are all covered, but the exact 126-row list is yours - replace or extend
-the array and reseed. Nothing else in the codebase hardcodes a device count.
+| Family | Count | Range |
+| --- | --- | --- |
+| iPhone | 28 | 11 through 17 Pro Max, including 16e |
+| Samsung | 12 | S23 through S26, base / Plus / Ultra |
+| AirPods | 7 | 1/2, 3, 4, Pro, Pro 2, Pro 3, Max |
+| Accessories | 3 | Apple Watch Band, Card Wallet, MagSafe Wallet |
 
-Variant price = the case type's `base_price` + the device's `price_delta`, in
-BDT. SKU is `DESIGN-CASETYPE-DEVICE`, e.g. `CATMAZE-ARMBLK-IP17PM`.
+S22 and older are not stocked. There are no Xiaomi, Redmi, Pixel, OnePlus,
+Samsung A-series or Z-series entries.
+
+SKU is `DESIGN-CASETYPE-DEVICE`, e.g. `CATMAZE-ARMBLK-IP17PM`.
+
+### Pricing
+
+**Price is flat per case type.** It does not vary by device, so a device row
+carries no price of its own and every variant of a product costs the same.
+
+| Case type | Price |
+| --- | --- |
+| Essentials | ৳1,400 |
+| Signature | ৳1,400 |
+| Elite Clear | ৳1,600 |
+| Armor Black | ৳1,950 |
+| Armor Clear | ৳1,950 |
+| Alcantara | ৳3,800 |
+
+Alcantara varies by device in the real store; it is held flat here until those
+figures are confirmed. If per-device pricing is ever needed, it belongs on the
+case-type/device pivot rather than on the device.
 
 ### Where each thing lives
 
@@ -145,7 +167,7 @@ cd apps/backend && npm run key
 ## Seed data
 
 Five designs, published across the case types each is offered in - 21 products
-and roughly a thousand variants. Region is Bangladesh, currency BDT, shipping is
+and 924 variants. Region is Bangladesh, currency BDT, shipping is
 Inside Dhaka (৳60) / Outside Dhaka (৳120).
 
 Reseeding requires a fresh database; the seed refuses to run twice.
@@ -185,5 +207,7 @@ source and calls `createProductsWorkflow` the way the seed does.
   widget with the design and case type. Adding real screens means an admin route
   plus API routes under `src/api/admin/`.
 - **The full 189-design import.** Only the 5 sample designs exist.
-- **Product images.** The seed points at `picsum.photos` placeholders. Wire up a
-  real file provider (S3, Cloudflare R2) before loading actual artwork.
+- **Product images.** The seed generates inline SVG placeholders from each
+  slug, so the catalogue renders offline and looks the same on every machine.
+  Wire up a real file provider (S3, Cloudflare R2) before loading actual
+  artwork, and add its host to `images.remotePatterns` in the storefront config.

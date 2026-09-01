@@ -86,8 +86,8 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "base_price": {
-          "name": "base_price",
+        "price": {
+          "name": "price",
           "type": "integer",
           "unsigned": false,
           "autoincrement": false,
@@ -569,22 +569,6 @@
           "comment": null,
           "enumItems": [],
           "mappedType": "text"
-        },
-        "price_delta": {
-          "name": "price_delta",
-          "type": "integer",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": "0",
-          "comment": null,
-          "enumItems": [],
-          "mappedType": "integer"
         },
         "sort_order": {
           "name": "sort_order",

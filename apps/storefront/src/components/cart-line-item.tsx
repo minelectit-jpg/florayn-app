@@ -1,11 +1,11 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import ProductImage from "@/components/product-image"
 import { removeLineItem, setLineItemQuantity, type CartItem } from "@/lib/cart"
 import { formatPrice } from "@/lib/money"
 
@@ -71,15 +71,12 @@ export default function CartLineItem({
       aria-busy={busy}
     >
       <div className="relative h-16 w-16 shrink-0 overflow-hidden border border-[var(--color-line)] bg-white">
-        {thumbnail ? (
-          <Image
-            src={thumbnail}
-            alt=""
-            fill
-            sizes="64px"
-            className="object-cover"
-          />
-        ) : null}
+        <ProductImage
+          src={thumbnail}
+          alt=""
+          label={productTitle}
+          sizes="64px"
+        />
       </div>
 
       <div className="min-w-0 flex-1">

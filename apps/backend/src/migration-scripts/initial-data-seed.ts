@@ -24,6 +24,7 @@ import { CATALOG_MODULE } from "../modules/catalog"
 import { CASE_TYPES } from "../modules/catalog/data/case-types"
 import { DESIGNS } from "../modules/catalog/data/designs"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
+import { placeholderImage } from "../modules/catalog/data/placeholder-image"
 
 const CURRENCY = "bdt"
 const COUNTRY = "bd"
@@ -69,6 +70,32 @@ export default async function initialDataSeed({
       "The catalog is already seeded. Drop and recreate the database before reseeding."
     )
     return
+  }
+
+  // An exclusion naming a device that no longer exists filters nothing, so a
+  // renamed or dropped device would silently widen a case type's fit list.
+  // Fail loudly instead.
+  const deviceSlugs = new Set(DEVICES.map((device) => device.slug))
+  const staleExclusions = CASE_TYPES.flatMap((caseType) =>
+    (caseType.excludes_devices ?? [])
+      .filter((slug) => !deviceSlugs.has(slug))
+      .map((slug) => `${caseType.slug} -> ${slug}`)
+  )
+  if (staleExclusions.length) {
+    throw new Error(
+      `case-types.ts excludes devices that are not in devices.ts: ${staleExclusions.join(", ")}`
+    )
+  }
+
+  const designCaseTypes = new Set(DESIGNS.flatMap((d) => d.case_types))
+  const knownCaseTypes = new Set(CASE_TYPES.map((c) => c.slug))
+  const unknownCaseTypes = [...designCaseTypes].filter(
+    (slug) => !knownCaseTypes.has(slug)
+  )
+  if (unknownCaseTypes.length) {
+    throw new Error(
+      `designs.ts references unknown case types: ${unknownCaseTypes.join(", ")}`
+    )
   }
 
   logger.info("Seeding store, sales channel and API key...")
@@ -240,7 +267,7 @@ export default async function initialDataSeed({
         name: caseType.name,
         description: caseType.description,
         sku_code: caseType.sku_code,
-        base_price: caseType.base_price,
+        price: caseType.price,
         sort_order: index,
         devices: DEVICES.filter(
           (device) => fits.has(device.family) && !excluded.has(device.slug)
@@ -262,7 +289,7 @@ export default async function initialDataSeed({
       artist: design.artist,
       sku_code: design.sku_code,
       sort_order: index,
-      hero_image_url: `https://picsum.photos/seed/florayn-${design.slug}/1200/1200`,
+      hero_image_url: placeholderImage(design.slug, design.name),
     }))
   )
   const designBySlug = new Map<string, any>(
@@ -344,7 +371,7 @@ export default async function initialDataSeed({
           ),
         ],
         images: [1, 2, 3].map((n) => ({
-          url: `https://picsum.photos/seed/florayn-${design.slug}-${caseTypeSlug}-${n}/1200/1200`,
+          url: placeholderImage(`${design.slug}-${caseTypeSlug}-${n}`, design.name),
         })),
         // Mirrored onto the product so the Store API can render a card without
         // a second round trip for the linked design and case type.
@@ -369,7 +396,8 @@ export default async function initialDataSeed({
           options: { Device: device.name },
           prices: [
             {
-              amount: caseTypeSeed.base_price + device.price_delta,
+              // Flat per case type - the device does not affect price.
+              amount: caseTypeSeed.price,
               currency_code: CURRENCY,
             },
           ],

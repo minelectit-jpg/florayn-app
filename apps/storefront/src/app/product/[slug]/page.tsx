@@ -1,9 +1,9 @@
 import type { Metadata } from "next"
-import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import DevicePicker from "@/components/device-picker"
+import ProductImage from "@/components/product-image"
 import { getDesign, getDeviceFamilyMap } from "@/lib/catalog"
 import { getProductByHandle } from "@/lib/medusa"
 
@@ -51,13 +51,12 @@ export default async function ProductPage({ params }: Params) {
         <div className="space-y-3">
           {images.length ? (
             <div className="relative aspect-square overflow-hidden border border-[var(--color-line)] bg-white">
-              <Image
+              <ProductImage
                 src={images[0].url}
                 alt={product.title}
-                fill
+                label={product.title}
                 priority
                 sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-cover"
               />
             </div>
           ) : null}
@@ -69,12 +68,11 @@ export default async function ProductPage({ params }: Params) {
                   key={image.id}
                   className="relative aspect-square overflow-hidden border border-[var(--color-line)] bg-white"
                 >
-                  <Image
+                  <ProductImage
                     src={image.url}
                     alt=""
-                    fill
+                    label={product.title}
                     sizes="16vw"
-                    className="object-cover"
                   />
                 </div>
               ))}
@@ -136,15 +134,13 @@ export default async function ProductPage({ params }: Params) {
                 className="group block border border-[var(--color-line)] bg-white hover:border-[var(--color-ink)]"
               >
                 <div className="relative aspect-square overflow-hidden bg-[var(--color-paper)]">
-                  {sibling.thumbnail ? (
-                    <Image
-                      src={sibling.thumbnail}
-                      alt={sibling.title}
-                      fill
-                      sizes="20vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : null}
+                  <ProductImage
+                    src={sibling.thumbnail}
+                    alt={sibling.title}
+                    label={sibling.case_type_name ?? sibling.title}
+                    sizes="20vw"
+                    className="transition-transform duration-500 group-hover:scale-105"
+                  />
                 </div>
                 <p className="p-3 text-sm">{sibling.case_type_name}</p>
               </Link>

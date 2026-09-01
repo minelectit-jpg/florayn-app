@@ -14,8 +14,8 @@ const CaseType = model.define("case_type", {
   description: model.text().nullable(),
   // Short code used when building variant SKUs, e.g. ARMBLK.
   sku_code: model.text(),
-  // Floor price in BDT before the per-device delta is applied.
-  base_price: model.number(),
+  // Flat price in BDT for every variant of every product in this case type.
+  price: model.number(),
   sort_order: model.number().default(0),
   is_active: model.boolean().default(true),
   devices: model.manyToMany(() => Device, {
