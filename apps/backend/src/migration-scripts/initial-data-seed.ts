@@ -21,6 +21,10 @@ import {
 } from "@medusajs/medusa/core-flows"
 
 import { CATALOG_MODULE } from "../modules/catalog"
+import {
+  SHIPPING,
+  SHIPPING_OPTION_NAMES,
+} from "../modules/catalog/data/bangladesh"
 import { CASE_TYPES } from "../modules/catalog/data/case-types"
 import { DESIGNS } from "../modules/catalog/data/designs"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
@@ -200,48 +204,60 @@ export default async function initialDataSeed({
     [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id },
   })
 
+  // Four options, not two: the paid rate per zone plus a zero-priced twin
+  // used when the order clears the free-delivery threshold. Shipping is
+  // chosen server-side at checkout from the district and subtotal, so the
+  // customer never picks a price.
+  const shippingOptionInput = (
+    name: string,
+    code: string,
+    description: string,
+    amount: number
+  ) => ({
+    name,
+    price_type: "flat" as const,
+    provider_id: "manual_manual",
+    service_zone_id: fulfillmentSet.service_zones[0].id,
+    shipping_profile_id: shippingProfile.id,
+    type: { label: name, description, code },
+    prices: [
+      { currency_code: CURRENCY, amount },
+      { region_id: region.id, amount },
+    ],
+    rules: [
+      { attribute: "enabled_in_store", value: "true", operator: "eq" },
+      { attribute: "is_return", value: "false", operator: "eq" },
+    ],
+  })
+
+  const freeNote = `Free over BDT ${SHIPPING.freeThreshold}.`
+
   await createShippingOptionsWorkflow(container).run({
     input: [
-      {
-        name: "Inside Dhaka",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Inside Dhaka",
-          description: "Delivered in 1-2 days.",
-          code: "inside-dhaka",
-        },
-        prices: [
-          { currency_code: CURRENCY, amount: 60 },
-          { region_id: region.id, amount: 60 },
-        ],
-        rules: [
-          { attribute: "enabled_in_store", value: "true", operator: "eq" },
-          { attribute: "is_return", value: "false", operator: "eq" },
-        ],
-      },
-      {
-        name: "Outside Dhaka",
-        price_type: "flat",
-        provider_id: "manual_manual",
-        service_zone_id: fulfillmentSet.service_zones[0].id,
-        shipping_profile_id: shippingProfile.id,
-        type: {
-          label: "Outside Dhaka",
-          description: "Delivered in 3-5 days.",
-          code: "outside-dhaka",
-        },
-        prices: [
-          { currency_code: CURRENCY, amount: 120 },
-          { region_id: region.id, amount: 120 },
-        ],
-        rules: [
-          { attribute: "enabled_in_store", value: "true", operator: "eq" },
-          { attribute: "is_return", value: "false", operator: "eq" },
-        ],
-      },
+      shippingOptionInput(
+        SHIPPING_OPTION_NAMES["inside-dhaka"].paid,
+        "inside-dhaka",
+        "Delivered in 1-2 days.",
+        SHIPPING.insideDhaka
+      ),
+      shippingOptionInput(
+        SHIPPING_OPTION_NAMES["outside-dhaka"].paid,
+        "outside-dhaka",
+        "Delivered in 3-5 days.",
+        SHIPPING.outsideDhaka
+      ),
+      shippingOptionInput(
+        SHIPPING_OPTION_NAMES["inside-dhaka"].free,
+        "inside-dhaka-free",
+        `Delivered in 1-2 days. ${freeNote}`,
+        0
+      ),
+      shippingOptionInput(
+        SHIPPING_OPTION_NAMES["outside-dhaka"].free,
+        "outside-dhaka-free",
+        `Delivered in 3-5 days. ${freeNote}`,
+        0
+      ),
     ],
   })
 

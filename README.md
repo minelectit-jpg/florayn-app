@@ -182,6 +182,9 @@ GET /store/designs           the artwork library
 GET /store/designs/:slug     one design plus every product it is published in
 GET /store/case-types        the six constructions and the devices they fit
 GET /store/devices           the device list, grouped by family
+GET /store/districts         the 64 districts and the delivery rates
+POST /store/checkout         place an order (address + COD + complete)
+GET /store/checkout/:id      order summary for the confirmation page
 ```
 
 All of them need the `x-publishable-api-key` header.
@@ -198,9 +201,10 @@ source and calls `createProductsWorkflow` the way the seed does.
 
 ## Not built yet
 
-- **Checkout.** The cart is real (Medusa carts, line items, BDT totals) but
-  there is no address, shipping-selection or payment step. Shipping options and
-  the manual payment provider are already configured in the backend.
+- **Online payment.** Cash on Delivery is the only method. bKash/Nagad and a
+  courier integration are deliberately not wired up yet.
+- **Order tracking for customers.** The confirmation page is reachable by its
+  order id, but there is no account area or order-status lookup.
 - **Admin CRUD for the catalog module.** Designs, case types and devices are
   seeded from the data files and readable through the Store API, but the admin
   dashboard has no screens to edit them. The product page does show a Catalog
@@ -211,3 +215,47 @@ source and calls `createProductsWorkflow` the way the seed does.
   slug, so the catalogue renders offline and looks the same on every machine.
   Wire up a real file provider (S3, Cloudflare R2) before loading actual
   artwork, and add its host to `images.remotePatterns` in the storefront config.
+
+## Checkout
+
+One page at `/checkout/`, Cash on Delivery only. Cart -> checkout -> `/order/<id>/`.
+
+The whole thing is a single `POST /store/checkout`: it validates the address,
+sets it on the cart, picks and attaches the shipping method, opens a COD
+payment session and completes the cart, then returns the order id.
+
+**Shipping is priced on the server, never sent by the client.**
+
+| Zone | Rate |
+| --- | --- |
+| Inside Dhaka (Dhaka district only) | ৳70 |
+| Outside Dhaka (the other 63) | ৳130 |
+| Any zone, subtotal ≥ ৳2,000 | Free |
+
+That is why the seed creates **four** shipping options, not two: a paid rate per
+zone plus a zero-priced twin for the free case. The checkout route picks one by
+name from the district and the cart subtotal, so a customer cannot get free
+delivery by editing the request.
+
+Gazipur and Narayanganj are adjacent to Dhaka and often bundled into the city
+rate; here they are separate districts and charged the outside rate. Change
+`INSIDE_DHAKA_DISTRICTS` in
+`apps/backend/src/modules/catalog/data/bangladesh.ts` if that is wrong.
+
+### Phone and email
+
+Phone is validated as `01[3-9]` plus 8 digits on both the client and the
+server, and `+880`/`880` prefixes are normalised away before validation.
+
+Email is optional, because most customers here do not have one. Medusa still
+requires an email to complete a cart, so when the field is blank the backend
+synthesises `<phone>@no-email.florayn.local` and records
+`customer_has_email: false` in the order metadata. **Do not send mail to those
+addresses** - filter on that flag first.
+
+### Orders in the admin
+
+Orders are created through `completeCartWorkflow`, so they are ordinary Medusa
+orders: visible under Orders, fulfillable, refundable. The district, area,
+delivery note and the COD marker are on the order metadata, and the phone is on
+the shipping address.

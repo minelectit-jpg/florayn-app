@@ -3,6 +3,11 @@
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 
+import {
+  placeOrder,
+  type CheckoutInput,
+  type PlacedOrder,
+} from "./checkout"
 import { getRegionId, sdk } from "./medusa"
 
 const CART_COOKIE = "florayn_cart_id"
@@ -180,4 +185,33 @@ export async function setLineItemQuantity(
 
 export async function removeLineItem(lineId: string): Promise<CartSummary> {
   return setLineItemQuantity(lineId, 0)
+}
+
+/**
+ * Places the order for the cart in the cookie.
+ *
+ * The cart id is httpOnly, so the checkout form never sees it and cannot post
+ * an order for someone else's cart. On success the cookie is cleared, so
+ * returning to the shop starts a fresh cart rather than re-showing items that
+ * have already been ordered.
+ */
+export async function submitOrder(
+  input: Omit<CheckoutInput, "cart_id">
+): Promise<
+  { ok: true; order: PlacedOrder } | { ok: false; errors: Record<string, string> }
+> {
+  const cartId = await readCartId()
+  if (!cartId) {
+    return { ok: false, errors: { form: "Your cart is empty." } }
+  }
+
+  const result = await placeOrder({ ...input, cart_id: cartId })
+
+  if (result.ok) {
+    const store = await cookies()
+    store.delete(CART_COOKIE)
+    revalidatePath("/cart")
+  }
+
+  return result
 }
