@@ -19,7 +19,6 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     shipping: {
       inside_dhaka: SHIPPING.insideDhaka,
       outside_dhaka: SHIPPING.outsideDhaka,
-      free_threshold: SHIPPING.freeThreshold,
     },
   })
 }

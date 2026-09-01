@@ -1,7 +1,10 @@
 /**
- * Medusa v2 stores prices as decimal amounts, not minor units, so a BDT price
- * of 1690 is 1690 taka. Taka is quoted in whole units in Bangladesh, so poisha
- * are only shown when an amount actually has them.
+ * Prices render as "1,400৳" - figure first, symbol after, no decimals.
+ *
+ * The symbol follows the number because that is what florayn.com does; the
+ * WooCommerce Store API reports an empty currency prefix and a "৳" suffix for
+ * BDT. Decimals are dropped because every price in this catalogue is a whole
+ * number of taka.
  */
 export function formatPrice(
   amount: number | null | undefined,
@@ -11,17 +14,16 @@ export function formatPrice(
     return "-"
   }
 
-  const hasFraction = Math.abs(amount % 1) > 0.0001
-  const formatted = amount.toLocaleString("en-US", {
-    minimumFractionDigits: hasFraction ? 2 : 0,
-    maximumFractionDigits: 2,
+  const value = amount.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   })
 
   if (currencyCode.toLowerCase() === "bdt") {
-    return `৳${formatted}`
+    return `${value}৳`
   }
 
-  return `${currencyCode.toUpperCase()} ${formatted}`
+  return `${value} ${currencyCode.toUpperCase()}`
 }
 
 /** Lowest price across a product's variants, for "from ৳1,290" on cards. */
@@ -40,13 +42,8 @@ export function priceRange(
 }
 
 /**
- * Splits a price into the number and its currency symbol so the card can style
- * them separately - florayn.com renders the symbol at weight 500 and .75
- * opacity, lighter than the figure it follows.
- *
- * The live site writes the symbol after the number with two decimals
- * ("1,400.00৳"), which is the WooCommerce/Bangladesh convention, so that is
- * what this returns.
+ * Splits a price into figure and symbol so the shop card can style the symbol
+ * separately - the live site renders it at weight 500 and .75 opacity.
  */
 export function splitPrice(
   amount: number | null | undefined,
@@ -57,8 +54,8 @@ export function splitPrice(
   }
 
   const value = amount.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   })
 
   if (currencyCode.toLowerCase() === "bdt") {

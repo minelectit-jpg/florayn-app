@@ -7,7 +7,6 @@ export type DistrictsResponse = {
   shipping: {
     inside_dhaka: number
     outside_dhaka: number
-    free_threshold: number
   }
 }
 

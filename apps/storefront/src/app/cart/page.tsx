@@ -28,8 +28,6 @@ export default async function CartPage() {
   }
 
   const subtotal = cart?.subtotal ?? 0
-  const threshold = districts?.shipping.free_threshold ?? 0
-  const remainingForFree = Math.max(0, threshold - subtotal)
 
   return (
     <div className="space-y-10">
@@ -62,23 +60,13 @@ export default async function CartPage() {
           </div>
 
           {districts ? (
-            remainingForFree > 0 ? (
-              <p className="border-t border-line pt-4 text-sm text-ink-muted">
-                Add{" "}
-                <span className="text-ink">
-                  {formatPrice(remainingForFree, currencyCode)}
-                </span>{" "}
-                more for free delivery. Otherwise it is{" "}
-                {formatPrice(districts.shipping.inside_dhaka, currencyCode)}{" "}
-                inside Dhaka,{" "}
-                {formatPrice(districts.shipping.outside_dhaka, currencyCode)}{" "}
-                outside.
-              </p>
-            ) : (
-              <p className="border-t border-line pt-4 text-sm text-success">
-                This order qualifies for free delivery.
-              </p>
-            )
+            <p className="border-t border-line pt-4 text-sm text-ink-muted">
+              Delivery is{" "}
+              {formatPrice(districts.shipping.inside_dhaka, currencyCode)} inside
+              Dhaka and{" "}
+              {formatPrice(districts.shipping.outside_dhaka, currencyCode)}{" "}
+              everywhere else.
+            </p>
           ) : null}
 
           <ButtonLink href="/checkout/" size="lg" fullWidth>

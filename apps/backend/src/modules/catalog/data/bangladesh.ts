@@ -5,6 +5,9 @@
  * the backend can never disagree about which districts exist or what delivery
  * costs. Shipping is always priced server-side at checkout - the client sends a
  * district, never a price.
+ *
+ * Districts and rates are taken from the live florayn.com checkout: a flat 60
+ * inside Dhaka and 100 everywhere else, with no free-delivery threshold.
  */
 
 /** All 64 districts, alphabetical. */
@@ -12,12 +15,11 @@ export const DISTRICTS = [
   "Bagerhat",
   "Bandarban",
   "Barguna",
-  "Barisal",
+  "Barishal",
   "Bhola",
   "Bogura",
   "Brahmanbaria",
   "Chandpur",
-  "Chapainawabganj",
   "Chattogram",
   "Chuadanga",
   "Cox's Bazar",
@@ -54,7 +56,8 @@ export const DISTRICTS = [
   "Narayanganj",
   "Narsingdi",
   "Natore",
-  "Netrokona",
+  "Nawabganj",
+  "Netrakona",
   "Nilphamari",
   "Noakhali",
   "Pabna",
@@ -87,10 +90,8 @@ export const DISTRICT_COUNT = DISTRICTS.length
 export const INSIDE_DHAKA_DISTRICTS: string[] = ["Dhaka"]
 
 export const SHIPPING = {
-  insideDhaka: 70,
-  outsideDhaka: 130,
-  /** Order subtotal, in BDT, at or above which delivery is free. */
-  freeThreshold: 2000,
+  insideDhaka: 60,
+  outsideDhaka: 100,
 } as const
 
 export type ShippingZone = "inside-dhaka" | "outside-dhaka"
@@ -105,10 +106,7 @@ export function isDistrict(value: string): boolean {
   return (DISTRICTS as readonly string[]).includes(value)
 }
 
-export function shippingCost(district: string, subtotal: number): number {
-  if (subtotal >= SHIPPING.freeThreshold) {
-    return 0
-  }
+export function shippingCost(district: string): number {
   return zoneForDistrict(district) === "inside-dhaka"
     ? SHIPPING.insideDhaka
     : SHIPPING.outsideDhaka
@@ -141,13 +139,7 @@ export function isValidPhone(value: string): boolean {
  * Shipping option names created by the seed. The checkout route looks options
  * up by name, so these are the contract between the seed and checkout.
  */
-export const SHIPPING_OPTION_NAMES: Record<ShippingZone, { paid: string; free: string }> = {
-  "inside-dhaka": {
-    paid: "Inside Dhaka",
-    free: "Inside Dhaka (Free delivery)",
-  },
-  "outside-dhaka": {
-    paid: "Outside Dhaka",
-    free: "Outside Dhaka (Free delivery)",
-  },
+export const SHIPPING_OPTION_NAMES: Record<ShippingZone, string> = {
+  "inside-dhaka": "Inside Dhaka",
+  "outside-dhaka": "Outside Dhaka",
 }

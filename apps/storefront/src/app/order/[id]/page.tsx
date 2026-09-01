@@ -108,9 +108,7 @@ export default async function OrderPage({ params }: Params) {
             <div className="flex justify-between">
               <dt className="text-ink-muted">Delivery</dt>
               <dd>
-                {order.shipping_total === 0
-                  ? "Free"
-                  : formatPrice(order.shipping_total, order.currency_code)}
+                {formatPrice(order.shipping_total, order.currency_code)}
               </dd>
             </div>
             <div className="flex justify-between border-t border-line pt-3">

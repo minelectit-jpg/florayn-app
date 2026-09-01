@@ -65,9 +65,8 @@ export default function SiteFooter() {
             <p className="eyebrow">Delivery</p>
             <ul className="space-y-2 text-sm text-ink-muted">
               <li>Cash on Delivery</li>
-              <li>Inside Dhaka ৳70</li>
-              <li>Outside Dhaka ৳130</li>
-              <li className="text-ink">Free over ৳2,000</li>
+              <li>Inside Dhaka 60৳</li>
+              <li>Outside Dhaka 100৳</li>
             </ul>
           </div>
         </div>

@@ -61,12 +61,12 @@ carries no price of its own and every variant of a product costs the same.
 
 | Case type | Price |
 | --- | --- |
-| Essentials | ৳1,400 |
-| Signature | ৳1,400 |
-| Elite Clear | ৳1,600 |
-| Armor Black | ৳1,950 |
-| Armor Clear | ৳1,950 |
-| Alcantara | ৳3,800 |
+| Essentials | 1,400৳ |
+| Signature | 1,400৳ |
+| Elite Clear | 1,600৳ |
+| Armor Black | 1,950৳ |
+| Armor Clear | 1,950৳ |
+| Alcantara | 3,800৳ |
 
 Alcantara varies by device in the real store; it is held flat here until those
 figures are confirmed. If per-device pricing is ever needed, it belongs on the
@@ -168,7 +168,7 @@ cd apps/backend && npm run key
 
 Five designs, published across the case types each is offered in - 21 products
 and 924 variants. Region is Bangladesh, currency BDT, shipping is
-Inside Dhaka (৳60) / Outside Dhaka (৳120).
+Inside Dhaka (60৳) / Outside Dhaka (100৳).
 
 Reseeding requires a fresh database; the seed refuses to run twice.
 
@@ -224,18 +224,19 @@ The whole thing is a single `POST /store/checkout`: it validates the address,
 sets it on the cart, picks and attaches the shipping method, opens a COD
 payment session and completes the cart, then returns the order id.
 
-**Shipping is priced on the server, never sent by the client.**
+**Shipping is priced on the server, never sent by the client.** Rates and the
+district list are taken from the live florayn.com checkout, not invented.
 
 | Zone | Rate |
 | --- | --- |
-| Inside Dhaka (Dhaka district only) | ৳70 |
-| Outside Dhaka (the other 63) | ৳130 |
-| Any zone, subtotal ≥ ৳2,000 | Free |
+| Inside Dhaka (Dhaka district only) | 60৳ |
+| Outside Dhaka (the other 63) | 100৳ |
 
-That is why the seed creates **four** shipping options, not two: a paid rate per
-zone plus a zero-priced twin for the free case. The checkout route picks one by
-name from the district and the cart subtotal, so a customer cannot get free
-delivery by editing the request.
+**There is no free-delivery threshold.** The live site has none: no such text
+appears on the homepage, cart, checkout or product pages, and a 1,950৳ subtotal
+is still charged 60৳ at the live checkout. The seed therefore creates one
+shipping option per zone, and the checkout route picks one by district, so the
+rate cannot be altered from the browser.
 
 Gazipur and Narayanganj are adjacent to Dhaka and often bundled into the city
 rate; here they are separate districts and charged the outside rate. Change
@@ -367,3 +368,19 @@ live site, which is what lets the meta line read
 "iPhone 17 Pro Max Case • Signature": a product here spans many devices, so
 without that choice there is no device to name. The chosen device also decides
 which variant quick-add adds.
+
+## Price format
+
+One format everywhere - cards, product page, cart, checkout, order
+confirmation: **`1,400৳`**. Figure first, symbol after, no decimals.
+
+The symbol follows the number because that is what florayn.com does; its
+WooCommerce Store API reports an empty currency prefix and a `৳` suffix for
+BDT. Decimals are dropped because every price in this catalogue is a whole
+number of taka - note the live site does print them (`1,400.00৳`), so if you
+want to match it exactly, change the two `maximumFractionDigits` in
+`apps/storefront/src/lib/money.ts`.
+
+`formatPrice` returns the whole string; `splitPrice` / the `Price` component
+return the figure and symbol separately, which the shop card needs so the
+symbol can carry weight 500 at .75 opacity.

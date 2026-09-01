@@ -12,7 +12,6 @@ import {
   isDistrict,
   isValidPhone,
   normalizePhone,
-  SHIPPING,
   SHIPPING_OPTION_NAMES,
   zoneForDistrict,
 } from "../../../modules/catalog/data/bangladesh"
@@ -21,9 +20,9 @@ import {
  * One-shot checkout: address, shipping, Cash on Delivery and completion in a
  * single request, because the storefront checkout is a single page.
  *
- * Shipping is priced here from the district and the cart subtotal. The client
- * sends a district, never an amount, so a customer cannot select free delivery
- * by editing the request.
+ * Shipping is priced here from the district. The client sends a district,
+ * never an amount, so the rate cannot be altered from the browser. The live
+ * site has no free-delivery threshold, so neither does this.
  *
  * POST /store/checkout
  */
@@ -113,12 +112,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     return res.status(400).json({ errors: { cart_id: "Your cart is empty." } })
   }
 
-  const subtotal = Number(cart.subtotal ?? 0)
   const zone = zoneForDistrict(district)
-  const isFree = subtotal >= SHIPPING.freeThreshold
-  const optionName = isFree
-    ? SHIPPING_OPTION_NAMES[zone].free
-    : SHIPPING_OPTION_NAMES[zone].paid
+  const optionName = SHIPPING_OPTION_NAMES[zone]
 
   const { data: shippingOptions } = await query.graph({
     entity: "shipping_option",
@@ -164,7 +159,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           district,
           area,
           shipping_zone: zone,
-          free_shipping: isFree,
           customer_phone: phone,
           customer_has_email: hasRealEmail,
           payment_method: "cash_on_delivery",

@@ -204,10 +204,9 @@ export default async function initialDataSeed({
     [Modules.FULFILLMENT]: { fulfillment_set_id: fulfillmentSet.id },
   })
 
-  // Four options, not two: the paid rate per zone plus a zero-priced twin
-  // used when the order clears the free-delivery threshold. Shipping is
-  // chosen server-side at checkout from the district and subtotal, so the
-  // customer never picks a price.
+  // One option per zone, at the live florayn.com rates. Shipping is chosen
+  // server-side at checkout from the district, so the customer never picks
+  // a price. There is no free-delivery threshold on the live site.
   const shippingOptionInput = (
     name: string,
     code: string,
@@ -230,33 +229,19 @@ export default async function initialDataSeed({
     ],
   })
 
-  const freeNote = `Free over BDT ${SHIPPING.freeThreshold}.`
-
   await createShippingOptionsWorkflow(container).run({
     input: [
       shippingOptionInput(
-        SHIPPING_OPTION_NAMES["inside-dhaka"].paid,
+        SHIPPING_OPTION_NAMES["inside-dhaka"],
         "inside-dhaka",
         "Delivered in 1-2 days.",
         SHIPPING.insideDhaka
       ),
       shippingOptionInput(
-        SHIPPING_OPTION_NAMES["outside-dhaka"].paid,
+        SHIPPING_OPTION_NAMES["outside-dhaka"],
         "outside-dhaka",
         "Delivered in 3-5 days.",
         SHIPPING.outsideDhaka
-      ),
-      shippingOptionInput(
-        SHIPPING_OPTION_NAMES["inside-dhaka"].free,
-        "inside-dhaka-free",
-        `Delivered in 1-2 days. ${freeNote}`,
-        0
-      ),
-      shippingOptionInput(
-        SHIPPING_OPTION_NAMES["outside-dhaka"].free,
-        "outside-dhaka-free",
-        `Delivered in 3-5 days. ${freeNote}`,
-        0
       ),
     ],
   })

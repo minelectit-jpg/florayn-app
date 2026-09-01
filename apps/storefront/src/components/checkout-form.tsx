@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
 import { Button, Spinner } from "@/components/ui/button"
@@ -58,21 +58,13 @@ export default function CheckoutForm({
   const [submitting, setSubmitting] = useState(false)
 
   const insideDhaka = districts.inside_dhaka.includes(fields.district)
-  const freeShipping = subtotal >= districts.shipping.free_threshold
-  const shipping = freeShipping
-    ? 0
-    : insideDhaka
-      ? districts.shipping.inside_dhaka
-      : districts.shipping.outside_dhaka
+  const shipping = insideDhaka
+    ? districts.shipping.inside_dhaka
+    : districts.shipping.outside_dhaka
   // Until a district is chosen the rate is not known, so show nothing rather
   // than a number that might change once they pick one.
-  const shippingKnown = freeShipping || Boolean(fields.district)
+  const shippingKnown = Boolean(fields.district)
   const total = subtotal + (shippingKnown ? shipping : 0)
-
-  const remainingForFree = useMemo(
-    () => Math.max(0, districts.shipping.free_threshold - subtotal),
-    [districts.shipping.free_threshold, subtotal]
-  )
 
   function set<K extends keyof Fields>(key: K, value: Fields[K]) {
     setFields((f) => ({ ...f, [key]: value }))
@@ -324,8 +316,6 @@ export default function CheckoutForm({
             <dd>
               {!shippingKnown ? (
                 <span className="text-ink-faint">Select a district</span>
-              ) : shipping === 0 ? (
-                "Free"
               ) : (
                 formatPrice(shipping, currencyCode)
               )}
@@ -339,17 +329,6 @@ export default function CheckoutForm({
           </div>
         </dl>
 
-        {!freeShipping && remainingForFree > 0 ? (
-          <p className="text-xs text-ink-muted">
-            Add {formatPrice(remainingForFree, currencyCode)} more for free
-            delivery.
-          </p>
-        ) : null}
-        {freeShipping ? (
-          <p className="text-xs text-success">
-            Free delivery applied to this order.
-          </p>
-        ) : null}
 
         {errors.form ? (
           <p role="alert" className="text-sm text-danger">
