@@ -1,0 +1,963 @@
+{
+  "source": "florayn.com pa_more-designs via WooCommerce Store API (read-only)",
+  "endpoint": "/wp-json/wc/store/v1/products/attributes/2/terms?hide_empty=false",
+  "terms_in_taxonomy": 189,
+  "excluded": [
+    {
+      "name": "Sunny Streett",
+      "reason": "typo duplicate of Sunny Street; has no products"
+    }
+  ],
+  "designs": 188,
+  "without_products": [
+    "Linea Espresso",
+    "Linea Heather",
+    "Linea Ivory",
+    "Linea Mint",
+    "Linea Olive",
+    "Linea Periwinkle",
+    "Linea Ruby"
+  ],
+  "list": [
+    {
+      "name": "Alcantara Black",
+      "slug": "alcantara-black",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Brown",
+      "slug": "alcantara-brown",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Cyan",
+      "slug": "alcantara-cyan",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Dark Green",
+      "slug": "alcantara-dark-green",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Dirty Pink",
+      "slug": "alcantara-dirty-pink",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Gray",
+      "slug": "alcantara-gray",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Orange",
+      "slug": "alcantara-orange",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Purple Blue",
+      "slug": "alcantara-purple-blue",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Sea Blue",
+      "slug": "alcantara-sea-blue",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Sierra Blue",
+      "slug": "alcantara-sierra-blue",
+      "has_products": true
+    },
+    {
+      "name": "Alcantara Wine Red",
+      "slug": "alcantara-wine-red",
+      "has_products": true
+    },
+    {
+      "name": "Alien Abduction",
+      "slug": "alien-abduction",
+      "has_products": true
+    },
+    {
+      "name": "Amber Leopard",
+      "slug": "amber-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Amplitude",
+      "slug": "amplitude",
+      "has_products": true
+    },
+    {
+      "name": "Ant Stripes",
+      "slug": "ant-stripes",
+      "has_products": true
+    },
+    {
+      "name": "Arctic Leopard",
+      "slug": "arctic-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Banana Bliss",
+      "slug": "banana-bliss",
+      "has_products": true
+    },
+    {
+      "name": "Beacon of Dusk",
+      "slug": "beacon-of-dusk",
+      "has_products": true
+    },
+    {
+      "name": "Beetle Shadow",
+      "slug": "beetle-shadow",
+      "has_products": true
+    },
+    {
+      "name": "Berry Pop",
+      "slug": "berry-pop",
+      "has_products": true
+    },
+    {
+      "name": "Blackberry Pinstripe",
+      "slug": "blackberry-pinstripe",
+      "has_products": true
+    },
+    {
+      "name": "Blackout",
+      "slug": "blackout",
+      "has_products": true
+    },
+    {
+      "name": "Blue Belle",
+      "slug": "blue-belle",
+      "has_products": true
+    },
+    {
+      "name": "Blue Bloom",
+      "slug": "blue-bloom",
+      "has_products": true
+    },
+    {
+      "name": "Blush Leopard",
+      "slug": "blush-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Blush Poppy",
+      "slug": "blush-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Candy Hills",
+      "slug": "candy-hills",
+      "has_products": true
+    },
+    {
+      "name": "Caterpillar Maze",
+      "slug": "caterpillar-maze",
+      "has_products": true
+    },
+    {
+      "name": "Celestial Silence",
+      "slug": "celestial-silence",
+      "has_products": true
+    },
+    {
+      "name": "Cherry Cordial",
+      "slug": "cherry-cordial",
+      "has_products": true
+    },
+    {
+      "name": "Cherry Swirl",
+      "slug": "cherry-swirl",
+      "has_products": true
+    },
+    {
+      "name": "Citrus Splash",
+      "slug": "citrus-splash",
+      "has_products": true
+    },
+    {
+      "name": "City Lights",
+      "slug": "city-lights",
+      "has_products": true
+    },
+    {
+      "name": "Classic Leopard",
+      "slug": "classic-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Clay",
+      "slug": "clay",
+      "has_products": true
+    },
+    {
+      "name": "Cloudwalker",
+      "slug": "cloudwalker",
+      "has_products": true
+    },
+    {
+      "name": "Clover Field",
+      "slug": "clover-field",
+      "has_products": true
+    },
+    {
+      "name": "Cobalt Nova",
+      "slug": "cobalt-nova",
+      "has_products": true
+    },
+    {
+      "name": "Coco Vibe",
+      "slug": "coco-vibe",
+      "has_products": true
+    },
+    {
+      "name": "Coral Crush",
+      "slug": "coral-crush",
+      "has_products": true
+    },
+    {
+      "name": "Cottage Glow",
+      "slug": "cottage-glow",
+      "has_products": true
+    },
+    {
+      "name": "Cow Hide",
+      "slug": "cow-hide",
+      "has_products": true
+    },
+    {
+      "name": "Crimson Pop",
+      "slug": "crimson-pop",
+      "has_products": true
+    },
+    {
+      "name": "Croc Scale",
+      "slug": "croc-scale",
+      "has_products": true
+    },
+    {
+      "name": "Crossing Dreams",
+      "slug": "crossing-dreams",
+      "has_products": true
+    },
+    {
+      "name": "Dalmatian Dot",
+      "slug": "dalmatian-dot",
+      "has_products": true
+    },
+    {
+      "name": "Dark Muse",
+      "slug": "dark-muse",
+      "has_products": true
+    },
+    {
+      "name": "Dark Waves",
+      "slug": "dark-waves",
+      "has_products": true
+    },
+    {
+      "name": "Date Night",
+      "slug": "date-night",
+      "has_products": true
+    },
+    {
+      "name": "Dream Grove",
+      "slug": "dream-grove",
+      "has_products": true
+    },
+    {
+      "name": "Drift Dynasty",
+      "slug": "drift-dynasty",
+      "has_products": true
+    },
+    {
+      "name": "Edge of Light",
+      "slug": "edge-of-light",
+      "has_products": true
+    },
+    {
+      "name": "Elderberry",
+      "slug": "elderberry",
+      "has_products": true
+    },
+    {
+      "name": "Emerald Muse",
+      "slug": "emerald-muse",
+      "has_products": true
+    },
+    {
+      "name": "Evergreen",
+      "slug": "evergreen",
+      "has_products": true
+    },
+    {
+      "name": "Floral Leopard",
+      "slug": "floral-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Floral Pop",
+      "slug": "floral-pop",
+      "has_products": true
+    },
+    {
+      "name": "Forest Poppy",
+      "slug": "forest-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Frostbite",
+      "slug": "frostbite",
+      "has_products": true
+    },
+    {
+      "name": "Fur Friends",
+      "slug": "fur-friends",
+      "has_products": true
+    },
+    {
+      "name": "Game Night",
+      "slug": "game-night",
+      "has_products": true
+    },
+    {
+      "name": "Gear Heads",
+      "slug": "gear-heads",
+      "has_products": true
+    },
+    {
+      "name": "Giraffe Earth",
+      "slug": "giraffe-earth",
+      "has_products": true
+    },
+    {
+      "name": "Golden Hour",
+      "slug": "golden-hour",
+      "has_products": true
+    },
+    {
+      "name": "Golden Hour Street",
+      "slug": "golden-hour-street",
+      "has_products": true
+    },
+    {
+      "name": "Good Things Are Coming",
+      "slug": "good-things-are-coming",
+      "has_products": true
+    },
+    {
+      "name": "Grape Goo",
+      "slug": "grape-goo",
+      "has_products": true
+    },
+    {
+      "name": "Green Lotus",
+      "slug": "green-lotus",
+      "has_products": true
+    },
+    {
+      "name": "Heartbeat",
+      "slug": "heartbeat",
+      "has_products": true
+    },
+    {
+      "name": "Heartstorm",
+      "slug": "heartstorm",
+      "has_products": true
+    },
+    {
+      "name": "Hertz",
+      "slug": "hertz",
+      "has_products": true
+    },
+    {
+      "name": "Home Above",
+      "slug": "home-above",
+      "has_products": true
+    },
+    {
+      "name": "Honey Glow",
+      "slug": "honey-glow",
+      "has_products": true
+    },
+    {
+      "name": "Honeycomb Bee",
+      "slug": "honeycomb-bee",
+      "has_products": true
+    },
+    {
+      "name": "Indigo Leopard",
+      "slug": "indigo-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Jackfruit Jungle",
+      "slug": "jackfruit-jungle",
+      "has_products": true
+    },
+    {
+      "name": "Jade Coil",
+      "slug": "jade-coil",
+      "has_products": true
+    },
+    {
+      "name": "Legends",
+      "slug": "legends",
+      "has_products": true
+    },
+    {
+      "name": "Lemon Drip",
+      "slug": "lemon-drip",
+      "has_products": true
+    },
+    {
+      "name": "Lemon Drop",
+      "slug": "lemon-drop",
+      "has_products": true
+    },
+    {
+      "name": "Leopard Spots",
+      "slug": "leopard-spots",
+      "has_products": true
+    },
+    {
+      "name": "Lilac Dream",
+      "slug": "lilac-dream",
+      "has_products": true
+    },
+    {
+      "name": "Lime Sorbet",
+      "slug": "lime-sorbet",
+      "has_products": true
+    },
+    {
+      "name": "Linea Espresso",
+      "slug": "linea-espresso",
+      "has_products": false
+    },
+    {
+      "name": "Linea Heather",
+      "slug": "linea-heather",
+      "has_products": false
+    },
+    {
+      "name": "Linea Ivory",
+      "slug": "linea-ivory",
+      "has_products": false
+    },
+    {
+      "name": "Linea Mint",
+      "slug": "linea-mint",
+      "has_products": false
+    },
+    {
+      "name": "Linea Olive",
+      "slug": "linea-olive",
+      "has_products": false
+    },
+    {
+      "name": "Linea Periwinkle",
+      "slug": "linea-periwinkle",
+      "has_products": false
+    },
+    {
+      "name": "Linea Ruby",
+      "slug": "linea-ruby",
+      "has_products": false
+    },
+    {
+      "name": "Lone Spirit",
+      "slug": "lone-spirit",
+      "has_products": true
+    },
+    {
+      "name": "Look for the Good",
+      "slug": "look-for-the-good",
+      "has_products": true
+    },
+    {
+      "name": "Love is simple",
+      "slug": "love-is-simple",
+      "has_products": true
+    },
+    {
+      "name": "Love Notes",
+      "slug": "love-notes",
+      "has_products": true
+    },
+    {
+      "name": "Love Spell",
+      "slug": "love-spell",
+      "has_products": true
+    },
+    {
+      "name": "Lychee Love",
+      "slug": "lychee-love",
+      "has_products": true
+    },
+    {
+      "name": "Mango Stamp",
+      "slug": "mango-stamp",
+      "has_products": true
+    },
+    {
+      "name": "Mauve Mood",
+      "slug": "mauve-mood",
+      "has_products": true
+    },
+    {
+      "name": "Mauve Poppy",
+      "slug": "mauve-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Midnight Leopard",
+      "slug": "midnight-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Midnight Riders",
+      "slug": "midnight-riders",
+      "has_products": true
+    },
+    {
+      "name": "Midnight Sprinkle",
+      "slug": "midnight-sprinkle",
+      "has_products": true
+    },
+    {
+      "name": "Mint Melt",
+      "slug": "mint-melt",
+      "has_products": true
+    },
+    {
+      "name": "Mint Muse",
+      "slug": "mint-muse",
+      "has_products": true
+    },
+    {
+      "name": "Misty Poppy",
+      "slug": "misty-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Mocha Dot",
+      "slug": "mocha-dot",
+      "has_products": true
+    },
+    {
+      "name": "Moon Drift",
+      "slug": "moon-drift",
+      "has_products": true
+    },
+    {
+      "name": "Moon Kiss",
+      "slug": "moon-kiss",
+      "has_products": true
+    },
+    {
+      "name": "Moonwatcher",
+      "slug": "moonwatcher",
+      "has_products": true
+    },
+    {
+      "name": "Morning Sky",
+      "slug": "morning-sky",
+      "has_products": true
+    },
+    {
+      "name": "Moth Dust",
+      "slug": "moth-dust",
+      "has_products": true
+    },
+    {
+      "name": "Mount Glow",
+      "slug": "mount-glow",
+      "has_products": true
+    },
+    {
+      "name": "Night Hibiscus",
+      "slug": "night-hibiscus",
+      "has_products": true
+    },
+    {
+      "name": "Night Out",
+      "slug": "night-out",
+      "has_products": true
+    },
+    {
+      "name": "Night Sparks",
+      "slug": "night-sparks",
+      "has_products": true
+    },
+    {
+      "name": "Night’s Whisper",
+      "slug": "nights-whisper",
+      "has_products": true
+    },
+    {
+      "name": "No Limits",
+      "slug": "no-limits",
+      "has_products": true
+    },
+    {
+      "name": "Noir Bold",
+      "slug": "noir-bold",
+      "has_products": true
+    },
+    {
+      "name": "Obsidian Leopard",
+      "slug": "obsidian-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Olive Grove",
+      "slug": "olive-grove",
+      "has_products": true
+    },
+    {
+      "name": "Opening Night",
+      "slug": "opening-night",
+      "has_products": true
+    },
+    {
+      "name": "Orchid Leopard",
+      "slug": "orchid-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Oscillate",
+      "slug": "oscillate",
+      "has_products": true
+    },
+    {
+      "name": "Oxblood",
+      "slug": "oxblood",
+      "has_products": true
+    },
+    {
+      "name": "Peach Blossom",
+      "slug": "peach-blossom",
+      "has_products": true
+    },
+    {
+      "name": "Peppermint Twist",
+      "slug": "peppermint-twist",
+      "has_products": true
+    },
+    {
+      "name": "Phase",
+      "slug": "phase",
+      "has_products": true
+    },
+    {
+      "name": "Pineapple Bloom",
+      "slug": "pineapple-bloom",
+      "has_products": true
+    },
+    {
+      "name": "Pink Lemonade",
+      "slug": "pink-lemonade",
+      "has_products": true
+    },
+    {
+      "name": "Pink Muse",
+      "slug": "pink-muse",
+      "has_products": true
+    },
+    {
+      "name": "Pink Plumeria",
+      "slug": "pink-plumeria",
+      "has_products": true
+    },
+    {
+      "name": "Positive Heart",
+      "slug": "positive-heart",
+      "has_products": true
+    },
+    {
+      "name": "Pulse",
+      "slug": "pulse",
+      "has_products": true
+    },
+    {
+      "name": "Pure Heart",
+      "slug": "pure-heart",
+      "has_products": true
+    },
+    {
+      "name": "Purple Reign",
+      "slug": "purple-reign",
+      "has_products": true
+    },
+    {
+      "name": "Rain Ride",
+      "slug": "rain-ride",
+      "has_products": true
+    },
+    {
+      "name": "Raspberry Ripple",
+      "slug": "raspberry-ripple",
+      "has_products": true
+    },
+    {
+      "name": "Rebel Society",
+      "slug": "rebel-society",
+      "has_products": true
+    },
+    {
+      "name": "Red Lily",
+      "slug": "red-lily",
+      "has_products": true
+    },
+    {
+      "name": "Redshift",
+      "slug": "redshift",
+      "has_products": true
+    },
+    {
+      "name": "Reverb",
+      "slug": "reverb",
+      "has_products": true
+    },
+    {
+      "name": "Riptide",
+      "slug": "riptide",
+      "has_products": true
+    },
+    {
+      "name": "Road Trip",
+      "slug": "road-trip",
+      "has_products": true
+    },
+    {
+      "name": "Rose Fizz",
+      "slug": "rose-fizz",
+      "has_products": true
+    },
+    {
+      "name": "Ruby Poppy",
+      "slug": "ruby-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Safari Dusk",
+      "slug": "safari-dusk",
+      "has_products": true
+    },
+    {
+      "name": "Sahara Leopard",
+      "slug": "sahara-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Sandstone",
+      "slug": "sandstone",
+      "has_products": true
+    },
+    {
+      "name": "Sandstone Poppy",
+      "slug": "sandstone-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Sea Voyage",
+      "slug": "sea-voyage",
+      "has_products": true
+    },
+    {
+      "name": "Self Love",
+      "slug": "self-love",
+      "has_products": true
+    },
+    {
+      "name": "Shadow Leopard",
+      "slug": "shadow-leopard",
+      "has_products": true
+    },
+    {
+      "name": "Signal",
+      "slug": "signal",
+      "has_products": true
+    },
+    {
+      "name": "Silver Haze",
+      "slug": "silver-haze",
+      "has_products": true
+    },
+    {
+      "name": "Snow Speckle",
+      "slug": "snow-speckle",
+      "has_products": true
+    },
+    {
+      "name": "Soft Ivory Mist",
+      "slug": "soft-ivory-mist",
+      "has_products": true
+    },
+    {
+      "name": "Sonar",
+      "slug": "sonar",
+      "has_products": true
+    },
+    {
+      "name": "Star Village",
+      "slug": "star-village",
+      "has_products": true
+    },
+    {
+      "name": "Starlit Date",
+      "slug": "starlit-date",
+      "has_products": true
+    },
+    {
+      "name": "Static",
+      "slug": "static",
+      "has_products": true
+    },
+    {
+      "name": "Still Reflections",
+      "slug": "still-reflections",
+      "has_products": true
+    },
+    {
+      "name": "Strawberry Blush",
+      "slug": "strawberry-blush",
+      "has_products": true
+    },
+    {
+      "name": "Strawberry Melt",
+      "slug": "strawberry-melt",
+      "has_products": true
+    },
+    {
+      "name": "Sunburst",
+      "slug": "sunburst",
+      "has_products": true
+    },
+    {
+      "name": "Sunflower Bay",
+      "slug": "sunflower-bay",
+      "has_products": true
+    },
+    {
+      "name": "Sunny Street",
+      "slug": "sunny-street",
+      "has_products": true
+    },
+    {
+      "name": "Sunset Sunflowers",
+      "slug": "sunset-sunflowers",
+      "has_products": true
+    },
+    {
+      "name": "Sweet Crush",
+      "slug": "sweet-crush",
+      "has_products": true
+    },
+    {
+      "name": "The Getaway",
+      "slug": "the-getaway",
+      "has_products": true
+    },
+    {
+      "name": "Tiger Ash",
+      "slug": "tiger-ash",
+      "has_products": true
+    },
+    {
+      "name": "Timeless",
+      "slug": "timeless",
+      "has_products": true
+    },
+    {
+      "name": "Tiny Hearts",
+      "slug": "tiny-hearts",
+      "has_products": true
+    },
+    {
+      "name": "Tremor",
+      "slug": "tremor",
+      "has_products": true
+    },
+    {
+      "name": "Two Wheels",
+      "slug": "two-wheels",
+      "has_products": true
+    },
+    {
+      "name": "Urban Solitude",
+      "slug": "urban-solitude",
+      "has_products": true
+    },
+    {
+      "name": "Vertigo",
+      "slug": "vertigo",
+      "has_products": true
+    },
+    {
+      "name": "Violet Horizon",
+      "slug": "violet-horizon",
+      "has_products": true
+    },
+    {
+      "name": "Violet Veil",
+      "slug": "violet-veil",
+      "has_products": true
+    },
+    {
+      "name": "Watermelon Crush",
+      "slug": "watermelon-crush",
+      "has_products": true
+    },
+    {
+      "name": "Waveform",
+      "slug": "waveform",
+      "has_products": true
+    },
+    {
+      "name": "Wavelength",
+      "slug": "wavelength",
+      "has_products": true
+    },
+    {
+      "name": "White Magnolia",
+      "slug": "white-magnolia",
+      "has_products": true
+    },
+    {
+      "name": "Wild Orchid",
+      "slug": "wild-orchid",
+      "has_products": true
+    },
+    {
+      "name": "Winter Poppy",
+      "slug": "winter-poppy",
+      "has_products": true
+    },
+    {
+      "name": "Yellow Marigold",
+      "slug": "yellow-marigold",
+      "has_products": true
+    },
+    {
+      "name": "Zebra Rust",
+      "slug": "zebra-rust",
+      "has_products": true
+    },
+    {
+      "name": "Zebra Shadow",
+      "slug": "zebra-shadow",
+      "has_products": true
+    },
+    {
+      "name": "Zebra Stark",
+      "slug": "zebra-stark",
+      "has_products": true
+    }
+  ]
+}

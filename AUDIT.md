@@ -378,17 +378,76 @@ FluentSMTP is active, so delivery goes through an external SMTP provider.
 
 ---
 
-## 14. Still not covered
+## 14. Designs — the authoritative list
 
-- **The 188 design names as an authoritative list.** 106 recovered from landing
-  pages; Fruit Punch, Stripes and any design without a landing page are missing.
-  Note the live site has both "Sunny Street" and "Sunny Streett" — a typo; only
-  "Sunny Street" is real, giving 188 rather than 189.
+Read from the `pa_more-designs` taxonomy through WooCommerce's **public
+read-only Store API**, so no execute ability was needed:
+
+```
+/wp-json/wc/store/v1/products/attributes            -> pa_more-designs = id 2
+/wp-json/wc/store/v1/products/attributes/2/terms?hide_empty=false&per_page=300
+```
+
+| | Count |
+| --- | --- |
+| Terms in `pa_more-designs` | **189** |
+| Terms with at least one product | 181 |
+| Terms with no products | 8 |
+| Real designs after removing the typo | **188** |
+
+`hide_empty` matters: the default hides terms with no products and returns 181.
+Only `hide_empty=false` gives the full 189.
+
+Saved to `apps/backend/src/modules/catalog/data/designs-live.json` with each
+design's name, slug and whether it currently has products.
+
+### The Sunny Streett typo, confirmed
+
+Both terms exist. **"Sunny Streett" has no products attached**, which is
+independent evidence it is an accidental duplicate rather than a real design.
+It is excluded, leaving 188.
+
+### Seven designs exist but have no products
+
+All from one unreleased-looking set: **Linea Espresso, Linea Heather, Linea
+Ivory, Linea Mint, Linea Olive, Linea Periwinkle, Linea Ruby**.
+
+A "Linea" line is set up in the taxonomy but nothing is published against it,
+and it has no landing page and no collection. Worth confirming whether it is
+upcoming, abandoned, or a staging leftover before it is seeded.
+
+---
+
+## 15. Display names — decision recorded
+
+The rebuild uses the **taxonomy names**, not the storefront marketing labels:
+
+| Use | Not |
+| --- | --- |
+| Signature | "Though Magsafe" |
+| Elite Clear | "Elite Transparent" |
+| Armor Clear | "Armor Transparent" |
+| Armor Black | — |
+| Essentials | — |
+| Alcantara | — |
+
+The marketing labels are inconsistent with each other and one is misspelled, so
+the taxonomy set is the clean baseline. The local build already uses exactly
+these six names, so no change to the data model is required.
+
+---
+
+## 16. Still not covered
+
+- **Design to collection mapping.** 106 of 188 designs are attributable to a
+  collection from the ten landing pages. The remaining 82 - including everything
+  in Fruit Punch, Stripes and Linea - have no landing page to read it from.
+  Needed before a faithful seed.
+- **Per-design case-type availability.** Which of the six constructions each
+  design is actually sold in. The seed currently assumes it.
 - **Alcantara price.**
-- **WooCommerce email settings** (header image, colours, footer text) — options
-  table, needs a read the connector does not expose.
-- **Hand-made WooCommerce coupons** — same limitation.
-- **Product page section behaviour** — Pairs well with, Frequently bought
-  together, bundle offers, gallery/video. File names and sizes are known;
-  behaviour is not documented.
+- **WooCommerce email settings** and **hand-made coupons** - options/posts
+  tables, not exposed read-only. Left as gaps by instruction.
+- **Product page section behaviour** - Pairs well with, Frequently bought
+  together, bundle offers, gallery/video.
 - **Account and blog page copy.**
