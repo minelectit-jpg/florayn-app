@@ -1,10 +1,12 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
-import { addToCart } from "@/lib/cart"
+import { useCart } from "@/components/cart-provider"
 import type { StoreVariant } from "@/lib/medusa"
 import { formatPrice } from "@/lib/money"
+
+type AddState = "idle" | "adding" | "added" | "error"
 
 /**
  * Every variant of a product is a device, so the variant selector is a device
@@ -14,17 +16,30 @@ import { formatPrice } from "@/lib/money"
 export default function DevicePicker({
   variants,
   families,
+  productTitle,
+  thumbnail,
 }: {
   variants: StoreVariant[]
   /** device name -> family label, for grouping the list. */
   families: Record<string, string>
+  productTitle: string
+  thumbnail: string | null
 }) {
+  const { add } = useCart()
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "")
   const [query, setQuery] = useState("")
-  const [added, setAdded] = useState(false)
-  const [pending, startTransition] = useTransition()
+  const [state, setState] = useState<AddState>("idle")
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selected = variants.find((v) => v.id === selectedId)
+
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current) {
+        clearTimeout(resetTimer.current)
+      }
+    }
+  }, [])
 
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -45,16 +60,39 @@ export default function DevicePicker({
 
   const matchCount = grouped.reduce((sum, [, list]) => sum + list.length, 0)
 
-  function onAdd() {
-    if (!selected) {
+  function scheduleReset() {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current)
+    }
+    resetTimer.current = setTimeout(() => setState("idle"), 2500)
+  }
+
+  async function onAdd() {
+    if (!selected || state === "adding") {
       return
     }
-    setAdded(false)
-    startTransition(async () => {
-      await addToCart(selected.id, 1)
-      setAdded(true)
-    })
+
+    setState("adding")
+    try {
+      await add(selected.id, 1, {
+        productTitle,
+        variantTitle: selected.title,
+        unitPrice: selected.calculated_price?.calculated_amount ?? 0,
+        thumbnail,
+      })
+      setState("added")
+    } catch {
+      setState("error")
+    }
+    scheduleReset()
   }
+
+  const label = {
+    idle: "Add to cart",
+    adding: "Adding...",
+    added: "Added ✓",
+    error: "Try again",
+  }[state]
 
   return (
     <div className="space-y-5">
@@ -87,10 +125,10 @@ export default function DevicePicker({
             made for it.
           </p>
         ) : (
-          grouped.map(([label, list]) => (
-            <div key={label}>
+          grouped.map(([familyLabel, list]) => (
+            <div key={familyLabel}>
               <p className="px-1 pb-1 text-xs font-medium uppercase tracking-wider text-[var(--color-ink-soft)]">
-                {label}
+                {familyLabel}
               </p>
               <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                 {list.map((variant) => {
@@ -101,7 +139,7 @@ export default function DevicePicker({
                       type="button"
                       onClick={() => {
                         setSelectedId(variant.id)
-                        setAdded(false)
+                        setState("idle")
                       }}
                       aria-pressed={isSelected}
                       className={[
@@ -144,12 +182,44 @@ export default function DevicePicker({
         <button
           type="button"
           onClick={onAdd}
-          disabled={!selected || pending}
-          className="ml-auto bg-[var(--color-ink)] px-6 py-3 text-sm text-white disabled:opacity-50"
+          disabled={!selected || state === "adding"}
+          className={[
+            "ml-auto flex items-center gap-2 px-6 py-3 text-sm text-white transition-colors",
+            state === "error"
+              ? "bg-red-700"
+              : state === "added"
+                ? "bg-green-800"
+                : "bg-[var(--color-ink)]",
+            state === "adding" ? "opacity-70" : "",
+            !selected ? "opacity-50" : "",
+          ].join(" ")}
         >
-          {pending ? "Adding..." : added ? "Added to cart" : "Add to cart"}
+          {state === "adding" ? (
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
+            />
+          ) : null}
+          {label}
         </button>
       </div>
+
+      {/* Announced to screen readers, which never see the drawer animation. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {state === "adding"
+          ? "Adding to cart"
+          : state === "added"
+            ? `${selected?.title ?? "Item"} added to cart`
+            : state === "error"
+              ? "Could not add to cart. Try again."
+              : ""}
+      </p>
+
+      {state === "error" ? (
+        <p className="text-sm text-red-700">
+          Could not add that to your cart. Check your connection and try again.
+        </p>
+      ) : null}
     </div>
   )
 }

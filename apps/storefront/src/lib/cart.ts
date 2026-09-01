@@ -34,6 +34,45 @@ export type Cart = {
   items?: CartItem[]
 }
 
+/**
+ * The slice of the cart the header badge and the drawer need. Kept small and
+ * separate from the full cart so every mutation can hand one back cheaply and
+ * the UI never has to guess what the server now holds.
+ */
+export type CartSummary = {
+  itemCount: number
+  subtotal: number
+  currencyCode: string
+}
+
+export type AddedLine = {
+  id: string
+  productTitle: string
+  variantTitle: string
+  sku: string | null
+  quantity: number
+  unitPrice: number
+  thumbnail: string | null
+}
+
+const EMPTY_SUMMARY: CartSummary = {
+  itemCount: 0,
+  subtotal: 0,
+  currencyCode: "bdt",
+}
+
+function summarize(cart: Cart | null): CartSummary {
+  if (!cart) {
+    return EMPTY_SUMMARY
+  }
+
+  return {
+    itemCount: (cart.items ?? []).reduce((sum, i) => sum + i.quantity, 0),
+    subtotal: cart.subtotal ?? 0,
+    currencyCode: cart.currency_code ?? "bdt",
+  }
+}
+
 async function readCartId(): Promise<string | undefined> {
   const store = await cookies()
   return store.get(CART_COOKIE)?.value
@@ -54,6 +93,11 @@ export async function getCart(): Promise<Cart | null> {
     // The cart was completed or pruned server-side; treat it as empty.
     return null
   }
+}
+
+/** Used by the header badge to hydrate itself after the page loads. */
+export async function getCartSummary(): Promise<CartSummary> {
+  return summarize(await getCart())
 }
 
 async function getOrCreateCartId(): Promise<string> {
@@ -79,19 +123,49 @@ async function getOrCreateCartId(): Promise<string> {
   return cart.id
 }
 
-export async function addToCart(variantId: string, quantity = 1) {
+/**
+ * Returns the line as the server now holds it, not as the caller assumed. If
+ * the device was already in the cart the quantity is the merged total, and the
+ * drawer should show that rather than "1".
+ */
+export async function addToCart(
+  variantId: string,
+  quantity = 1
+): Promise<{ summary: CartSummary; added: AddedLine | null }> {
   const cartId = await getOrCreateCartId()
   await sdk.store.cart.createLineItem(cartId, {
     variant_id: variantId,
     quantity,
   })
+
+  const cart = await getCart()
+  const line = (cart?.items ?? []).find((i) => i.variant?.id === variantId)
+
   revalidatePath("/cart")
+
+  return {
+    summary: summarize(cart),
+    added: line
+      ? {
+          id: line.id,
+          productTitle: line.variant?.product?.title ?? line.title,
+          variantTitle: line.variant?.title ?? "",
+          sku: line.variant?.sku ?? null,
+          quantity: line.quantity,
+          unitPrice: line.unit_price,
+          thumbnail: line.thumbnail ?? line.variant?.product?.thumbnail ?? null,
+        }
+      : null,
+  }
 }
 
-export async function updateLineItem(lineId: string, quantity: number) {
+export async function setLineItemQuantity(
+  lineId: string,
+  quantity: number
+): Promise<CartSummary> {
   const cartId = await readCartId()
   if (!cartId) {
-    return
+    return EMPTY_SUMMARY
   }
 
   if (quantity <= 0) {
@@ -99,5 +173,11 @@ export async function updateLineItem(lineId: string, quantity: number) {
   } else {
     await sdk.store.cart.updateLineItem(cartId, lineId, { quantity })
   }
+
   revalidatePath("/cart")
+  return summarize(await getCart())
+}
+
+export async function removeLineItem(lineId: string): Promise<CartSummary> {
+  return setLineItemQuantity(lineId, 0)
 }

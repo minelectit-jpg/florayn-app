@@ -106,6 +106,8 @@ export default async function ProductPage({ params }: Params) {
           <DevicePicker
             variants={product.variants ?? []}
             families={families}
+            productTitle={product.title}
+            thumbnail={product.thumbnail ?? images[0]?.url ?? null}
           />
 
           {product.description ? (
