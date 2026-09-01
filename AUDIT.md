@@ -82,29 +82,39 @@ which is what you asked for.
 
 ## 4. Case types
 
-Six, confirmed present on the live site:
+Six, confirmed from the `pa_case-type` taxonomy in the live database:
 
-| Case type | Price (verified) | Category exists at top level |
-| --- | --- | --- |
-| Signature | **1,400.00৳** | no — only as `*-tm` |
-| Elite Clear | **1,600.00৳** | no — only as `*-etm` |
-| Armor Black | **1,950.00৳** | no — only as `*-abm` |
-| Armor Clear | **1,950.00৳** | no — only as `*-atm` |
-| Essentials | not yet read | `/collection/essentials/` (200) |
-| Tough ("Though") MagSafe | not yet read | `/collection/though-magsafe/` (200) |
+| Case type | Price |
+| --- | --- |
+| Essentials | 1,400৳ |
+| Signature | 1,400৳ |
+| Elite Clear | 1,600৳ |
+| Armor Black | 1,950৳ |
+| Armor Clear | 1,950৳ |
+| Alcantara | not yet read |
 
-Prices read from the CASE TYPE swatches on
-`/product/amber-leopard-iphone-17-pro-max-case/`.
+Armor Black / Armor Clear / Elite Clear / Signature prices were read from the
+CASE TYPE swatches on `/product/amber-leopard-iphone-17-pro-max-case/`.
 
-**Italian Alcantara is not a case-type category.** It is an Elementor landing
-page at `/italian-alcantara/`; `/collection/italian-alcantara/` returns 404. The
-local build currently models Alcantara as a case type — that needs a decision.
+### Tough MagSafe is a category, not a case type
 
-**Correction to the local build:** the six case types here are Essentials,
-Signature, Elite Clear, Armor Black, Armor Clear, **Alcantara**. The live sixth
-is **Tough MagSafe**, with Alcantara being a separate line.
+`/collection/though-magsafe/` is a **product category and marketing name for
+Signature**, not a seventh construction. 3,225 of the 3,304 products in that
+category carry `pa_case-type = Signature`. This is consistent with the slug
+suffix decoded in section 2, where `-tm` resolves to Signature.
 
----
+The same applies to `/collection/essentials/`: a category page existing at top
+level says nothing about whether something is a case type.
+
+**Correction.** An earlier version of this audit claimed Tough MagSafe was the
+sixth case type and Alcantara was not one. That was wrong. It inferred the case
+type list from which `/collection/` URLs return 200 - a category signal - rather
+than from `pa_case-type`. The local build’s six case types were correct all
+along and must not be changed.
+
+Alcantara also has an Elementor landing page at `/italian-alcantara/`; the
+landing page and the case type are separate surfaces, as with the other
+collections (see section 5).
 
 ## 5. Pages (all 29)
 
@@ -227,22 +237,158 @@ crawl efficiency, but will need a 301 map.
 
 ---
 
-## 9. Not yet covered
+## 9. Header — mega menu
 
-Listed rather than guessed:
+Four top-level items. Every device link goes to the shop with a **case-type
+filter already applied**, not to a category:
 
-- **The 189 design names.** Needs a crawl of the design-level categories or a
-  paged `woocommerce/products-query`. ~92 design bases are visible behind the
-  case-type suffixes; the rest are in the unsuffixed remainder.
-- **Per-collection landing page layouts.** Section-by-section structure for the
-  10 Elementor landings.
-- **Header mega menu and mobile menu**, beyond the top-level items
-  (Phone Case, Earbuds Cases, Styles, Collections) and the WOMEN/MEN pill.
-- **Footer** — column-by-column link list.
-- **Product page modules in detail** — gallery/video, Pairs well with,
-  Frequently bought together, More designs, reviews, bundle offers. The module
-  and include names are known; behaviour is not documented.
-- **Coupon logic.** Not readable without a write/execute ability.
-- **Email templates**, order-status emails, review-request emails.
-- **Account, blog, policy page copy.**
-- **Essentials and Tough MagSafe prices.**
+```
+/shop/?filter_device=<device>&filter_case-type=<case-type>&filter=1
+```
+
+| Menu | Contents |
+| --- | --- |
+| **Phone Case** | iPhone 17 Pro Max / 17 Pro / 17 Air / 17 (all badged "New"), 16 series, 15 series, 14 series, 13 series, 12 series, then Samsung S26 (New + Hot) / S25 / S24 / S23 — each `filter_case-type=signature` |
+| **Earbuds Cases** | AirPods 1/2, 3, 4, Pro, Pro 2, Pro 3 (New), Designer Vivid |
+| **Styles** | Alcantara, Essentials, Though Magsafe, Elite Transparent, Armor Transparent, Armor Black |
+| **Collections** | Leopard, Muse Marvel, van Gogh Dreams, Bug Life, and a Collections index |
+
+### Marketing names differ from taxonomy names
+
+This is the important find, and it independently confirms section 4:
+
+| Menu label | Actually filters to |
+| --- | --- |
+| Though Magsafe | `filter_case-type=signature` |
+| Elite Transparent | `filter_case-type=elite-clear` |
+| Armor Transparent | `filter_case-type=armor-clear` |
+| Armor Black | `filter_case-type=armor-black` |
+| Essentials | `/collection/essentials/` |
+| Alcantara | `/italian-alcantara/` |
+
+So the store presents **six style entries whose display names are not the
+taxonomy names**. "Though Magsafe" resolving to `signature` is direct proof
+that Tough MagSafe is Signature's marketing name.
+
+The WOMEN / MEN pill sits left of the wordmark (`header-toggle.php`), with
+`section-resolver.php` remembering the choice across pages without redirecting.
+
+---
+
+## 10. Footer
+
+Four columns plus a bar:
+
+| Column | Contents |
+| --- | --- |
+| **Help Customers** | Plot#H-2 (1st Floor), Block-H, Sector-2, Avenue-10, Zahurul Islam City (Aftabnagar Eastern Housing Project), Dhaka-1212, Dhaka, Bangladesh · +880 1310-007055 · email (Cloudflare-obfuscated) |
+| **About** | Terms and Conditions, Privacy Policy, Contact Us |
+| **Shop Categories** | Shop Phone Case, Shop AirPods Case, iPhone 17 Series |
+| **Popular Products** | Wavelength widget — iPhone 17 Pro Max / 17 Pro / 17 Air / 17 / 16 Pro Max, 1,950.00৳, with Add to cart |
+
+Bar: `© 2026 Florayn Store. All rights reserved.`
+
+Two notes: **"Contact Us" points at Facebook**
+(`facebook.com/FloraynFashion`), not an on-site page; and the footer has no
+delivery-terms column, so the 60৳/100৳ rates appear only on the product page
+and at checkout.
+
+---
+
+## 11. Collection landing pages
+
+Ten Elementor pages, all following the same shape: a hero, then a grid of
+**design tiles** where each tile is one design in that collection, linking
+through to the design's category.
+
+| Landing page | Designs listed |
+| --- | --- |
+| `/muse-marvel/` | 14 |
+| `/garage/` | 13 |
+| `/frequency/` | 13 |
+| `/van-gogh-dreams/` | 13 |
+| `/wild-instinct/` | 12 |
+| `/leopard-series/` | 11 |
+| `/florayn-blooms/` | 11 |
+| `/bug-life/` | 9 |
+| `/checkmate/` | 9 |
+| `/italian-alcantara/` | 4 |
+
+**106 distinct design names** are recoverable this way. Examples: Leopard —
+Amber / Arctic / Blush / Classic / Floral / Indigo / Midnight / Obsidian /
+Orchid Leopard. Garage — Redshift, Midnight Riders, Two Wheels, Drift Dynasty,
+Rebel Society, Sunburst, Timeless, Gear Heads, Alien Abduction.
+
+`/collections/` is an index page above the ten.
+
+**Fruit Punch and Stripes have no landing page**, which is why their designs do
+not appear above. Their designs are visible in category slugs — banana-bliss,
+berry-pop, citrus-splash, coco-vibe, jackfruit-jungle, lychee-love, mango-stamp,
+pineapple-bloom, strawberry-blush, watermelon-crush — consistent with a Fruit
+Punch collection that was never given a landing page.
+
+---
+
+## 12. Coupons
+
+There is no general coupon programme in florayn-core. Coupons are generated by
+one subsystem, **Review Rewards** (`includes/review-rewards.php`):
+
+> Customers can attach photos to a product review. When the review is approved
+> they get a single use percentage coupon for their next order, mailed to them:
+> a higher one for a review with photos, a lower one for text only.
+
+Defaults:
+
+| Setting | Value |
+| --- | --- |
+| Photo review | **15%** off |
+| Text-only review | **10%** off |
+| Coupon expiry | 60 days |
+| Max photos | 3 |
+| Minimum rating | 1 |
+| Cooldown between rewards | 30 days |
+| Auto-approve | on |
+| Popup | on |
+| Email from name | Florayn |
+
+Coupons are single-use and percentage-based. Any coupons created by hand in
+WooCommerce admin are **not** readable without a write/execute ability.
+
+---
+
+## 13. Email
+
+**No email template overrides exist on disk.** There is no
+`themes/glozin/woocommerce/emails/` directory, and florayn-core's `templates/`
+holds only `cart/cross-sells.php` and `woocommerce/single-product-reviews.php`.
+
+So transactional mail is **stock WooCommerce**, styled through WooCommerce's
+email settings (header image, base colour, footer text). Those live in the
+options table and are not readable read-only.
+
+Custom mail is sent by two florayn-core subsystems, composed in PHP rather than
+templates:
+
+- `review-requests.php` (36KB) — post-purchase review request emails, with a
+  sent-log.
+- `review-rewards.php` (35KB) — the reward-coupon email above.
+
+FluentSMTP is active, so delivery goes through an external SMTP provider.
+
+---
+
+## 14. Still not covered
+
+- **The 188 design names as an authoritative list.** 106 recovered from landing
+  pages; Fruit Punch, Stripes and any design without a landing page are missing.
+  Note the live site has both "Sunny Street" and "Sunny Streett" — a typo; only
+  "Sunny Street" is real, giving 188 rather than 189.
+- **Alcantara price.**
+- **WooCommerce email settings** (header image, colours, footer text) — options
+  table, needs a read the connector does not expose.
+- **Hand-made WooCommerce coupons** — same limitation.
+- **Product page section behaviour** — Pairs well with, Frequently bought
+  together, bundle offers, gallery/video. File names and sizes are known;
+  behaviour is not documented.
+- **Account and blog page copy.**
