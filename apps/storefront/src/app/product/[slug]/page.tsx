@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
-import ProductBuyBox from "@/components/product-buy-box"
-import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
+import ProductView from "@/components/product-view"
 import {
   CaseTypeTiles,
   DesignReviews,
@@ -14,7 +13,7 @@ import {
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
 import { getBundleConfig } from "@/lib/bundles"
-import { getDesign, getDeviceFamilyMap } from "@/lib/catalog"
+import { getDesign, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { getProductByHandle } from "@/lib/medusa"
 
@@ -56,11 +55,33 @@ export default async function ProductPage({ params }: Params) {
   const caseTypeName = product.metadata?.case_type_name as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, designData, bundles] = await Promise.all([
+  const [families, deviceCatalog, designData, bundles] = await Promise.all([
     getDeviceFamilyMap(),
+    getDeviceCatalog(),
     designSlug ? getDesign(designSlug) : Promise.resolve(null),
     getBundleConfig(),
   ])
+
+  /*
+   * Which set of pictures a device belongs to. iPhone and Samsung share the
+   * phone shots; the two wallets are separate objects and get their own.
+   */
+  const imageFamilyByDevice: Record<string, string> = {}
+  for (const device of deviceCatalog) {
+    imageFamilyByDevice[device.name] =
+      device.family === "iphone" || device.family === "samsung"
+        ? "phone"
+        : device.family === "airpods"
+          ? "airpods"
+          : device.family === "watch"
+            ? "watch"
+            : device.slug
+  }
+
+  // Written onto the product by scripts/wire-images.ts, which is the only
+  // thing that knows the image host.
+  const imagesByFamily =
+    (product.metadata?.images as Record<string, string[]> | undefined) ?? {}
 
   // The design route cannot join prices, so the sibling products are fetched
   // again through the Store API to price each case-type tile.
@@ -139,13 +160,6 @@ export default async function ProductPage({ params }: Params) {
     }))
 
   const images = product.images ?? []
-  const galleryItems: GalleryItem[] = images.map((image) => ({
-    id: image.id,
-    url: image.url,
-    // No design-level video exists in the catalogue yet; the gallery renders
-    // one as a slide as soon as a design carries a video URL.
-    video: null,
-  }))
 
   const deviceCount = product.variants?.length ?? 0
   const facts = [
@@ -162,46 +176,39 @@ export default async function ProductPage({ params }: Params) {
 
   return (
     <article className="mx-auto w-full max-w-[1260px] px-[30px]">
-      <div className="grid gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
-        <div>
-          <ProductGallery items={galleryItems} label={designName} />
-        </div>
-
-        <div className="lg:sticky lg:top-[50px] lg:self-start">
-          {product.collection ? (
-            <Link
-              href={`/collection/${product.collection.handle}/`}
-              className="eyebrow transition-colors hover:text-purple"
-            >
-              {product.collection.title}
-            </Link>
-          ) : null}
-
-          <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
-            {designName}
-            {caseTypeName ? (
-              <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
+      <ProductView
+        variants={product.variants ?? []}
+        families={families}
+        imageFamilyByDevice={imageFamilyByDevice}
+        imagesByFamily={imagesByFamily}
+        fallbackImages={images.map((i) => i.url)}
+        designName={designName}
+        productTitle={product.title}
+        bundles={bundles}
+        header={
+          <>
+            {product.collection ? (
+              <Link
+                href={`/collection/${product.collection.handle}/`}
+                className="eyebrow transition-colors hover:text-purple"
+              >
+                {product.collection.title}
+              </Link>
             ) : null}
-          </h1>
-
-          <div className="mt-3">
-            <ProductBuyBox
-              variants={product.variants ?? []}
-              families={families}
-              productTitle={product.title}
-              thumbnail={product.thumbnail ?? images[0]?.url ?? null}
-              moreDesigns={<MoreDesigns items={moreDesignItems} />}
-              caseTypes={
-                <CaseTypeTiles
-                  items={caseTypeItems}
-                  currentHandle={product.handle}
-                />
-              }
-              shipping={<ShippingNote />}
-              bundles={bundles}
-            />
-          </div>
-
+            <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
+              {designName}
+              {caseTypeName ? (
+                <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
+              ) : null}
+            </h1>
+          </>
+        }
+        moreDesigns={<MoreDesigns items={moreDesignItems} />}
+        caseTypes={
+          <CaseTypeTiles items={caseTypeItems} currentHandle={product.handle} />
+        }
+        shipping={<ShippingNote />}
+        tabs={
           <ProductTabs
             description={product.description}
             caseTypeName={caseTypeName}
@@ -209,10 +216,9 @@ export default async function ProductPage({ params }: Params) {
             facts={facts}
             reviews={<DesignReviews designName={designName} />}
           />
-
-          <PairsWellWith items={pairsItems} />
-        </div>
-      </div>
+        }
+        pairs={<PairsWellWith items={pairsItems} />}
+      />
     </article>
   )
 }

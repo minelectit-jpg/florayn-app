@@ -26,6 +26,8 @@ export default function ProductBuyBox({
   caseTypes,
   shipping,
   bundles,
+  selectedId,
+  onSelect,
 }: {
   variants: StoreVariant[]
   /** device name -> family label, for grouping the drawer. */
@@ -37,9 +39,11 @@ export default function ProductBuyBox({
   shipping?: ReactNode
   /** Multi-buy tiers. Null hides the widget. */
   bundles?: BundleConfig | null
+  /** Selection is lifted so the gallery can follow the chosen device. */
+  selectedId: string
+  onSelect: (variantId: string) => void
 }) {
   const { add } = useCart()
-  const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "")
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [qty, setQty] = useState(1)
@@ -193,7 +197,7 @@ export default function ProductBuyBox({
                               role="option"
                               aria-selected={isSelected}
                               onClick={() => {
-                                setSelectedId(variant.id)
+                                onSelect(variant.id)
                                 setState("idle")
                                 setOpen(false)
                                 setQuery("")
