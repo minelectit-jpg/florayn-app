@@ -1,26 +1,35 @@
-import type { DeviceFamily } from "./devices"
-
 /**
  * The six case constructions Florayn sells. A design is published once per case
  * type it is offered in, and each of those is a separate product.
  *
- * `fits_families` plus `excludes_devices` is what decides a product's variant
- * list at seed time, so this is where device compatibility is maintained.
+ * Device availability is deliberately NOT declared here. It varies design by
+ * design rather than by construction, so it is swept from the live catalogue
+ * into design-devices.ts.
  */
+
+export type DevicePriceGroup = {
+  /** What this group covers, for the seed log and for reading this file. */
+  label: string
+  price: number
+  devices: string[]
+}
+
 export type CaseTypeSeed = {
   slug: string
   name: string
   description: string
   sku_code: string
   /**
-   * The price in BDT. Price is flat per case type - it does not vary by
-   * device, so this is the price of every variant of every product built in
-   * this construction.
+   * The price in BDT. Five of the six constructions are flat - every device
+   * costs the same. Alcantara is the exception; see `price_groups`.
    */
   price: number
-  fits_families: DeviceFamily[]
-  /** Device slugs this construction is not tooled for. */
-  excludes_devices?: string[]
+  /**
+   * Per-device-group price overrides. A device named in no group falls back to
+   * `price`. Only Alcantara has these: it is cut from a different amount of
+   * hide per body, so a card wallet and a Pro Max shell are not the same price.
+   */
+  price_groups?: DevicePriceGroup[]
 }
 
 // Ordered cheapest first; this is also the order they appear in the admin.
@@ -32,7 +41,6 @@ export const CASE_TYPES: CaseTypeSeed[] = [
       "A slim flexible shell with a soft-touch finish. The everyday case, and the widest device coverage we offer.",
     sku_code: "ESS",
     price: 1400,
-    fits_families: ["iphone", "samsung", "airpods"],
   },
   {
     slug: "signature",
@@ -41,7 +49,6 @@ export const CASE_TYPES: CaseTypeSeed[] = [
       "Our full-wrap print finish, available across phones, AirPods, watch bands and wallets.",
     sku_code: "SIG",
     price: 1400,
-    fits_families: ["iphone", "samsung", "airpods", "watch", "wallet"],
   },
   {
     slug: "elite-clear",
@@ -50,7 +57,6 @@ export const CASE_TYPES: CaseTypeSeed[] = [
       "Optically clear polycarbonate with a hardened anti-scratch coat, cut thin enough to disappear.",
     sku_code: "ELTCLR",
     price: 1600,
-    fits_families: ["iphone", "samsung"],
   },
   {
     slug: "armor-black",
@@ -59,7 +65,6 @@ export const CASE_TYPES: CaseTypeSeed[] = [
       "Dual-layer drop protection in a matte black frame. Raised lips over the camera and screen.",
     sku_code: "ARMBLK",
     price: 1950,
-    fits_families: ["iphone", "samsung"],
   },
   {
     slug: "armor-clear",
@@ -68,7 +73,6 @@ export const CASE_TYPES: CaseTypeSeed[] = [
       "Shock-absorbing bumper with a rigid clear back that holds the artwork without yellowing.",
     sku_code: "ARMCLR",
     price: 1950,
-    fits_families: ["iphone", "samsung"],
   },
   {
     slug: "alcantara",
@@ -76,18 +80,41 @@ export const CASE_TYPES: CaseTypeSeed[] = [
     description:
       "Italian Alcantara bonded to a rigid core. Warm to hold, and it does not slip out of a pocket.",
     sku_code: "ALC",
-    // Alcantara varies by device in the real store; held flat here until the
-    // per-device figures are confirmed.
+    // Phone shells. The groups below override this for everything else.
     price: 3800,
-    fits_families: ["iphone", "samsung", "airpods", "wallet"],
-    // Alcantara tooling was never cut for the small and oldest bodies.
-    excludes_devices: [
-      "iphone-11",
-      "iphone-11-pro",
-      "iphone-11-pro-max",
-      "iphone-12-mini",
-      "iphone-13-mini",
-      "airpods-1-2",
+    price_groups: [
+      {
+        label: "AirPods cases",
+        price: 2100,
+        // AirPods Max is absent on purpose: Alcantara is not made for it.
+        devices: [
+          "airpods-1-2",
+          "airpods-3",
+          "airpods-4",
+          "airpods-pro",
+          "airpods-pro-2",
+          "airpods-pro-3",
+        ],
+      },
+      {
+        label: "MagSafe Wallet and Apple Watch Band",
+        price: 2200,
+        devices: ["magsafe-wallet", "apple-watch-band"],
+      },
+      {
+        label: "Card Wallet",
+        price: 1900,
+        devices: ["card-wallet"],
+      },
     ],
   },
 ]
+
+/** What one device costs in one construction. */
+export function priceForDevice(
+  caseType: CaseTypeSeed,
+  deviceSlug: string
+): number {
+  const group = caseType.price_groups?.find((g) => g.devices.includes(deviceSlug))
+  return group ? group.price : caseType.price
+}

@@ -25,7 +25,12 @@ import {
   SHIPPING,
   SHIPPING_OPTION_NAMES,
 } from "../modules/catalog/data/bangladesh"
-import { CASE_TYPES } from "../modules/catalog/data/case-types"
+import { CASE_TYPES, priceForDevice } from "../modules/catalog/data/case-types"
+import {
+  CASE_TYPE_DEVICES,
+  DEVICE_SETS,
+  devicesFor,
+} from "../modules/catalog/data/design-devices"
 import { DESIGNS } from "../modules/catalog/data/designs"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
 import { placeholderImage } from "../modules/catalog/data/placeholder-image"
@@ -80,14 +85,23 @@ export default async function initialDataSeed({
   // renamed or dropped device would silently widen a case type's fit list.
   // Fail loudly instead.
   const deviceSlugs = new Set(DEVICES.map((device) => device.slug))
-  const staleExclusions = CASE_TYPES.flatMap((caseType) =>
-    (caseType.excludes_devices ?? [])
-      .filter((slug) => !deviceSlugs.has(slug))
-      .map((slug) => `${caseType.slug} -> ${slug}`)
-  )
-  if (staleExclusions.length) {
+  const unknownDevices = [
+    ...Object.entries(DEVICE_SETS).flatMap(([id, list]) =>
+      list
+        .filter((slug) => !deviceSlugs.has(slug))
+        .map((slug) => `set ${id} -> ${slug}`)
+    ),
+    ...CASE_TYPES.flatMap((caseType) =>
+      (caseType.price_groups ?? []).flatMap((group) =>
+        group.devices
+          .filter((slug) => !deviceSlugs.has(slug))
+          .map((slug) => `${caseType.slug} price group "${group.label}" -> ${slug}`)
+      )
+    ),
+  ]
+  if (unknownDevices.length) {
     throw new Error(
-      `case-types.ts excludes devices that are not in devices.ts: ${staleExclusions.join(", ")}`
+      `devices referenced that are not in devices.ts: ${unknownDevices.join(", ")}`
     )
   }
 
@@ -261,8 +275,7 @@ export default async function initialDataSeed({
   logger.info(`Seeding catalog: ${CASE_TYPES.length} case types...`)
   const caseTypes = await catalogModuleService.createCaseTypes(
     CASE_TYPES.map((caseType, index) => {
-      const excluded = new Set(caseType.excludes_devices ?? [])
-      const fits = new Set(caseType.fits_families)
+      const union = new Set(CASE_TYPE_DEVICES[caseType.slug] ?? [])
       return {
         slug: caseType.slug,
         name: caseType.name,
@@ -270,9 +283,9 @@ export default async function initialDataSeed({
         sku_code: caseType.sku_code,
         price: caseType.price,
         sort_order: index,
-        devices: DEVICES.filter(
-          (device) => fits.has(device.family) && !excluded.has(device.slug)
-        ).map((device) => deviceBySlug.get(device.slug)!.id),
+        devices: DEVICES.filter((device) => union.has(device.slug)).map(
+          (device) => deviceBySlug.get(device.slug)!.id
+        ),
       }
     })
   )
@@ -354,11 +367,17 @@ export default async function initialDataSeed({
 
     const productsInput = design.case_types.map((caseTypeSlug) => {
       const caseTypeSeed = CASE_TYPES.find((c) => c.slug === caseTypeSlug)!
-      const excluded = new Set(caseTypeSeed.excludes_devices ?? [])
-      const fits = new Set(caseTypeSeed.fits_families)
-      const compatible = DEVICES.filter(
-        (device) => fits.has(device.family) && !excluded.has(device.slug)
-      )
+      // Which devices this design is actually sold for in this construction,
+      // read from the live catalogue rather than derived from the case type.
+      const sold = new Set(devicesFor(design.slug, caseTypeSlug))
+      const compatible = DEVICES.filter((device) => sold.has(device.slug))
+      // A product with no variants cannot be bought, so fail rather than
+      // quietly publish one if the swept data ever loses a pair.
+      if (!compatible.length) {
+        throw new Error(
+          `no devices for ${design.slug} in ${caseTypeSlug}; re-sweep design-devices.ts`
+        )
+      }
       const families = [...new Set(compatible.map((device) => device.family))]
 
       caseTypeIds.push(caseTypeBySlug.get(caseTypeSlug)!.id)
@@ -406,8 +425,8 @@ export default async function initialDataSeed({
           options: { Device: device.name },
           prices: [
             {
-              // Flat per case type - the device does not affect price.
-              amount: caseTypeSeed.price,
+              // Flat for five constructions; Alcantara varies by device group.
+              amount: priceForDevice(caseTypeSeed, device.slug),
               currency_code: CURRENCY,
             },
           ],

@@ -16,8 +16,9 @@ florayn.com catalogue.
 | Case types | 6 — Essentials, Signature, Elite Clear, Armor Black, Armor Clear, Alcantara |
 | Devices | 50 |
 | Products | 525 (design × case type) |
-| Variants | 22,718 |
+| Variants | 13,041 — matches the live catalogue exactly |
 | Collections | 12 |
+| Pricing | Flat per case type, except Alcantara which varies by device group |
 | Checkout | One page, Cash on Delivery, working end to end |
 
 Read [AUDIT.md](AUDIT.md) first — it records what the live site actually does
@@ -51,9 +52,14 @@ the README.
 
 ## Gotchas that cost time this session
 
+- **Reseeding needs the database dropped first.** The seed refuses to run over
+  a seeded catalogue. Stop the backend so it releases its connections, then
+  drop and recreate `florayn` and run `npm run backend:migrate`, which runs
+  the migrations and the seed together.
 - **Reseeding rotates the publishable key and drops the admin user.** After any
   reseed, put the new key in `apps/storefront/.env.local` and recreate the user
-  with `npx medusa user -e … -p …`. The seed prints the key.
+  with `npx medusa user -e … -p …`. The seed prints the key. Restart the
+  storefront afterwards or it serves 500s with the old key.
 - **Never run `next build` while `next dev` is running** on the same `.next`.
   It corrupts the dev server with `Cannot find module ./vendor-chunks/*`. Stop
   dev, delete `.next`, then build.
@@ -85,47 +91,40 @@ have no products and undercounts.
 
 ---
 
-## Outstanding — decisions needed
+## Settled
 
-These need an answer before the work they block can be done well.
+Decided and implemented, recorded here so they are not reopened.
 
-1. **Alcantara price.** The other five are confirmed (Essentials 1,400৳,
-   Signature 1,400৳, Elite Clear 1,600৳, Armor Black 1,950৳, Armor Clear
-   1,950৳). Alcantara is seeded at 3,800৳, which was never verified against the
-   live site.
-2. **Price decimals.** The build renders `1,400৳`; the live site renders
-   `1,400.00৳`. Ours was a deliberate instruction — confirm it stands.
-3. **Area / thana field.** Checkout requires it. The live checkout has no such
-   field. Keep or drop?
-4. **60 designs have no collection.** They seed without one, so they appear in
-   no collection page. Is that correct, or should they get a home?
-5. **Linea** — 7 designs, set up but never launched. Excluded for now. Seed
-   when it launches.
+- **Alcantara pricing.** The only construction whose price varies by device:
+  3,800৳ phone shells, 2,200৳ MagSafe Wallet and Apple Watch Band, 2,100৳
+  AirPods, 1,900৳ Card Wallet. The other five are flat. See `price_groups` in
+  case-types.ts.
+- **Price format** is `1,400৳` — no decimals — everywhere.
+- **Checkout keeps the area/thana field**, though the live checkout has none.
+- **The 60 designs with no collection** stay as they are: seeded, in no
+  collection.
+- **Linea** — 7 designs, set up but never launched. Still excluded; seed them
+  when it launches.
 
 ## Outstanding — work
 
 Roughly in the order it makes sense to do it.
 
-1. **Per-design device availability.** The seed derives a product's devices
-   from its case type. The live catalogue knows the real per-design device
-   list, and the sweep already collected it — it just is not used yet. This is
-   the largest remaining fidelity gap in the data.
-2. **Product page.** Ours does not match the live one, which has a DEVICE
+1. **Product page.** Ours does not match the live one, which has a DEVICE
    dropdown, a MORE DESIGNS carousel, and a CASE TYPE selector showing each
    construction with its price. Ours has a device list picker only.
-3. **Collection landing pages.** Ten exist live (Garage, Leopard, Bug Life,
+2. **Collection landing pages.** Ten exist live (Garage, Leopard, Bug Life,
    Van Gogh Dreams, Frequency, Checkmate, Wild Instinct, Muse Marvel, Florayn
    Blooms, Italian Alcantara), each a hero plus a grid of design tiles. None
    are built here. Note Fruit Punch and Stripes have no landing page live.
-4. **Home page** — not matched to the live one.
-5. **Header mega menu and footer** — structure captured in AUDIT.md sections 9
+3. **Home page** — not matched to the live one.
+4. **Header mega menu and footer** — structure captured in AUDIT.md sections 9
    and 10, not built.
-6. **Design descriptions.** Seeded designs have none. The live site holds copy
-   per product, not per design, so this is new copy to write rather than
-   import.
-7. **Checkout extras** — bKash, and a courier integration. Deliberately not
+5. **Per-design product copy.** Every product carries the case type's
+   description. The live site has copy per product; there is none per design.
+6. **Checkout extras** — bKash, and a courier integration. Deliberately not
    built; COD only for now.
-8. **Real product images.** Currently deterministic inline SVG placeholders.
+7. **Real product images.** Currently deterministic inline SVG placeholders.
    Needs a file provider (S3 / R2) and the host added to
    `images.remotePatterns`.
 

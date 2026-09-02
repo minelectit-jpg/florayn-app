@@ -531,11 +531,71 @@ already included Sunny Streett, subtracting it twice.
 - **Design descriptions.** The live site holds copy per product, not per
   design, so there is nothing design-level to import. Seeded designs have no
   description.
-- **Alcantara price.**
 - **WooCommerce email settings** and **hand-made coupons** — options/posts
   tables, not exposed read-only. Left as gaps by instruction.
 - **Product page section behaviour** — Pairs well with, Frequently bought
   together, bundle offers, gallery/video.
 - **Account and blog page copy.**
-- **Per-design device availability.** The sweep collected it; the seed still
-  derives devices from case-type compatibility rather than per design.
+- **Per-design product copy.** Each live product has its own description; the
+  seed uses the case type's copy for all of them.
+
+---
+
+## 19. Device availability and Alcantara pricing
+
+A second sweep of all 13,281 products, keeping each product's `pa_device`
+terms. The first sweep kept only a count, which was not enough to seed from.
+
+### Device availability is a property of the design, not the case type
+
+The build previously derived a product's devices from its case type — a
+family rule plus an exclusion list. That is wrong. The live catalogue varies
+the device list design by design within the same construction:
+
+| Case type | Devices (union) | Distinct device lists |
+| --- | ---: | ---: |
+| Signature | 46 | 24 |
+| Armor Black | 22 | 7 |
+| Armor Clear | 22 | 17 |
+| Elite Clear | 22 | 13 |
+| Alcantara | 17 | 3 |
+| Essentials | 12 | 1 |
+
+Only Essentials is uniform. Signature carries 24 different device lists across
+its 165 designs.
+
+The rule produced **22,718 variants**; the live catalogue has **13,041**. It
+was inventing roughly 9,700 device/product combinations that are not for sale.
+13,041 also reconciles with the sweep: 13,281 products less the 149 carrying no
+device term leaves 13,132, within 1% of the variant total.
+
+Now swept into `design-devices.ts` as 60 distinct device lists mapped across
+all 525 design/case-type pairs.
+
+### Alcantara fits 17 devices
+
+Eight phone bodies — iPhone 15 Pro, 15 Pro Max, 16 Pro, 16 Pro Max, 17, 17 Air,
+17 Pro, 17 Pro Max — plus six AirPods, the MagSafe Wallet, the Apple Watch Band
+and the Card Wallet. **No Samsung devices at all.**
+
+Two corrections to what the build assumed: Alcantara **is** made for AirPods 1/2
+(previously excluded), and is **not** made for AirPods Max (previously
+included).
+
+### Alcantara is the one construction priced by device
+
+Every other case type is flat across every device it fits.
+
+| Device group | Price |
+| --- | ---: |
+| Phone cases (8 bodies) | 3,800৳ |
+| MagSafe Wallet, Apple Watch Band | 2,200৳ |
+| AirPods cases (6 models) | 2,100৳ |
+| Card Wallet | 1,900৳ |
+
+So an Alcantara product spans 1,900৳–3,800৳ and its card reads "From 1,900৳".
+
+### iPhone 16e
+
+In the device catalogue but attached to no live product, so it appears in no
+design's device list. Kept, as instructed when the device list was set.
