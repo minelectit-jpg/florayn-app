@@ -63,29 +63,33 @@ export default function ProductView({
 
   const family = selected ? imageFamilyByDevice[selected.title] : undefined
 
+  /*
+   * The gallery follows the device, not the family: picking iPhone 12 shows
+   * the iPhone 12 render. Each variant carries its own shots in metadata;
+   * the family map is the fallback for anything not yet wired that way.
+   */
+  const perVariant = (selected?.metadata?.images as string[] | undefined) ?? []
+
   const items: GalleryItem[] = useMemo(() => {
     const urls =
-      (family && imagesByFamily[family]?.length
-        ? imagesByFamily[family]
-        : null) ??
-      // A family with no shots of its own falls back to the phone set rather
-      // than showing nothing.
+      (perVariant.length ? perVariant : null) ??
+      (family && imagesByFamily[family]?.length ? imagesByFamily[family] : null) ??
       (imagesByFamily.phone?.length ? imagesByFamily.phone : fallbackImages)
 
     return urls.map((url, i) => ({
-      // Keyed by family so switching family remounts the gallery on slide 1
-      // instead of holding an index that no longer exists.
-      id: `${family ?? "default"}-${i}`,
+      // Keyed by device so changing device remounts the gallery on slide 1
+      // rather than holding an index that no longer exists.
+      id: `${selected?.id ?? family ?? "default"}-${i}`,
       url,
       video: null,
     }))
-  }, [family, imagesByFamily, fallbackImages])
+  }, [perVariant, family, imagesByFamily, fallbackImages, selected?.id])
 
   return (
     <div className="grid gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
       <div>
         <ProductGallery
-          key={family ?? "default"}
+          key={selected?.id ?? family ?? "default"}
           items={items}
           label={designName}
         />

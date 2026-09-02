@@ -19,6 +19,7 @@ export const sdk = new Medusa({
 export const PRODUCT_FIELDS =
   "id,title,handle,subtitle,description,thumbnail,metadata," +
   "*images,*options,*options.values,*variants,*variants.options," +
+  "*variants.metadata," +
   "*variants.calculated_price,*collection,*categories"
 
 export type StoreProduct = {
@@ -39,6 +40,8 @@ export type StoreProduct = {
 export type StoreVariant = {
   id: string
   title: string
+  /** Carries this device's own gallery, written by wire-images-device.ts. */
+  metadata?: Record<string, unknown> | null
   sku?: string | null
   options?: { id: string; option_id: string; value: string }[]
   calculated_price?: {
