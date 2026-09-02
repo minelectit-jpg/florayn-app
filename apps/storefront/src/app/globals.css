@@ -116,6 +116,20 @@
     color: var(--color-ink-faint);
   }
 
+  /*
+   * The block labels on the product page - DEVICE, MORE DESIGNS, CASE TYPE.
+   * Measured on florayn.com: 15px / 600, near-black, 6px under. The caps are
+   * literal text on the live page, not a text-transform, so nothing is
+   * uppercased here either.
+   */
+  .fl-pdp-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 6px;
+    color: var(--color-ink);
+  }
+
   .field-label {
     font-size: 0.8125rem;
     font-weight: 500;

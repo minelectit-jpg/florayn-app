@@ -110,23 +110,45 @@ Decided and implemented, recorded here so they are not reopened.
 
 Roughly in the order it makes sense to do it.
 
-1. **Product page.** Ours does not match the live one, which has a DEVICE
-   dropdown, a MORE DESIGNS carousel, and a CASE TYPE selector showing each
-   construction with its price. Ours has a device list picker only.
-2. **Collection landing pages.** Ten exist live (Garage, Leopard, Bug Life,
+1. **Collection landing pages.** Ten exist live (Garage, Leopard, Bug Life,
    Van Gogh Dreams, Frequency, Checkmate, Wild Instinct, Muse Marvel, Florayn
    Blooms, Italian Alcantara), each a hero plus a grid of design tiles. None
    are built here. Note Fruit Punch and Stripes have no landing page live.
-3. **Home page** — not matched to the live one.
-4. **Header mega menu and footer** — structure captured in AUDIT.md sections 9
+2. **Home page** — not matched to the live one.
+3. **Header mega menu and footer** — structure captured in AUDIT.md sections 9
    and 10, not built.
-5. **Per-design product copy.** Every product carries the case type's
+4. **Per-design product copy.** Every product carries the case type's
    description. The live site has copy per product; there is none per design.
-6. **Checkout extras** — bKash, and a courier integration. Deliberately not
+5. **Checkout extras** — bKash, and a courier integration. Deliberately not
    built; COD only for now.
-7. **Real product images.** Currently deterministic inline SVG placeholders.
+6. **Real product images.** Currently deterministic inline SVG placeholders.
    Needs a file provider (S3 / R2) and the host added to
    `images.remotePatterns`.
+
+## The product page needs data, not layout
+
+Built and measured against florayn.com. Three parts are structure only,
+because the data behind them does not exist yet:
+
+- **Reviews.** Ratings pool per design on the live site - every case type built
+  from one design shares one score and one list. Needs a review store: a
+  `review` entity linked to `design` (not product), with rating, body, photo,
+  author and verified-purchase flag. Until that exists the tab renders an
+  explanation, not fake stars.
+- **Bundle offers.** The live `.flb` widget sells Single / 2-pack / 3-pack and
+  a "Matching Set" tier, each with its own price and saving. Those figures come
+  from `bundle-offers.php`, which is not readable through the connector. Only
+  the Single tier carries a real price here; the others show a dash rather than
+  an invented discount. Needs the real tier table.
+- **Design-level video.** The gallery renders a video as a slide as soon as a
+  design carries a URL. No design in the catalogue has one, and the live
+  product pages sampled had none either.
+
+Also unresolved by data alone: **"Pairs well with"** on the live site shows the
+same design in another *product form* - an AirPods case beside a phone case.
+Here a device is a variant, not a product, so there is no separate AirPods
+product to link. It currently shows the same design in a construction that
+covers non-phone devices, which is the nearest true equivalent.
 
 ## Known gaps that need a rule change to close
 
