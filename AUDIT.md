@@ -599,3 +599,68 @@ So an Alcantara product spans 1,900৳–3,800৳ and its card reads "From 1,900
 
 In the device catalogue but attached to no live product, so it appears in no
 design's device list. Kept, as instructed when the device list was set.
+
+---
+
+## 20. Images — what the catalogue actually needs
+
+A sweep of all 13,281 live products reading their `images`, to size the job
+before downloading anything. Nothing was fetched but the JSON.
+
+### What is there
+
+| | |
+| --- | ---: |
+| Products swept | 13,281 |
+| Products with no image | 5 |
+| Products with more than one image | 4,951 |
+| **Distinct images** | **22,369** |
+| Measured size, 1200w WebP | ~86 KB each |
+| **Total if every image were taken** | **~1.84 GB** |
+
+There is almost no reuse: 19,750 of the 22,369 images are used by exactly one
+product, 1,978 by two. One image is shared by 290 products, which is the only
+sign of a generic fallback in the set.
+
+### Images are rendered per design per device
+
+The filenames give the scheme away. For one design, the set reads:
+
+```
+17-Pro-Max_-95.webp   17-Pro_-95.webp   17-Air_-95.webp   17_-95.webp
+16-Pro-Max_-95.webp   16-Pro_-95.webp   16-Plus_-63.webp  16_-95.webp
+```
+
+`<device>_-<design index>`. Each body gets its own render of the same artwork,
+which is why the count runs to five figures rather than the 181 the design
+library would suggest.
+
+### Coverage of our catalogue
+
+Every one of our 525 products and **all 13,041 variants** have a live image -
+100%, no gaps. 1,334 of those variants share an image with another variant, so
+the variants resolve to 11,707 distinct files.
+
+### The four ways to do this
+
+| | Images | Size | What you get |
+| --- | ---: | ---: | --- |
+| **A. One shot per product** | 525 | ~44 MB | Every product card and product page has correct artwork. The image does not change when the shopper picks a different device. |
+| **B. All shots of one device** | 1,180 | ~99 MB | As above plus the extra angles, so the gallery has more than one image. |
+| **C. One per variant** | 11,707 | ~0.96 GB | The picture changes with the device, as on the live site. |
+| **D. Everything** | 22,149 | ~1.82 GB | Full parity including every alternate angle. |
+
+iPhone 15 Pro Max is the most photographed body, present for 519 of the 525
+products (99%); iPhone 16 Pro Max, 16 Pro, 17 Pro Max and 17 are all within two
+of it. Any of them works as the representative shot for option A or B.
+
+### The architectural catch
+
+Medusa attaches images to a **product**, not a variant. Options A and B fit that
+model directly. Option C does not: showing a different picture per device means
+either carrying a device→URL map in variant metadata and swapping the gallery
+client-side, or abandoning the one-product-per-design×case-type model - which is
+the whole reason this build has 525 products instead of 13,281.
+
+So option C is not just 20x the bytes, it is a change to the data model. That
+is the decision to make before anything is downloaded.
