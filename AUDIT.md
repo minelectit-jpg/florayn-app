@@ -646,13 +646,49 @@ the variants resolve to 11,707 distinct files.
 | | Images | Size | What you get |
 | --- | ---: | ---: | --- |
 | **A. One shot per product** | 525 | ~44 MB | Every product card and product page has correct artwork. The image does not change when the shopper picks a different device. |
-| **B. All shots of one device** | 1,180 | ~99 MB | As above plus the extra angles, so the gallery has more than one image. |
+| **B. All shots of one device** | 1,180 | ~99 MB | As above plus extra angles - but wrong for Signature and Alcantara, see below. |
 | **C. One per variant** | 11,707 | ~0.96 GB | The picture changes with the device, as on the live site. |
 | **D. Everything** | 22,149 | ~1.82 GB | Full parity including every alternate angle. |
 
 iPhone 15 Pro Max is the most photographed body, present for 519 of the 525
 products (99%); iPhone 16 Pro Max, 16 Pro, 17 Pro Max and 17 are all within two
 of it. Any of them works as the representative shot for option A or B.
+
+### Per device family — the option that is actually right
+
+Option B is wrong, and not by a small margin. On Signature and Alcantara the
+variants of one product span different **objects**, not different phone bodies:
+
+| Case type | Products | Span >1 family | Families in one product |
+| --- | ---: | ---: | --- |
+| Signature | 165 | 160 | phone, AirPods |
+| Alcantara | 11 | **11** | phone, AirPods, watch, card wallet, MagSafe wallet |
+| Elite Clear | 131 | 0 | phone |
+| Armor Black | 109 | 0 | phone |
+| Armor Clear | 104 | 0 | phone |
+| Essentials | 5 | 0 | phone |
+
+A single phone shot on an Alcantara product means somebody buying a Card Wallet
+is looking at a picture of a phone case. So the unit is one image per product
+**per family** - phone, AirPods, Apple Watch band, Card Wallet, MagSafe Wallet -
+with the best-covered body standing in for its family.
+
+| Family | Products | Images | Representative |
+| --- | ---: | ---: | --- |
+| phone | 525 | 1,180 | iPhone 15 Pro Max |
+| AirPods | 171 | 776 | AirPods 1/2 |
+| Apple Watch band | 11 | 77 | Apple Watch Band |
+| MagSafe Wallet | 11 | 77 | MagSafe Wallet |
+| Card Wallet | 6 | 30 | Card Wallet |
+| **Total** | | **2,140** | **~180 MB** |
+
+**Zero gaps** - every product has a live shot for every family it sells into.
+Without the extra gallery angles it is 723 images at ~61 MB.
+
+171 of the 525 products span more than one family, so the gallery swaps when the
+shopper moves between phone and AirPods and stays put while they move between
+phone bodies. That is the right way round: the case that matters is covered, the
+case that does not costs nothing.
 
 ### The architectural catch
 
