@@ -8,6 +8,7 @@ import {
   updateCartWorkflow,
 } from "@medusajs/medusa/core-flows"
 
+import { applyBundleDiscount } from "../../../modules/bundles/apply"
 import {
   isDistrict,
   isValidPhone,
@@ -171,6 +172,18 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       input: { cart_id: cartId, options: [{ id: shippingOption.id }] },
     })
 
+    /*
+     * Multi-buy discount and the free-delivery threshold, recomputed from the
+     * cart's own lines. This has to land before the payment collection is
+     * created, because that reads the cart total.
+     */
+    const bundle = await applyBundleDiscount({
+      scope: req.scope,
+      query,
+      cartId,
+      logger,
+    })
+
     const { result: paymentCollection } =
       await createPaymentCollectionForCartWorkflow(req.scope).run({
         input: { cart_id: cartId },
@@ -203,6 +216,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         display_id: order?.display_id ?? null,
         total: order?.total ?? null,
         currency_code: order?.currency_code ?? "bdt",
+      },
+      // What the multi-buy tiers took off, so the confirmation can show it.
+      bundle: {
+        discount: bundle.discount,
+        free_shipping: bundle.freeShipping,
       },
     })
   } catch (error: any) {

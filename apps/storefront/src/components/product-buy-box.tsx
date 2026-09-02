@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { useCart } from "@/components/cart-provider"
 import { Spinner } from "@/components/ui/button"
+import { tierPricing, type BundleConfig } from "@/lib/bundles"
 import type { StoreVariant } from "@/lib/medusa"
 import { formatPrice } from "@/lib/money"
 
@@ -24,6 +25,7 @@ export default function ProductBuyBox({
   moreDesigns,
   caseTypes,
   shipping,
+  bundles,
 }: {
   variants: StoreVariant[]
   /** device name -> family label, for grouping the drawer. */
@@ -33,6 +35,8 @@ export default function ProductBuyBox({
   moreDesigns?: ReactNode
   caseTypes?: ReactNode
   shipping?: ReactNode
+  /** Multi-buy tiers. Null hides the widget. */
+  bundles?: BundleConfig | null
 }) {
   const { add } = useCart()
   const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "")
@@ -118,7 +122,14 @@ export default function ProductBuyBox({
         {formatPrice(price?.calculated_amount, price?.currency_code)}
       </p>
 
-      <BundleTiers unit={price?.calculated_amount ?? null} />
+      {bundles ? (
+        <BundleTiers
+          unit={price?.calculated_amount ?? null}
+          config={bundles}
+          quantity={qty}
+          onPick={setQty}
+        />
+      ) : null}
 
       {/* DEVICE */}
       <div className="mt-6">
@@ -228,8 +239,8 @@ export default function ProductBuyBox({
           </span>
           <button
             type="button"
-            onClick={() => setQty((q) => Math.min(10, q + 1))}
-            disabled={qty >= 10}
+            onClick={() => setQty((q) => Math.min(99, q + 1))}
+            disabled={qty >= 99}
             aria-label="Increase quantity"
             className="grid size-[38px] place-items-center rounded-full text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
           >
@@ -281,44 +292,120 @@ export default function ProductBuyBox({
 }
 
 /**
- * The live page sells single / 2-pack / 3-pack / matching-set tiers from its
- * bundle-offers module. The tier prices are configured per product there and
- * are not exposed read-only, so only the Single tier carries a real figure -
- * the rest are marked pending rather than filled with invented discounts.
+ * The multi-buy pills. Picking one sets the quantity, so the tier a shopper
+ * chose is exactly what lands in the cart; checkout then recomputes the same
+ * discount server-side.
  */
-function BundleTiers({ unit }: { unit: number | null }) {
-  const tiers = [
-    { key: "single", label: "Single", qty: 1 },
-    { key: "two", label: "2-pack", qty: 2 },
-    { key: "three", label: "3-pack", qty: 3 },
+function BundleTiers({
+  unit,
+  config,
+  quantity,
+  onPick,
+}: {
+  unit: number | null
+  config: BundleConfig
+  quantity: number
+  onPick: (quantity: number) => void
+}) {
+  if (!config.settings.is_active || !config.tiers.length || unit == null) {
+    return null
+  }
+
+  const pills = [
+    { key: "single", label: config.settings.single_label, quantity: 1 },
+    ...config.tiers.map((tier) => ({
+      key: tier.id,
+      label: `${tier.quantity}-pack`,
+      quantity: tier.quantity,
+      tier,
+    })),
   ]
 
+  const activeTotal =
+    config.tiers.find((t) => t.quantity === quantity) != null
+      ? tierPricing(
+          unit,
+          config.tiers.find((t) => t.quantity === quantity)!
+        ).total
+      : unit * quantity
+  const threshold = config.settings.free_shipping_threshold
+
   return (
-    <div className="mt-5 grid grid-cols-3 gap-1">
-      {tiers.map((tier, i) => {
-        const isSingle = i === 0
-        return (
-          <div
-            key={tier.key}
-            aria-current={isSingle}
-            className={[
-              "rounded-[11px] border px-3 py-2.5 text-center",
-              isSingle
-                ? "border-purple bg-purple-tint"
-                : "border-[#ddd0fb] bg-surface",
-            ].join(" ")}
-          >
-            <p className="text-[13px] font-semibold">{tier.label}</p>
-            <p className="mt-0.5 text-[13px] tabular-nums">
-              {isSingle && unit != null ? (
-                formatPrice(unit)
-              ) : (
-                <span className="text-ink-faint">&mdash;</span>
-              )}
-            </p>
-          </div>
-        )
-      })}
-    </div>
+    <section className="mt-5">
+      <p className="fl-pdp-label">{config.settings.heading}</p>
+      <div
+        role="radiogroup"
+        aria-label={config.settings.heading}
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${pills.length}, minmax(0, 1fr))` }}
+      >
+        {pills.map((pill) => {
+          const priced =
+            "tier" in pill && pill.tier
+              ? tierPricing(unit, pill.tier)
+              : { subtotal: unit, discount: 0, total: unit }
+          const isActive = quantity === pill.quantity
+          const badge = "tier" in pill ? pill.tier?.badge : null
+
+          return (
+            <button
+              key={pill.key}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              onClick={() => onPick(pill.quantity)}
+              className={[
+                "relative rounded-[11px] border px-2 pb-2.5 text-center transition-colors",
+                badge ? "pt-4" : "pt-2.5",
+                isActive
+                  ? "border-purple bg-purple-tint"
+                  : "border-[#ddd0fb] bg-surface hover:border-purple",
+              ].join(" ")}
+            >
+              {badge ? (
+                <span className="absolute inset-x-0 top-0 truncate rounded-t-[10px] bg-purple px-1 py-[2px] text-[9px] font-semibold uppercase tracking-wide text-white">
+                  {badge}
+                </span>
+              ) : null}
+              <span className="block text-[13px] font-semibold">
+                {pill.label}
+              </span>
+              <span className="mt-0.5 block text-[13px] tabular-nums">
+                {priced.discount > 0 ? (
+                  <>
+                    <s className="text-ink-faint">
+                      {formatPrice(priced.subtotal)}
+                    </s>{" "}
+                    <b className="font-semibold">{formatPrice(priced.total)}</b>
+                  </>
+                ) : (
+                  formatPrice(priced.total)
+                )}
+              </span>
+              {priced.discount > 0 ? (
+                <span className="mt-0.5 block text-[11px] font-semibold text-purple">
+                  Save {formatPrice(priced.discount)}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+
+      {threshold > 0 ? (
+        <p className="mt-2 text-[13px] text-ink-muted">
+          {activeTotal >= threshold ? (
+            <span className="font-semibold text-success">
+              Free delivery on this order.
+            </span>
+          ) : (
+            <>
+              Add {formatPrice(threshold - activeTotal)} more for free
+              delivery.
+            </>
+          )}
+        </p>
+      ) : null}
+    </section>
   )
 }

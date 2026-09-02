@@ -13,6 +13,7 @@ import {
   type RelatedProduct,
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
+import { getBundleConfig } from "@/lib/bundles"
 import { getDesign, getDeviceFamilyMap } from "@/lib/catalog"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { getProductByHandle } from "@/lib/medusa"
@@ -55,9 +56,10 @@ export default async function ProductPage({ params }: Params) {
   const caseTypeName = product.metadata?.case_type_name as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, designData] = await Promise.all([
+  const [families, designData, bundles] = await Promise.all([
     getDeviceFamilyMap(),
     designSlug ? getDesign(designSlug) : Promise.resolve(null),
+    getBundleConfig(),
   ])
 
   // The design route cannot join prices, so the sibling products are fetched
@@ -196,6 +198,7 @@ export default async function ProductPage({ params }: Params) {
                 />
               }
               shipping={<ShippingNote />}
+              bundles={bundles}
             />
           </div>
 

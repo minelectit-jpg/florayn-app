@@ -17,5 +17,8 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/catalog",
     },
+    {
+      resolve: "./src/modules/bundles",
+    },
   ],
 })

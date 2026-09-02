@@ -105,6 +105,12 @@ Decided and implemented, recorded here so they are not reopened.
   collection.
 - **Linea** — 7 designs, set up but never launched. Still excluded; seed them
   when it launches.
+- **Multi-buy tiers** are live and editable in the admin under **Bundles**:
+  2-pack 300৳ off clamped to 8-12%, 3-pack 800৳ off clamped to 12-20%, free
+  delivery over 3,400৳. The discount is applied for real at checkout as a
+  single-use promotion, recomputed server-side from the cart's own lines.
+- **The Matching Set bundle** is deliberately not built: it needs a Signature
+  Pen product type that does not exist in the catalogue.
 
 ## Outstanding — work
 
@@ -127,19 +133,14 @@ Roughly in the order it makes sense to do it.
 
 ## The product page needs data, not layout
 
-Built and measured against florayn.com. Three parts are structure only,
-because the data behind them does not exist yet:
+Built and measured against florayn.com. Two parts are structure only, because
+the data behind them does not exist yet:
 
 - **Reviews.** Ratings pool per design on the live site - every case type built
   from one design shares one score and one list. Needs a review store: a
   `review` entity linked to `design` (not product), with rating, body, photo,
   author and verified-purchase flag. Until that exists the tab renders an
   explanation, not fake stars.
-- **Bundle offers.** The live `.flb` widget sells Single / 2-pack / 3-pack and
-  a "Matching Set" tier, each with its own price and saving. Those figures come
-  from `bundle-offers.php`, which is not readable through the connector. Only
-  the Single tier carries a real price here; the others show a dash rather than
-  an invented discount. Needs the real tier table.
 - **Design-level video.** The gallery renders a video as a slide as soon as a
   design carries a URL. No design in the catalogue has one, and the live
   product pages sampled had none either.

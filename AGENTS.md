@@ -137,6 +137,13 @@ claude mcp add --transport http medusa https://docs.medusajs.com/mcp # or agent 
 
 ## Conventions
 
+- **Every feature ships with its admin screen.** A feature with settings a
+  human will want to change - prices, tiers, copy, thresholds, toggles - is
+  not finished until those live in the database and there is a Medusa admin
+  page to edit them. Never leave a tunable in a constant that needs a code
+  change. The page goes in `src/admin/routes/<feature>/page.tsx` with
+  `defineRouteConfig`, backed by `src/api/admin/<feature>/route.ts`. See
+  `modules/bundles` and `admin/routes/bundles` for the shape.
 - **Backend routing is file-based.** A store endpoint is `src/api/store/<path>/route.ts` exporting `GET`/`POST`/etc. Don't add a router or register routes manually.
 - **Business logic belongs in workflows**, not in route handlers. Routes resolve and run a workflow; workflows compose steps.
 - Adding a task to `turbo.json` requires declaring its `outputs`, or Turbo will cache nothing/the wrong thing.
