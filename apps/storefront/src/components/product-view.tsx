@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState, type ReactNode } from "react"
 
 import ProductBuyBox from "@/components/product-buy-box"
@@ -24,7 +25,8 @@ export default function ProductView({
   fallbackImages,
   designName,
   productTitle,
-  header,
+  caseTypeName,
+  collection,
   moreDesigns,
   caseTypes,
   shipping,
@@ -42,7 +44,13 @@ export default function ProductView({
   fallbackImages: string[]
   designName: string
   productTitle: string
-  header: ReactNode
+  /**
+   * The heading is built here from plain values rather than passed in as JSX.
+   * Static JSX children lose their static marker crossing the server/client
+   * boundary, so React sees a keyless array and warns.
+   */
+  caseTypeName?: string | null
+  collection?: { title: string; handle: string } | null
   moreDesigns?: ReactNode
   caseTypes?: ReactNode
   shipping?: ReactNode
@@ -84,7 +92,21 @@ export default function ProductView({
       </div>
 
       <div className="lg:sticky lg:top-[50px] lg:self-start">
-        {header}
+        {collection ? (
+          <Link
+            href={`/collection/${collection.handle}/`}
+            className="eyebrow transition-colors hover:text-purple"
+          >
+            {collection.title}
+          </Link>
+        ) : null}
+
+        <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
+          {designName}
+          {caseTypeName ? (
+            <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
+          ) : null}
+        </h1>
 
         <div className="mt-3">
           <ProductBuyBox

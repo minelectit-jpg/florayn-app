@@ -2,6 +2,8 @@
 
 import { useState, type ReactNode } from "react"
 
+import { DesignReviews } from "@/components/product-sections"
+
 type Tab = { id: string; label: string; panel: ReactNode }
 
 /**
@@ -14,14 +16,20 @@ export default function ProductTabs({
   caseTypeName,
   caseTypeDescription,
   facts,
-  reviews,
+  designName,
 }: {
   description?: string | null
   caseTypeName?: string | null
   caseTypeDescription?: string | null
   /** Rows for Additional information. */
   facts: { label: string; value: string }[]
-  reviews: ReactNode
+  /**
+   * The reviews panel is built here from the design name rather than passed in
+   * as JSX. A server-rendered element with several static children loses its
+   * static marker crossing into a client component, and React then treats the
+   * children as a keyless array and warns.
+   */
+  designName: string
 }) {
   const tabs: Tab[] = [
     {
@@ -57,7 +65,11 @@ export default function ProductTabs({
         </dl>
       ),
     },
-    { id: "reviews", label: "Reviews", panel: reviews },
+    {
+      id: "reviews",
+      label: "Reviews",
+      panel: <DesignReviews designName={designName} />,
+    },
   ]
 
   const [active, setActive] = useState(tabs[0].id)

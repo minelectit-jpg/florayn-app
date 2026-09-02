@@ -5,7 +5,6 @@ import { notFound } from "next/navigation"
 import ProductView from "@/components/product-view"
 import {
   CaseTypeTiles,
-  DesignReviews,
   MoreDesigns,
   PairsWellWith,
   ShippingNote,
@@ -185,23 +184,11 @@ export default async function ProductPage({ params }: Params) {
         designName={designName}
         productTitle={product.title}
         bundles={bundles}
-        header={
-          <>
-            {product.collection ? (
-              <Link
-                href={`/collection/${product.collection.handle}/`}
-                className="eyebrow transition-colors hover:text-purple"
-              >
-                {product.collection.title}
-              </Link>
-            ) : null}
-            <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
-              {designName}
-              {caseTypeName ? (
-                <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
-              ) : null}
-            </h1>
-          </>
+        caseTypeName={caseTypeName ?? null}
+        collection={
+          product.collection
+            ? { title: product.collection.title, handle: product.collection.handle }
+            : null
         }
         moreDesigns={<MoreDesigns items={moreDesignItems} />}
         caseTypes={
@@ -214,7 +201,7 @@ export default async function ProductPage({ params }: Params) {
             caseTypeName={caseTypeName}
             caseTypeDescription={product.description}
             facts={facts}
-            reviews={<DesignReviews designName={designName} />}
+            designName={designName}
           />
         }
         pairs={<PairsWellWith items={pairsItems} />}

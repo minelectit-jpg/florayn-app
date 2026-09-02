@@ -198,9 +198,9 @@ export function DesignReviews({ designName }: { designName: string }) {
     <div className="rounded-[10px] border border-dashed border-line-strong bg-paper p-6">
       <p className="text-sm font-semibold">Reviews for {designName}</p>
       <p className="mt-2 max-w-prose text-sm text-ink-muted">
-        Ratings pool per design, so every case type built from {designName}
-        {" "}shares one score and one list. No review store is wired up yet, so
-        there is nothing to show.
+        Ratings pool per design, so every case type built from {designName}{" "}
+        shares one score and one list. No review store is wired up yet, so there
+        is nothing to show.
       </p>
     </div>
   )
