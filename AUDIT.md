@@ -724,6 +724,32 @@ content-type so the R2 upload can set it without sniffing bytes.
 The PNGs are worth converting before upload: 311 files at ~1 MB each are most of
 80 MB that WebP would cut by roughly two thirds.
 
+
+### Converted to WebP
+
+The 920 PNG and JPEG files were re-encoded to WebP at quality 85, effort 6.
+
+| | Files | Size |
+| --- | ---: | ---: |
+| Before | 2,157 | 399 MB |
+| **After** | **2,157** | **143 MB** |
+
+**256 MB saved, 64% smaller.** 880 files converted; 40 JPEGs were left alone
+because WebP came out no smaller, so the upload set is 2,117 WebP and 40 JPEG.
+Nothing failed, nothing is missing, every file decodes, and no image changed
+dimensions.
+
+Originals are kept in `C:UsersMd Shamimlorayn-images-originals` - 920
+files, 350 MB, mirroring the same tree. Delete that folder once the upload
+looks right.
+
+**On transparency.** 207 of the PNGs carry an alpha channel and WebP does not.
+That looked like a defect until the pixels were checked: every one of those
+alpha channels is fully opaque - zero genuinely transparent pixels across all
+311 PNGs - so dropping the channel changes nothing on screen. Worth knowing
+because `extractChannel(3).stats()` reports a minimum of 0 on these files and
+suggests the opposite; only a raw pixel scan tells the truth.
+
 ### The architectural catch
 
 Medusa attaches images to a **product**, not a variant. Options A and B fit that
