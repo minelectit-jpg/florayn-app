@@ -111,6 +111,14 @@ Decided and implemented, recorded here so they are not reopened.
   single-use promotion, recomputed server-side from the cart's own lines.
 - **The Matching Set bundle** is deliberately not built: it needs a Signature
   Pen product type that does not exist in the catalogue.
+- **Home page, header, mega menu and footer** are built from the content
+  module and edited under **Home page**, **Mega menu** and **Footer** in the
+  admin. The menu keeps the live query shape,
+  `/shop/?filter_device=…&filter_case-type=…`, so links copied from
+  florayn.com work unchanged.
+- **Footer "Contact Us"** goes to a real `/contact/` page, not Facebook.
+- **Style names** in the menu are the taxonomy names — Signature, Elite Clear,
+  Armor Clear — not the live marketing labels.
 
 ## Outstanding — work
 
@@ -119,17 +127,18 @@ Roughly in the order it makes sense to do it.
 1. **Collection landing pages.** Ten exist live (Garage, Leopard, Bug Life,
    Van Gogh Dreams, Frequency, Checkmate, Wild Instinct, Muse Marvel, Florayn
    Blooms, Italian Alcantara), each a hero plus a grid of design tiles. None
-   are built here. Note Fruit Punch and Stripes have no landing page live.
-2. **Home page** — not matched to the live one.
-3. **Header mega menu and footer** — structure captured in AUDIT.md sections 9
-   and 10, not built.
-4. **Per-design product copy.** Every product carries the case type's
+   are built here, so the Collections menu points at `/collection/<slug>/`
+   instead. Note Fruit Punch and Stripes have no landing page live.
+2. **Terms and Privacy pages** exist as routes so the footer does not 404, but
+   the wording has to come from the business.
+3. **Per-design product copy.** Every product carries the case type's
    description. The live site has copy per product; there is none per design.
-5. **Checkout extras** — bKash, and a courier integration. Deliberately not
+4. **Checkout extras** — bKash, and a courier integration. Deliberately not
    built; COD only for now.
-6. **Real product images.** Currently deterministic inline SVG placeholders.
+5. **Real product images.** Currently deterministic inline SVG placeholders.
    Needs a file provider (S3 / R2) and the host added to
-   `images.remotePatterns`.
+   `images.remotePatterns`. This is now the biggest visual gap: the home page
+   heroes and category tiles are all placeholder art.
 
 ## The product page needs data, not layout
 

@@ -5,6 +5,7 @@ import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
 import SiteFooter from "@/components/site-footer"
 import SiteHeader from "@/components/site-header"
+import { getSiteContent } from "@/lib/content"
 
 import "./globals.css"
 
@@ -42,22 +43,28 @@ export const metadata: Metadata = {
     "Premium printed cases for iPhone, Samsung, AirPods, Apple Watch and cards. One design, every device.",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const content = await getSiteContent()
+
   return (
     <html lang="en" className={`${fraunces.variable} ${figtree.variable}`}>
       <body className="min-h-screen bg-paper text-ink">
         <CartProvider>
-          <SiteHeader />
+          <SiteHeader menu={content.primary} />
 
           <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-12 md:px-[30px] md:py-16">
             {children}
           </main>
 
-          <SiteFooter />
+          <SiteFooter
+            columns={content.footer}
+            note={content.footerNote}
+            social={content.social}
+          />
           <CartDrawer />
         </CartProvider>
       </body>
