@@ -63,3 +63,33 @@ export async function getSiteContent(): Promise<SiteContent> {
     return EMPTY
   }
 }
+
+export type CollectionPage = {
+  collection_slug: string
+  hero_image_url: string | null
+  hero_eyebrow: string | null
+  hero_heading: string | null
+  cta_label: string | null
+  cta_href: string | null
+  intro_heading: string | null
+  intro_copy: string | null
+  /** Ordered design slugs. Empty means every design, in catalogue order. */
+  design_slugs: string[]
+}
+
+/** The landing content for one collection, or null when there is none. */
+export async function getCollectionPage(
+  slug: string
+): Promise<CollectionPage | null> {
+  try {
+    const res = await fetch(`${BACKEND}/store/collection-pages/${slug}`, {
+      headers: { "x-publishable-api-key": KEY },
+      next: { revalidate: 60 },
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as { page: CollectionPage }
+    return data.page ?? null
+  } catch {
+    return null
+  }
+}

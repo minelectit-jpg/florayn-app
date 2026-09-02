@@ -1,3 +1,4 @@
+import { DEFAULT_COLLECTION_PAGES } from "./collection-pages"
 import {
   DEFAULT_HOME_SECTIONS,
   DEFAULT_MENU,
@@ -107,4 +108,28 @@ export function buildMenu(
         groups,
       }
     })
+}
+
+/**
+ * The collection landing pages, seeded on first read like the rest of the
+ * content module. `cta_href` defaults to the collection's own URL.
+ */
+export async function getCollectionPages(service: any) {
+  let pages = await service.listCollectionPages({}, { order: { position: "ASC" } })
+
+  if (!pages?.length) {
+    await service.createCollectionPages(
+      DEFAULT_COLLECTION_PAGES.map((page, index) => ({
+        ...page,
+        cta_href: page.cta_href ?? `/collection/${page.collection_slug}/`,
+        hero_image_url: page.hero_image_url ?? null,
+        design_slugs: [],
+        is_visible: true,
+        position: index,
+      }))
+    )
+    pages = await service.listCollectionPages({}, { order: { position: "ASC" } })
+  }
+
+  return pages ?? []
 }

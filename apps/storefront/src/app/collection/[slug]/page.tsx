@@ -2,8 +2,10 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import CollectionFilters from "@/components/collection-filters"
+import CollectionHero from "@/components/collection-hero"
 import ProductCard from "@/components/product-card"
 import { getDeviceCatalog } from "@/lib/catalog"
+import { getCollectionPage } from "@/lib/content"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
 
 type Params = {
@@ -94,13 +96,14 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     notFound()
   }
 
-  const [{ products }, deviceCatalog] = await Promise.all([
+  const [{ products }, deviceCatalog, landing] = await Promise.all([
     listProducts(
       group.kind === "collection"
         ? { collection_id: group.id, limit: 100 }
         : { category_id: group.id, limit: 100 }
     ),
     getDeviceCatalog(),
+    getCollectionPage(slug),
   ])
 
   // Only offer devices this collection actually has stock for.
@@ -148,7 +151,24 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     : forDevice
 
   const sort = first(query.sort) || "featured"
-  const sorted = sortProducts(filtered, sort)
+  let sorted = sortProducts(filtered, sort)
+
+  /*
+   * A curated design list wins over the default ordering, but only while the
+   * shopper has not asked for a different sort - their choice should not be
+   * silently overridden.
+   */
+  const curated = landing?.design_slugs ?? []
+  if (curated.length && sort === "featured") {
+    const rank = new Map(curated.map((designSlug, i) => [designSlug, i]))
+    sorted = sorted
+      .filter((product) => rank.has(product.metadata?.design_slug as string))
+      .sort(
+        (a, b) =>
+          (rank.get(a.metadata?.design_slug as string) ?? 0) -
+          (rank.get(b.metadata?.design_slug as string) ?? 0)
+      )
+  }
 
   const resultLabel = device
     ? `${device} Cases - ${sorted.length}`
@@ -156,15 +176,23 @@ export default async function CollectionPage({ params, searchParams }: Params) {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-3">
-        <p className="eyebrow">Collection</p>
-        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
-          {group.title}
-        </h1>
-        {group.description ? (
-          <p className="max-w-2xl text-ink-muted">{group.description}</p>
-        ) : null}
-      </header>
+      {landing ? (
+        <CollectionHero
+          page={landing}
+          fallbackImage={sorted[0]?.thumbnail ?? products[0]?.thumbnail ?? null}
+          title={group.title}
+        />
+      ) : (
+        <header className="space-y-3">
+          <p className="eyebrow">Collection</p>
+          <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
+            {group.title}
+          </h1>
+          {group.description ? (
+            <p className="max-w-2xl text-ink-muted">{group.description}</p>
+          ) : null}
+        </header>
+      )}
 
       <CollectionFilters
         devices={deviceOptions}
