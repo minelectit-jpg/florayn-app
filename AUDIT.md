@@ -690,6 +690,40 @@ shopper moves between phone and AirPods and stays put while they move between
 phone bodies. That is the right way round: the case that matters is covered, the
 case that does not costs nothing.
 
+
+### Downloaded
+
+2,157 files, 399 MB, in `C:UsersMd Shamimlorayn-images` - outside the git
+tree, because 400 MB of binaries do not belong in the repository and Cloudways
+wipes `apps/backend/static/` on every deploy. Zero failures, zero missing, all
+525 products covered.
+
+```
+<design-slug>/<case-type>/<family>/<n>.<ext>
+manifest.json
+```
+
+**The size estimate was wrong.** The audit said ~180 MB; it is 399 MB. I had
+measured a single phone image at 86 KB and applied it to every family. Phone
+images do average 101 KB, but the accessory shots are far heavier:
+
+| Family | Files | Mean | Total |
+| --- | ---: | ---: | ---: |
+| phone | 1,192 | 101 KB | 118 MB |
+| AirPods | 781 | 148 KB | 113 MB |
+| MagSafe Wallet | 77 | 1,068 KB | 80 MB |
+| Apple Watch band | 77 | 727 KB | 55 MB |
+| Card Wallet | 30 | 1,148 KB | 34 MB |
+
+**The `.webp` URLs lie.** 920 of the 2,157 are not WebP at all - the live server
+returns `image/png` and `image/jpeg` from `.webp` URLs. The real mix is 1,237
+WebP, 609 JPEG, 311 PNG, and the PNGs are what make the accessory families
+heavy. Files carry their true extension, and `manifest.json` maps extension to
+content-type so the R2 upload can set it without sniffing bytes.
+
+The PNGs are worth converting before upload: 311 files at ~1 MB each are most of
+80 MB that WebP would cut by roughly two thirds.
+
 ### The architectural catch
 
 Medusa attaches images to a **product**, not a variant. Options A and B fit that
