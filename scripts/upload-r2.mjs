@@ -108,7 +108,7 @@ async function worker() {
     const f = queue.shift()
     if (f.endsWith("manifest.json")) {
       await s3.send(new PutObjectCommand({
-        Bucket: R2_BUCKET, Key: "manifest.json",
+        Bucket: R2_BUCKET, Key: process.env.MANIFEST_KEY ?? "manifest.json",
         Body: fs.readFileSync(f), ContentType: "application/json",
       })).then(() => done++).catch((e) => { failed++; failures.push({ key: "manifest.json", error: String(e.message) }) })
       continue
