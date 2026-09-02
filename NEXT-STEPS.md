@@ -44,8 +44,14 @@ npm run backend:dev
 npm run storefront:dev
 ```
 
-Storefront on :8000, admin on :9000/app. Admin login is
-`admin@florayn.local` / `REDACTED`.
+Storefront on :8000, admin on :9000/app. Create your admin user with:
+
+```bash
+cd apps/backend && npx medusa user -e you@example.com -p '<your password>'
+```
+
+A reseed drops the user, so this has to be run again after one. Do not put
+the password in this file - the repository is public.
 
 Full setup, including why the storefront is not an npm workspace member, is in
 the README.
