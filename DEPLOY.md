@@ -3,204 +3,209 @@
 Written for someone who has not deployed a Node app before. Every command is
 one you can copy and paste.
 
-**Read the two findings first.** They change what you need to buy, and no
-amount of dashboard clicking gets around them.
+---
+
+## The one thing that is not a setting
+
+Florayn is **two separate servers**:
+
+| | What it is | Serves |
+| --- | --- | --- |
+| **Backend** | Medusa | the API and the admin at `/app` |
+| **Storefront** | Next.js | the shop customers see |
+
+A Velocity app runs one build and one start command on one port, so it cannot
+run both. You need **two apps** on the same repository and branch.
+
+Your existing `florayn-app` becomes the **storefront**. Create the backend app
+after this one is working.
+
+## The setting that breaks the build
+
+The two apps need **different Root Directories**, and this is not a preference:
+
+- The **storefront** has its own `package-lock.json` and imports nothing
+  outside its folder. Root Directory is `apps/storefront`.
+- The **backend** is an npm workspace member with no lockfile of its own — its
+  dependencies live in the repository root's `node_modules`. Root Directory
+  must be the repository root, or `npm install` installs nothing.
+
+**If your failed deploy had Root Directory empty or `/` for the storefront,
+that is almost certainly why.** At the root, `npm run build` runs `turbo build`,
+which builds the Medusa backend too, and the backend build needs a
+`DATABASE_URL` the storefront app does not have. The build fails on a database
+error while you are trying to deploy a website.
 
 ---
 
-## Finding 1 — this needs two apps, not one
+## Step 1 — the database
 
-Florayn is two separate servers:
+Provision PostgreSQL from the Cloudways dashboard. It is offered on every plan
+alongside MySQL and MongoDB.
 
-| | What it is | Command | Serves |
-| --- | --- | --- | --- |
-| **Backend** | Medusa | `medusa start` | the API and the admin at `/app` |
-| **Storefront** | Next.js | `next start` | the shop customers see |
-
-A Velocity app runs **one** build and **one** start command on **one** port. It
-cannot run both. So you need **two Velocity apps**, both pointing at
-`github.com/minelectit-jpg/florayn-app`, branch `main`, with different settings.
-
-Your existing `florayn-app` becomes the **storefront**. Create a second app for
-the backend.
-
-> If Velocity turns out not to let you set a custom start command or a
-> subdirectory, the backend will not run there. In that case put the backend on
-> a normal Cloudways server with the Node.js stack, and keep Velocity for the
-> storefront only. The storefront is the part that benefits from Velocity.
-
-## Finding 2 — Cloudways does not give you PostgreSQL
-
-Medusa **requires** PostgreSQL. It does not run on MySQL or MariaDB, which is
-what Cloudways servers provide. Velocity does not ship a database at all.
-
-So the database has to come from somewhere else. Any managed Postgres works.
-Cheapest sensible options:
-
-- **Neon** (neon.tech) — has a free tier, made for this
-- **Supabase** (supabase.com) — free tier, gives you a Postgres URL
-- **DigitalOcean Managed Database** — paid, same company style as Cloudways
-
-Pick one, create a Postgres database, and copy the connection string it gives
-you. It looks like:
+Then open **Overview** and find the database credentials section. Copy the host,
+port, database name, user and password, and assemble them:
 
 ```
-postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+postgresql://USER:PASSWORD@HOST:PORT/DBNAME
 ```
 
-That string is your `DATABASE_URL`. Keep it somewhere safe; you will paste it
-into both the deploy settings and your own terminal.
+If the credentials panel offers a ready-made connection string, use that
+instead of assembling it. Add `?sslmode=require` on the end if Cloudways says
+the database requires SSL.
 
-**Check before you buy:** log into Cloudways and look for a Database or Add-ons
-section on the Velocity app. If PostgreSQL is offered there now, use it and
-skip the external provider. It was not offered when this was written.
+That value is your `DATABASE_URL`. You will paste it into the backend app's
+environment, and you may need it in your own terminal in Step 3.
 
----
+## Step 2 — make your secrets
 
-## Step 1 — make your secrets
-
-On your own computer, in the project folder, run this **three times** and keep
-each result. They are three different random values.
+On your own computer, in the project folder, run this **twice** and keep both
+results. They are two different random values.
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Label them:
+Label them `JWT_SECRET` and `COOKIE_SECRET`. Do not reuse the development
+values and do not put them in the repository — they go in the dashboard only.
 
-1. `JWT_SECRET`
-2. `COOKIE_SECRET`
-3. spare (keep it; you will want one later)
+## Step 3 — create the catalogue in the database
 
-**Do not reuse the development values, and do not put these in the repository.**
-They go in the Cloudways dashboard only.
+This has to happen once, before either app is useful. There are two ways, and
+which one you can use depends on whether the database accepts connections from
+outside Cloudways.
 
-## Step 2 — set up the database
+**Find out first.** With your `DATABASE_URL` to hand, run this on your computer:
 
-1. Create the Postgres database at Neon or Supabase.
-2. Copy the connection string.
-3. On your computer, put it in `apps/backend/.env` **temporarily**, replacing
-   the local one:
-
-```
-DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+```bash
+node -e "const{Client}=require('pg');const c=new Client(process.env.DATABASE_URL);c.connect().then(()=>{console.log('reachable');return c.end()}).catch(e=>console.log('not reachable:',e.message))"
 ```
 
-4. Create the tables and the catalogue:
+Set `DATABASE_URL` in your shell first, or paste it into the string.
+
+### Path A — the database is reachable from your computer
+
+1. Put the production `DATABASE_URL` in `apps/backend/.env`, replacing the
+   local one.
+2. Run:
 
 ```bash
 cd apps/backend
 npx medusa db:migrate
-```
-
-That runs the migrations **and** the seed, because the seed is a migration
-script. It creates 181 designs, 6 case types, 50 devices, 525 products and
-13,041 variants. It takes a few minutes.
-
-5. Create your admin login:
-
-```bash
 npx medusa user -e you@example.com -p "a password you choose"
-```
-
-6. Read the publishable key the seed made — you need it in Step 4:
-
-```bash
+npx medusa exec ./src/scripts/wire-images-device.ts
 cd ..
 npm run backend:key
 ```
 
-Copy the `pk_...` value.
+3. Copy the `pk_...` the last command prints. You need it in Step 5.
+4. **Put your local `DATABASE_URL` back**, or local work will write to
+   production.
 
-7. Point the product images at R2:
+### Path B — the database is only reachable from Cloudways
+
+Deploy the backend app first (Step 4), then use **Cron Job Management** to run
+the setup once. Add a cron job, set it to run once at a time a few minutes
+away, with this command:
 
 ```bash
-cd apps/backend && npx medusa exec ./src/scripts/wire-images-device.ts
+cd /home/master/applications/YOUR_APP/public_html && npx medusa db:migrate && npx medusa exec ./src/scripts/wire-images-device.ts
 ```
 
-8. **Put your local `DATABASE_URL` back** to the development one, or local work
-   will start writing to production.
+Replace `YOUR_APP` with the path shown under **Access Details**. Delete the
+cron job once it has run — the seed refuses to run twice, but the cron will
+keep firing.
 
-> Running the seed from your own machine against the remote database is
-> deliberate. Velocity may not give you a terminal on the server, and this
-> avoids needing one.
+Creating the admin user and reading the publishable key also need a command
+run there. Add them the same way, one at a time:
 
-## Step 3 — the backend app
+```bash
+cd /home/master/applications/YOUR_APP/public_html/apps/backend && npx medusa user -e you@example.com -p "a password you choose"
+```
 
-Create a second Velocity app on the same repository and branch.
+```bash
+cd /home/master/applications/YOUR_APP/public_html && npm run backend:key
+```
 
-**Build settings**
+Cron output goes to the job's log in the dashboard; that is where the `pk_...`
+will appear.
+
+## Step 4 — the storefront app (your existing florayn-app)
+
+Set each field exactly as below.
 
 | Field | Value |
 | --- | --- |
-| Node version | 22 |
-| Install command | `npm install` |
-| Build command | `npm --prefix apps/backend run build` |
-| Start command | `cd apps/backend/.medusa/server && npm install --omit=dev && npm run start` |
-| Output / root directory | leave as the repository root |
+| **Framework preset** | Next.js |
+| **Branch** | `main` |
+| **Node version** | 22 |
+| **Root Directory** | `apps/storefront` |
+| **Build and Output Settings** | Custom |
+| — Install command | `npm install` |
+| — Build command | `npm run build` |
+| — Output directory | `.next` |
+| — Start / run command | `npm run start` |
 
-That start command looks odd and is not optional. `medusa build` produces a
-self-contained app in `apps/backend/.medusa/server` with its own
-`package.json`; that folder is what actually runs.
+Because Root Directory is `apps/storefront`, every command runs inside that
+folder. That is what makes them this short.
 
-**Environment variables**
-
-Replace `BACKEND_URL` and `STOREFRONT_URL` with the URLs Cloudways gives each
-app once created. They look like `https://something.cloudwaysapps.com`.
+**Environment Variables** — use the Environment Variables tab:
 
 ```
 NODE_ENV=production
-DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
-JWT_SECRET=<the first value from Step 1>
-COOKIE_SECRET=<the second value from Step 1>
-STORE_CORS=STOREFRONT_URL
-ADMIN_CORS=BACKEND_URL
-AUTH_CORS=BACKEND_URL,STOREFRONT_URL
-MEDUSA_BACKEND_URL=BACKEND_URL
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://your-backend-app.cloudwaysapps.com
+NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=pk_...
+NEXT_PUBLIC_SITE_URL=https://your-storefront-app.cloudwaysapps.com
+```
+
+You will not have the backend URL or the `pk_` until Steps 3 and 5. Deploy once
+with placeholders to prove the build works, then fill them in and redeploy —
+the site will build either way, it just will not show products yet.
+
+Do **not** set `PORT`. Cloudways sets it, and the start script now honours it.
+
+Use the **PM2 Service** panel to Restart after changing environment variables;
+a variable change alone does not restart the process.
+
+## Step 5 — the backend app
+
+Create a second app on the same repository and branch.
+
+| Field | Value |
+| --- | --- |
+| **Framework preset** | Custom / Node.js — not Next.js |
+| **Branch** | `main` |
+| **Node version** | 22 |
+| **Root Directory** | leave empty (the repository root) |
+| **Build and Output Settings** | Custom |
+| — Install command | `npm install` |
+| — Build command | `npm --prefix apps/backend run build` |
+| — Output directory | `apps/backend/.medusa/server` |
+| — Start / run command | `cd apps/backend/.medusa/server && npm install --omit=dev && npm run start` |
+
+That start command is not optional. `medusa build` produces a self-contained
+app in `apps/backend/.medusa/server`, with its own `package.json`, and that
+folder is what actually runs.
+
+**Environment Variables**, with the two URLs replaced by the real ones:
+
+```
+NODE_ENV=production
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DBNAME
+JWT_SECRET=<first value from Step 2>
+COOKIE_SECRET=<second value from Step 2>
+STORE_CORS=https://your-storefront-app.cloudwaysapps.com
+ADMIN_CORS=https://your-backend-app.cloudwaysapps.com
+AUTH_CORS=https://your-backend-app.cloudwaysapps.com,https://your-storefront-app.cloudwaysapps.com
+MEDUSA_BACKEND_URL=https://your-backend-app.cloudwaysapps.com
 IMAGE_BASE_URL=https://pub-1af88507922d437983ab3ffaf7336788.r2.dev
-DISABLE_MEDUSA_ADMIN=false
 ```
 
-Deploy. When it is up, open `BACKEND_URL/app` and log in with the user from
-Step 2. If you see the admin, the backend is working.
+Deploy, then open `https://your-backend-app.cloudwaysapps.com/app` and log in.
 
-## Step 4 — the storefront app
+## Step 6 — check it works
 
-Use your existing `florayn-app`.
-
-**Build settings**
-
-| Field | Value |
-| --- | --- |
-| Node version | 22 |
-| Install command | `npm run setup` |
-| Build command | `npm run storefront:build` |
-| Start command | `npm --prefix apps/storefront run start` |
-| Output / root directory | leave as the repository root |
-
-`npm run setup` installs both the root and the storefront, which has its own
-`node_modules` on purpose — the storefront is deliberately not an npm workspace
-member, because Medusa's admin needs React 18 and Next needs React 19.
-
-**Environment variables**
-
-```
-NODE_ENV=production
-NEXT_PUBLIC_MEDUSA_BACKEND_URL=BACKEND_URL
-NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=<the pk_... from Step 2>
-NEXT_PUBLIC_SITE_URL=STOREFRONT_URL
-```
-
-`NEXT_PUBLIC_SITE_URL` is what the sitemap and robots.txt put in their URLs.
-Set it to the Cloudways URL for now and change it to `https://florayn.com` when
-you connect the domain.
-
-Deploy. Open `STOREFRONT_URL`. You should see the home page with real product
-images.
-
-## Step 5 — check it works
-
-In this order:
+In this order, because each step rules out the one before:
 
 1. `BACKEND_URL/health` returns `OK`
 2. `BACKEND_URL/app` shows the admin login
@@ -208,20 +213,25 @@ In this order:
 4. `STOREFRONT_URL/collection/leopard/` shows 44 products
 5. `STOREFRONT_URL/product/amber-leopard-signature-iphone-12/` shows an
    iPhone 12 render
-6. Add something to the cart and place a Cash on Delivery order
+6. Add to cart and place a Cash on Delivery order
 7. The order appears in the admin under Orders
 
-If the storefront loads but has no products, the publishable key is wrong or
-`STORE_CORS` does not exactly match the storefront URL. Those two cause almost
-every "it deployed but it is empty" problem.
+**If the site loads but has no products**, it is one of two things, and almost
+never anything else: the publishable key is wrong, or `STORE_CORS` does not
+exactly match the storefront URL — no trailing slash, right protocol.
 
-## Step 6 — connecting florayn.com, at the very end
+## Step 7 — staging
 
-When you are ready:
+**Staging Management** gives you a copy of the app on its own URL. Worth using
+before the domain is attached: push to `main`, let staging build, check Step 6
+against the staging URL, then promote. It uses the same environment variables
+unless you override them, so point staging at the same backend.
 
-1. Attach the domain to the **storefront** app in Cloudways.
-2. Attach a subdomain — `api.florayn.com` — to the **backend** app.
-3. Update these and redeploy both:
+## Step 8 — connecting florayn.com, at the very end
+
+1. **Domain Management** on the **storefront** app → add `florayn.com`.
+2. **Domain Management** on the **backend** app → add `api.florayn.com`.
+3. Update these and restart both from the PM2 panel:
 
 ```
 # backend
@@ -235,33 +245,41 @@ NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.florayn.com
 NEXT_PUBLIC_SITE_URL=https://florayn.com
 ```
 
-4. Point `img.florayn.com` at the R2 bucket, then change `IMAGE_BASE_URL` on
-   the backend and run once from your computer, against the production
-   database:
-
-```bash
-cd apps/backend && npx medusa exec ./src/scripts/wire-images-device.ts
-```
-
-The image host is named in exactly one place, so that variable plus that one
-command moves every image URL.
+4. When `img.florayn.com` points at the R2 bucket, change `IMAGE_BASE_URL` on
+   the backend and run the wiring once more. The image host is named in exactly
+   one place, so that variable plus one command moves all 27,962 image URLs.
 
 ---
 
-## Things that will bite
+## If a deploy fails
+
+Read the build log and look for the **first** error, not the last. The usual
+causes, most likely first:
+
+**"Cannot find module" or a database error during the storefront build** —
+Root Directory is not `apps/storefront`. At the root the build runs `turbo
+build`, which builds the backend, which needs a database.
+
+**The build succeeds but the app is unreachable** — the start command is wrong,
+or the process exited. Check the PM2 panel; if it is stopped or restarting in a
+loop, the start command is the thing to fix.
+
+**"medusa: not found" on the backend** — Root Directory is not empty. The
+backend's dependencies are in the repository root.
+
+**Out of memory during the storefront build** — it prerenders about 2,100
+pages. Set `SEED_DEVICES_PER_PRODUCT=1` in the storefront environment to halve
+that.
+
+## Things worth knowing
 
 **Redis.** Medusa uses an in-memory event bus without it and says so in the
-logs. On one server that works, but events are lost on restart and it will not
-survive scaling to two. Add Redis when you can; Medusa reads `REDIS_URL`.
+logs. On one server that works; events are lost on restart. Add it when you
+can — Medusa reads `REDIS_URL`.
 
 **The seed only runs once.** It refuses to run over a catalogue that already
-exists. To reseed you must drop and recreate the database, which also rotates
-the publishable key and deletes the admin user — so Step 2 has to be redone in
-full.
+exists. Reseeding means dropping the database, which also rotates the
+publishable key and deletes the admin user, so Step 3 has to be redone whole.
 
-**Build memory.** The storefront prerenders a seed of about 2,100 pages. If the
-build is killed, lower it by setting `SEED_DEVICES_PER_PRODUCT=1` on the
-storefront app, which cuts the seed to roughly 1,050 pages.
-
-**Two apps, one repository.** Both apps redeploy on a push to `main`. That is
-usually what you want; just expect both to rebuild.
+**Both apps redeploy on a push to `main`.** Usually what you want; just expect
+two builds.
