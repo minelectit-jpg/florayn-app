@@ -141,10 +141,19 @@ Roughly in the order it makes sense to do it.
    description. The live site has copy per product; there is none per design.
 4. **Checkout extras** — bKash, and a courier integration. Deliberately not
    built; COD only for now.
-5. **Real product images.** Currently deterministic inline SVG placeholders.
-   Needs a file provider (S3 / R2) and the host added to
-   `images.remotePatterns`. This is now the biggest visual gap: the home page
-   heroes and category tiles are all placeholder art.
+5. **Home page and collection hero art.** Product imagery is real and served
+   from R2, but the home page heroes, category pills and tile grids are still
+   generated SVG placeholders - they are marketing renders, not product
+   shots, so they are not in the image set. Upload them and point the
+   sections at them from the Home page admin screen.
+
+- **Product imagery is per device.** 30,014 objects in R2; every one of the
+  13,041 variants carries its own ordered gallery in `metadata.images`, so
+  the picture follows the device rather than the family. The five family
+  folders remain as the fallback path.
+- **The Media admin screen** manages it: per-device groups, gaps filtering,
+  thumbnails, reordering, and a URL list per device. It is the permanent
+  tool for new designs, not a migration script.
 
 ## The product page needs data, not layout
 
