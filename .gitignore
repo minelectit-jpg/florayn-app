@@ -57,3 +57,6 @@ Thumbs.db
 **/.DS_Store
 # Transient progress files from the image upload script
 scripts/*.progress
+
+# MCP server config can carry access tokens; this repo is public.
+.mcp.json
