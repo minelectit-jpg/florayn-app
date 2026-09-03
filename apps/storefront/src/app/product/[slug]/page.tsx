@@ -13,10 +13,45 @@ import {
 import ProductTabs from "@/components/product-tabs"
 import { getBundleConfig } from "@/lib/bundles"
 import { getDesign, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
+import { devicePageHref, resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
+import { fitCopy, seoDescription, seoHeading } from "@/lib/seo-copy"
 import { getProductByHandle } from "@/lib/medusa"
 
 type Params = { params: Promise<{ slug: string }> }
+
+/**
+ * Prerender a seed at build time and let the rest generate on demand.
+ *
+ * Every design x case type x device has its own URL - 13,041 of them - and
+ * prerendering all of them would mean roughly 91,000 backend calls per build.
+ * The seed is the base product page plus its most-sold devices; the long tail
+ * is built on first request and cached, which is what Googlebot's own crawl
+ * warms up.
+ *
+ * SEED_DEVICES_PER_PRODUCT and STATIC_PAGE_LIMIT exist so a build can be
+ * scoped for measurement without changing the code.
+ */
+export const dynamicParams = true
+export const revalidate = 86400
+
+const SEED_DEVICES = Number(process.env.SEED_DEVICES_PER_PRODUCT ?? 3)
+
+export async function generateStaticParams() {
+  const limit = Number(process.env.STATIC_PAGE_LIMIT ?? 0)
+  const { products } = await listProducts({ limit: 600 })
+
+  const params: { slug: string }[] = []
+  for (const product of products) {
+    params.push({ slug: product.handle })
+    for (const variant of (product.variants ?? []).slice(0, SEED_DEVICES)) {
+      const deviceSlug = variant.metadata?.device_slug as string | undefined
+      if (deviceSlug) params.push({ slug: `${product.handle}-${deviceSlug}` })
+    }
+  }
+
+  return limit > 0 ? params.slice(0, limit) : params
+}
 
 /** Cheapest variant, which is what a case-type tile shows. */
 function minPrice(product: StoreProduct): number | null {
@@ -28,26 +63,63 @@ function minPrice(product: StoreProduct): number | null {
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params
-  const product = await getProductByHandle(slug)
+  const resolved = await resolveProductPage(slug)
 
-  if (!product) {
-    return { title: "Not found" }
+  /*
+   * notFound() belongs here rather than only in the page body. This route has
+   * a loading.tsx, so the shell streams as soon as the route is entered and
+   * the 200 is committed before the body runs - a missing product would then
+   * render the not-found UI under a 200, which Google reads as a real page.
+   * generateMetadata runs before the first flush, so the status is still ours
+   * to set.
+   */
+  if (!resolved) {
+    notFound()
+  }
+
+  const { product, device } = resolved
+  const design = (product.metadata?.design_name as string) ?? product.title
+  const caseType = (product.metadata?.case_type_name as string) ?? ""
+
+  // Self-canonical: each device page is its own target, not a duplicate of
+  // the base product, so it can rank on its own device terms.
+  const canonical = `/product/${slug}/`
+
+  if (!device) {
+    return {
+      title: product.title,
+      description: product.description?.slice(0, 160) ?? undefined,
+      alternates: { canonical },
+    }
   }
 
   return {
-    title: product.title,
-    description: product.description?.slice(0, 160) ?? undefined,
-    alternates: { canonical: `/product/${product.handle}/` },
+    title: `${design} ${device.name} Case - ${caseType}`,
+    description: seoDescription({ design, device: device.name, caseType }),
+    alternates: { canonical },
+    openGraph: {
+      title: `${design} ${device.name} Case - ${caseType}`,
+      images: firstImageFor(product, device.name),
+    },
   }
+}
+
+/** The first render for a device, used as the page's primary image. */
+function firstImageFor(product: StoreProduct, deviceName: string) {
+  const variant = (product.variants ?? []).find((v) => v.title === deviceName)
+  const images = (variant?.metadata?.images as string[] | undefined) ?? []
+  return images.length ? [images[0]] : undefined
 }
 
 export default async function ProductPage({ params }: Params) {
   const { slug } = await params
-  const product = await getProductByHandle(slug)
+  const resolved = await resolveProductPage(slug)
 
-  if (!product) {
+  if (!resolved) {
     notFound()
   }
+
+  const { product, device, baseHandle } = resolved
 
   const designSlug = product.metadata?.design_slug as string | undefined
   const caseTypeSlug = product.metadata?.case_type_slug as string | undefined
@@ -81,6 +153,10 @@ export default async function ProductPage({ params }: Params) {
   // thing that knows the image host.
   const imagesByFamily =
     (product.metadata?.images as Record<string, string[]> | undefined) ?? {}
+
+  // device name -> slug, so the picker can link to each device's own URL.
+  const deviceSlugByName: Record<string, string> = {}
+  for (const d of deviceCatalog) deviceSlugByName[d.name] = d.slug
 
   // The design route cannot join prices, so the sibling products are fetched
   // again through the Store API to price each case-type tile.
@@ -185,6 +261,10 @@ export default async function ProductPage({ params }: Params) {
         productTitle={product.title}
         bundles={bundles}
         caseTypeName={caseTypeName ?? null}
+        deviceName={device?.name ?? null}
+        fitCopy={device ? fitCopy(device.name, device.slug) : null}
+        baseHandle={baseHandle}
+        deviceSlugByName={deviceSlugByName}
         collection={
           product.collection
             ? { title: product.collection.title, handle: product.collection.handle }

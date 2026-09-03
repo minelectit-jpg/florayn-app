@@ -72,8 +72,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params
   const group = await resolveCollection(slug)
 
+  // Same soft-404 as the product route: loading.tsx commits the 200 before
+  // the body runs, so the check has to happen here.
   if (!group) {
-    return { title: "Not found" }
+    notFound()
   }
 
   return {

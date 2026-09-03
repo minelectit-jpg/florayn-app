@@ -27,6 +27,10 @@ export default function ProductView({
   productTitle,
   caseTypeName,
   collection,
+  deviceName,
+  fitCopy,
+  baseHandle,
+  deviceSlugByName,
   moreDesigns,
   caseTypes,
   shipping,
@@ -51,6 +55,14 @@ export default function ProductView({
    */
   caseTypeName?: string | null
   collection?: { title: string; handle: string } | null
+  /** Set on a device page: the device this URL is for. */
+  deviceName?: string | null
+  /** A sentence about the fit, generated from the device's own attributes. */
+  fitCopy?: string | null
+  /** Base handle, so the picker can link to each device's own URL. */
+  baseHandle?: string
+  /** device name -> device slug, for those links. */
+  deviceSlugByName?: Record<string, string>
   moreDesigns?: ReactNode
   caseTypes?: ReactNode
   shipping?: ReactNode
@@ -58,7 +70,12 @@ export default function ProductView({
   tabs: ReactNode
   pairs: ReactNode
 }) {
-  const [selectedId, setSelectedId] = useState(variants[0]?.id ?? "")
+  // A device page opens on its own device rather than the first variant.
+  const initial =
+    (deviceName && variants.find((v) => v.title === deviceName)?.id) ??
+    variants[0]?.id ??
+    ""
+  const [selectedId, setSelectedId] = useState(initial)
   const selected = variants.find((v) => v.id === selectedId) ?? variants[0]
 
   const family = selected ? imageFamilyByDevice[selected.title] : undefined
@@ -106,11 +123,17 @@ export default function ProductView({
         ) : null}
 
         <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
-          {designName}
+          {deviceName ? `${designName} ${deviceName} Case` : designName}
           {caseTypeName ? (
             <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
           ) : null}
         </h1>
+
+        {fitCopy ? (
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
+            {fitCopy}
+          </p>
+        ) : null}
 
         <div className="mt-3">
           <ProductBuyBox
@@ -124,6 +147,8 @@ export default function ProductView({
             bundles={bundles}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            baseHandle={baseHandle}
+            deviceSlugByName={deviceSlugByName}
           />
         </div>
 

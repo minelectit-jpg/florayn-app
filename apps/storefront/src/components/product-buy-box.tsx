@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
+import Link from "next/link"
+
 import { useCart } from "@/components/cart-provider"
 import { Spinner } from "@/components/ui/button"
 import { tierPricing, type BundleConfig } from "@/lib/bundles"
@@ -28,6 +30,8 @@ export default function ProductBuyBox({
   bundles,
   selectedId,
   onSelect,
+  baseHandle,
+  deviceSlugByName,
 }: {
   variants: StoreVariant[]
   /** device name -> family label, for grouping the drawer. */
@@ -42,6 +46,12 @@ export default function ProductBuyBox({
   /** Selection is lifted so the gallery can follow the chosen device. */
   selectedId: string
   onSelect: (variantId: string) => void
+  /**
+   * When set, each device is a link to its own indexable URL rather than a
+   * button that only changes state - so the picker is crawlable.
+   */
+  baseHandle?: string
+  deviceSlugByName?: Record<string, string>
 }) {
   const { add } = useCart()
   const [open, setOpen] = useState(false)
@@ -191,26 +201,43 @@ export default function ProductBuyBox({
                         {list.map((variant) => {
                           const isSelected = variant.id === selectedId
                           return (
-                            <button
-                              key={variant.id}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              onClick={() => {
-                                onSelect(variant.id)
-                                setState("idle")
-                                setOpen(false)
-                                setQuery("")
-                              }}
-                              className={[
-                                "rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
+                            (() => {
+                              const cls = [
+                                "block rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
                                 isSelected
                                   ? "border-purple bg-purple-tint text-ink"
                                   : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
-                              ].join(" ")}
-                            >
-                              {variant.title}
-                            </button>
+                              ].join(" ")
+                              const deviceSlug = deviceSlugByName?.[variant.title]
+                              const close = () => {
+                                setState("idle")
+                                setOpen(false)
+                                setQuery("")
+                              }
+                              return baseHandle && deviceSlug ? (
+                                <Link
+                                  key={variant.id}
+                                  href={`/product/${baseHandle}-${deviceSlug}/`}
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  className={cls}
+                                  onClick={close}
+                                >
+                                  {variant.title}
+                                </Link>
+                              ) : (
+                                <button
+                                  key={variant.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => { onSelect(variant.id); close() }}
+                                  className={cls}
+                                >
+                                  {variant.title}
+                                </button>
+                              )
+                            })()
                           )
                         })}
                       </div>
