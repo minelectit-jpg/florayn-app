@@ -295,6 +295,100 @@ function warn(message) {
 migrate()
 
 /*
+ * One-shot admin bootstrap, for a host with no SSH.
+ *
+ * Runs only when ADMIN_EMAIL and ADMIN_PASSWORD are both set, and only after
+ * migrations, since it writes to the user table. It is safe on every restart:
+ * `medusa user` is not idempotent - a second run exits 1 with "User with
+ * email: ..., already exists." - so that specific failure is read as "already
+ * done" and everything else is reported as a real problem.
+ *
+ * Like the migration step this is non-fatal. A server that boots is what makes
+ * the admin reachable, and refusing to start because an account already exists
+ * would be perverse.
+ *
+ * The password is never logged. Note that it IS passed as a command-line
+ * argument, because that is the only interface the CLI offers, so it is
+ * briefly visible to anyone who can list processes on the host. Once the admin
+ * exists, clear ADMIN_PASSWORD from the app's environment.
+ */
+const ADMIN_TIMEOUT_MS = Number(process.env.ADMIN_TIMEOUT_MS ?? 180_000)
+
+function createAdminUser() {
+  const email = process.env.ADMIN_EMAIL
+  const password = process.env.ADMIN_PASSWORD
+
+  if (!email || !password) {
+    // Silent unless one is set without the other, which is a typo worth
+    // pointing at rather than ignoring.
+    if (email || password) {
+      console.error(
+        `[start-backend] ${email ? "ADMIN_EMAIL" : "ADMIN_PASSWORD"} is set but ` +
+          `${email ? "ADMIN_PASSWORD" : "ADMIN_EMAIL"} is not; no admin user created.`
+      )
+    }
+    return
+  }
+
+  let cli
+  try {
+    cli = require.resolve("@medusajs/cli", { paths: [SERVER_DIR] })
+  } catch (error) {
+    console.error(`[start-backend] Cannot create admin: ${error.message}`)
+    return
+  }
+
+  console.log(`[start-backend] Ensuring admin user ${email} exists...`)
+
+  /*
+   * Piped rather than inherited, so the output can be classified before it is
+   * shown. The CLI prints a full stack for a duplicate, which is alarming and
+   * meaningless in the ordinary case where the account is simply already there.
+   */
+  const result = spawnSync(process.execPath, [cli, "user", "-e", email, "-p", password], {
+    cwd: SERVER_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: process.env,
+    timeout: ADMIN_TIMEOUT_MS,
+    encoding: "utf8",
+  })
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`
+
+  if (result.error) {
+    console.error(
+      `[start-backend] Admin user step failed: ${
+        result.error.code === "ETIMEDOUT"
+          ? `timed out after ${ADMIN_TIMEOUT_MS}ms`
+          : result.error.message
+      }`
+    )
+    return
+  }
+
+  if (result.status === 0) {
+    console.log(`[start-backend] Admin user ${email} created.`)
+    console.log(
+      "[start-backend] Remove ADMIN_PASSWORD from the app environment now that it exists."
+    )
+    return
+  }
+
+  if (/already exists/i.test(output)) {
+    console.log(`[start-backend] Admin user ${email} already exists; nothing to do.`)
+    return
+  }
+
+  // Unclassified: show the child's own output, since it is the only clue.
+  console.error(
+    `[start-backend] Could not create admin user ${email} (exit ${result.status}).\n` +
+      output.trim()
+  )
+}
+
+createAdminUser()
+
+/*
  * Windows needs shell: true, because since CVE-2024-27980 Node refuses to
  * spawn a .cmd file without one. Linux - which is what Cloudways runs - must
  * NOT have it: a shell layer would swallow the signals forwarded below, so

@@ -116,12 +116,27 @@ Replace `YOUR_APP` with the path shown under **Access Details**. Delete the
 cron job once it has run — the seed refuses to run twice, but the cron will
 keep firing.
 
-Creating the admin user and reading the publishable key also need a command
-run there. Add them the same way, one at a time:
+**The admin user needs no command at all.** Set these two on the backend app
+and restart it from the PM2 panel:
 
-```bash
-cd /home/master/applications/YOUR_APP/public_html/apps/backend && npx medusa user -e you@example.com -p "a password you choose"
 ```
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=a password you choose
+```
+
+`start-backend.js` creates the account on the next boot, after migrations, and
+says so in the log:
+
+```
+[start-backend] Admin user you@example.com created.
+```
+
+It is safe to leave set — every later restart prints `already exists; nothing
+to do` instead. **Delete `ADMIN_PASSWORD` once the account exists**, though:
+the CLI takes the password as a command-line argument, so it is briefly
+visible to anything that can list processes on the host.
+
+Reading the publishable key still needs a command run there:
 
 ```bash
 cd /home/master/applications/YOUR_APP/public_html && npm run backend:key
