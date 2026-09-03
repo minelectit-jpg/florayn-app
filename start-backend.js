@@ -58,6 +58,10 @@ const ENV_CANDIDATES = [
   path.join(__dirname, "apps", "backend", ".env"),
 ]
 
+// key -> which file supplied it, for anything this wrapper injected. Values
+// already in the environment are absent from this map.
+const ENV_SOURCE = new Map()
+
 // Enough to boot. DATABASE_URL is not listed: Medusa defaults it, and a
 // missing one fails loudly on its own rather than silently misconfiguring.
 const REQUIRED_ENV = ["JWT_SECRET", "COOKIE_SECRET"]
@@ -99,6 +103,7 @@ function loadEnvFiles() {
       if (process.env[key] === undefined) {
         process.env[key] = value
         added.push(key)
+        ENV_SOURCE.set(key, file)
       }
     }
     console.log(
@@ -121,6 +126,85 @@ function loadEnvFiles() {
 }
 
 loadEnvFiles()
+
+/*
+ * Say out loud which database is about to be used, and where that came from.
+ *
+ * medusa-config.ts reads exactly one variable - process.env.DATABASE_URL - and
+ * builds nothing from parts, so a surprising hostname is always inside that
+ * string. What is not obvious is who supplied it: the environment, a .env this
+ * wrapper read, or a .env the bundle reads on its own. Printing the host with
+ * its provenance turns "where is that name coming from" into something the
+ * boot log answers by itself.
+ *
+ * The password is redacted. Everything else - user, host, port, database - is
+ * what you need in order to compare against the dashboard.
+ */
+function describeDatabaseUrl(raw) {
+  if (!raw) return "DATABASE_URL is NOT SET"
+
+  let url
+  try {
+    url = new URL(raw)
+  } catch {
+    // Do not echo an unparseable value; it may still contain the password.
+    return `DATABASE_URL is set but is not a parseable URL (${raw.length} chars)`
+  }
+
+  return [
+    `host=${url.hostname || "(empty)"}`,
+    `port=${url.port || "(default)"}`,
+    `database=${url.pathname.replace(/^\//, "") || "(none)"}`,
+    `user=${url.username || "(none)"}`,
+    `password=${url.password ? "[redacted]" : "(none)"}`,
+  ].join(" ")
+}
+
+function reportDatabaseConfig() {
+  const raw = process.env.DATABASE_URL
+  const origin = ENV_SOURCE.get("DATABASE_URL")
+
+  console.log("[start-backend] Database configuration:")
+  console.log(`[start-backend]   ${describeDatabaseUrl(raw)}`)
+  console.log(
+    `[start-backend]   supplied by: ${
+      origin ? `this wrapper, from ${origin}` : raw ? "the environment" : "nothing"
+    }`
+  )
+
+  /*
+   * Names only, never values - several of these hold credentials. The point is
+   * to reveal a variable nobody expected to be there, which is the usual
+   * explanation for a hostname that appears from nowhere.
+   */
+  const related = Object.keys(process.env)
+    .filter((key) => /(^|_)(DB|DATABASE|POSTGRES|PG|MYSQL|REDIS)([_0-9]|$)/i.test(key))
+    .sort()
+  console.log(
+    `[start-backend]   other DB-ish variables visible: ${
+      related.length ? related.join(", ") : "(none)"
+    }`
+  )
+
+  /*
+   * The bundle runs dotenv against its own directory, so these files can also
+   * fill a DATABASE_URL that this wrapper never sees. NODE_ENV=production
+   * pulls in .env.production alongside .env.
+   */
+  const bundleEnvFiles = [".env", `.env.${process.env.NODE_ENV || "development"}`]
+    .map((name) => path.join(SERVER_DIR, name))
+    .filter((file) => fs.existsSync(file))
+
+  if (bundleEnvFiles.length) {
+    console.log(
+      `[start-backend]   NOTE: the server reads these on its own, and either\n` +
+        `[start-backend]   can supply a DATABASE_URL independently of the above:\n` +
+        bundleEnvFiles.map((f) => `[start-backend]     ${f}`).join("\n")
+    )
+  }
+}
+
+reportDatabaseConfig()
 
 /*
  * Predeploy: migrate before serving.
