@@ -179,13 +179,21 @@ Create a second app on the same repository and branch.
 | **Root Directory** | leave empty (the repository root) |
 | **Build and Output Settings** | Custom |
 | — Install command | `npm install` |
-| — Build command | `npm --prefix apps/backend run build` |
+| — Build command | `npm --prefix apps/backend run build && npm --prefix apps/backend/.medusa/server install --omit=dev` |
 | — Output directory | `apps/backend/.medusa/server` |
-| — Start / run command | `cd apps/backend/.medusa/server && npm install --omit=dev && npm run start` |
+| **Entry File** | `start-backend.js` |
 
-That start command is not optional. `medusa build` produces a self-contained
-app in `apps/backend/.medusa/server`, with its own `package.json`, and that
-folder is what actually runs.
+Two things about that row pair, both of which will break the app if changed.
+
+**The Entry File is a file, not a command.** Cloudways runs it through PM2,
+which expects a path to a JavaScript file. A shell command in that box does
+not work. `start-backend.js` at the repository root is a small wrapper that
+spawns the real server and forwards signals so PM2 can stop it cleanly.
+
+**The build command installs twice on purpose.** `medusa build` produces a
+self-contained app in `apps/backend/.medusa/server` with its own
+`package.json` — and no `node_modules`. That second install fills them in.
+Without it the app starts, prints `has no node_modules`, and exits 1.
 
 **Environment Variables**, with the two URLs replaced by the real ones:
 
@@ -266,6 +274,14 @@ loop, the start command is the thing to fix.
 
 **"medusa: not found" on the backend** — Root Directory is not empty. The
 backend's dependencies are in the repository root.
+
+**`[start-backend] ... has no node_modules`** — the build command is missing
+its second half, the `npm --prefix apps/backend/.medusa/server install
+--omit=dev`. The app is telling you exactly what to add.
+
+**`[start-backend] No build found`** — the build did not reach
+`apps/backend/.medusa/server` at all, so read the build log rather than this
+one; the real failure is earlier.
 
 **Out of memory during the storefront build** — it prerenders about 2,100
 pages. Set `SEED_DEVICES_PER_PRODUCT=1` in the storefront environment to halve
