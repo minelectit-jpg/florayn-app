@@ -238,8 +238,11 @@ export default async function initialDataSeed({
       { region_id: region.id, amount },
     ],
     rules: [
-      { attribute: "enabled_in_store", value: "true", operator: "eq" },
-      { attribute: "is_return", value: "false", operator: "eq" },
+      // `as const` keeps these as the literal "eq" rather than widening to
+      // string, which is what CreateFlatRateShippingOptionInput's
+      // RuleOperatorType requires - same reason price_type is pinned above.
+      { attribute: "enabled_in_store", value: "true", operator: "eq" as const },
+      { attribute: "is_return", value: "false", operator: "eq" as const },
     ],
   })
 
