@@ -290,8 +290,19 @@ that.
 ## Things worth knowing
 
 **Redis.** Medusa uses an in-memory event bus without it and says so in the
-logs. On one server that works; events are lost on restart. Add it when you
-can — Medusa reads `REDIS_URL`.
+logs — `redisUrl not found. A fake redis instance will be used.` On one server
+that works; events are lost on restart.
+
+Setting `REDIS_URL` on the app **will not** stop that message. Nothing reads
+it: `medusa-config.ts` configures no Redis at all. Wiring it up is a code
+change to that file, not an environment variable, and it is still outstanding.
+
+**Environment variables reach the backend two ways.** `start-backend.js`
+prefers real environment variables and falls back to a `.env` at the
+repository root or at `apps/backend/`, because the built server reads `.env`
+relative to its own directory (`apps/backend/.medusa/server`) and would
+otherwise ignore one placed at the app root. If a value is set on the app and
+still is not arriving, the boot log says which of the two paths it used.
 
 **The seed only runs once.** It refuses to run over a catalogue that already
 exists. Reseeding means dropping the database, which also rotates the
