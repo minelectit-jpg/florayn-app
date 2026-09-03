@@ -133,3 +133,13 @@ export async function getCollectionPages(service: any) {
 
   return pages ?? []
 }
+
+/** SEO templates and their overrides, seeded on first read. */
+export async function getSeoConfig(service: any) {
+  let [settings] = await service.listSeoSettings({}, { take: 1 })
+  if (!settings) {
+    settings = await service.createSeoSettings({})
+  }
+  const overrides = await service.listSeoOverrides({ is_active: true })
+  return { settings, overrides: overrides ?? [] }
+}

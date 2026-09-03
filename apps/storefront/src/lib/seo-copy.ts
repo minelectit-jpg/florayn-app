@@ -155,3 +155,98 @@ export function seoDescription({
 export function seoHeading(design: string, device: string): string {
   return `${design} ${device} Case`
 }
+
+/* -------------------------------------------------------------------------
+ * Templates and overrides, edited under SEO in the admin.
+ * ---------------------------------------------------------------------- */
+
+const BACKEND =
+  process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL ?? "http://localhost:9000"
+const KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY ?? ""
+
+export type SeoConfig = {
+  templates: {
+    title: string
+    description: string
+    heading: string
+    fit_copy_enabled: boolean
+  }
+  overrides: {
+    scope: "design" | "device"
+    key: string
+    title: string | null
+    description: string | null
+    fit_copy: string | null
+  }[]
+}
+
+const FALLBACK: SeoConfig = {
+  templates: {
+    title: "{design} {device} Case - {caseType}",
+    description:
+      "{design} {device} case in our {caseType} finish. Printed in Dhaka, cash on delivery across Bangladesh.",
+    heading: "{design} {device} Case",
+    fit_copy_enabled: true,
+  },
+  overrides: [],
+}
+
+export async function getSeoConfig(): Promise<SeoConfig> {
+  try {
+    const res = await fetch(`${BACKEND}/store/seo`, {
+      headers: { "x-publishable-api-key": KEY },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return FALLBACK
+    return (await res.json()) as SeoConfig
+  } catch {
+    return FALLBACK
+  }
+}
+
+/** Fills the placeholders, tidying the gap a blank device leaves. */
+export function fillTemplate(
+  template: string,
+  values: Record<string, string>
+): string {
+  return template
+    .replace(/\{(\w+)\}/g, (_, k) => values[k] ?? "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+-\s*$/, "")
+    .trim()
+}
+
+/**
+ * The copy for one page, with a device override beating a design override,
+ * which beats the template.
+ */
+export function resolveSeo({
+  config,
+  designSlug,
+  deviceSlug,
+  values,
+}: {
+  config: SeoConfig
+  designSlug?: string
+  deviceSlug?: string
+  values: { design: string; device: string; caseType: string }
+}) {
+  const pick = (field: "title" | "description" | "fit_copy") => {
+    const device = deviceSlug
+      ? config.overrides.find((o) => o.scope === "device" && o.key === deviceSlug)
+      : undefined
+    const design = designSlug
+      ? config.overrides.find((o) => o.scope === "design" && o.key === designSlug)
+      : undefined
+    return device?.[field] ?? design?.[field] ?? null
+  }
+
+  return {
+    title: pick("title") ?? fillTemplate(config.templates.title, values),
+    description:
+      pick("description") ?? fillTemplate(config.templates.description, values),
+    heading: fillTemplate(config.templates.heading, values),
+    fitCopyOverride: pick("fit_copy"),
+    fitCopyEnabled: config.templates.fit_copy_enabled,
+  }
+}

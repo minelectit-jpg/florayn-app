@@ -15,7 +15,7 @@ import { getBundleConfig } from "@/lib/bundles"
 import { getDesign, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
 import { devicePageHref, resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
-import { fitCopy, seoDescription, seoHeading } from "@/lib/seo-copy"
+import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { getProductByHandle } from "@/lib/medusa"
 
 type Params = { params: Promise<{ slug: string }> }
@@ -93,12 +93,20 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     }
   }
 
+  const seo = resolveSeo({
+    config: await getSeoConfig(),
+    designSlug: product.metadata?.design_slug as string | undefined,
+    deviceSlug: device.slug,
+    values: { design, device: device.name, caseType },
+  })
+
   return {
-    title: `${design} ${device.name} Case - ${caseType}`,
-    description: seoDescription({ design, device: device.name, caseType }),
+    title: seo.title,
+    description: seo.description,
     alternates: { canonical },
     openGraph: {
-      title: `${design} ${device.name} Case - ${caseType}`,
+      title: seo.title,
+      description: seo.description,
       images: firstImageFor(product, device.name),
     },
   }
@@ -157,6 +165,28 @@ export default async function ProductPage({ params }: Params) {
   // device name -> slug, so the picker can link to each device's own URL.
   const deviceSlugByName: Record<string, string> = {}
   for (const d of deviceCatalog) deviceSlugByName[d.name] = d.slug
+
+  /*
+   * The fit sentence is generated from the device's own attributes, but an
+   * override wins - that is where a wrong claim about a cutout gets corrected,
+   * since none of these facts came from Florayn.
+   */
+  let deviceCopy: string | null = null
+  if (device) {
+    const seo = resolveSeo({
+      config: await getSeoConfig(),
+      designSlug,
+      deviceSlug: device.slug,
+      values: {
+        design: designName,
+        device: device.name,
+        caseType: caseTypeName ?? "",
+      },
+    })
+    deviceCopy = seo.fitCopyEnabled
+      ? (seo.fitCopyOverride ?? fitCopy(device.name, device.slug))
+      : null
+  }
 
   // The design route cannot join prices, so the sibling products are fetched
   // again through the Store API to price each case-type tile.
@@ -262,7 +292,7 @@ export default async function ProductPage({ params }: Params) {
         bundles={bundles}
         caseTypeName={caseTypeName ?? null}
         deviceName={device?.name ?? null}
-        fitCopy={device ? fitCopy(device.name, device.slug) : null}
+        fitCopy={deviceCopy}
         baseHandle={baseHandle}
         deviceSlugByName={deviceSlugByName}
         collection={
