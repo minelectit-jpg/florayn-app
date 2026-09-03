@@ -71,9 +71,8 @@ values and do not put them in the repository — they go in the dashboard only.
 
 ## Step 3 — create the catalogue in the database
 
-This has to happen once, before either app is useful. There are two ways, and
-which one you can use depends on whether the database accepts connections from
-outside Cloudways.
+This has to happen once, before either app is useful. Which route you can use
+depends on whether the database accepts connections from outside Cloudways.
 
 **Find out first.** With your `DATABASE_URL` to hand, run this on your computer:
 
@@ -83,7 +82,56 @@ node -e "const{Client}=require('pg');const c=new Client(process.env.DATABASE_URL
 
 Set `DATABASE_URL` in your shell first, or paste it into the string.
 
-### Path A — the database is reachable from your computer
+### Path 0 — restore a dump (do this one if you can)
+
+Prefer this to seeding whenever the database is reachable. The seed is not a
+bulk load: it drives 525 product creations and 13,041 variants through the
+workflow engine one at a time, and it has to be watched on a host where you
+cannot watch it. A restore is one bulk copy of a database you have already
+tested, and it **carries the wired R2 image URLs with it**, so it also saves
+running `wire-images-device.ts` afterwards.
+
+The whole database compresses to under 5 MB.
+
+`PGBIN` below is your local PostgreSQL `bin` directory — by default
+`%USERPROFILE%\pgsql-root\pgsql\bin`.
+
+1. Dump your local database:
+
+```bash
+"$PGBIN/pg_dump.exe" "$LOCAL_DATABASE_URL" -Fc -f florayn.dump
+```
+
+2. Restore it over the production one:
+
+```bash
+"$PGBIN/pg_restore.exe" --clean --if-exists --no-owner --no-privileges -d "$PROD_DATABASE_URL" florayn.dump
+```
+
+`--clean --if-exists` drops what is there first, which is what makes this
+work on a database that is already half-populated. `--no-owner
+--no-privileges` matter because the Cloudways database user is not the local
+one, and without them the restore fails on every `OWNER TO` line.
+
+**This replaces the whole database**, so afterwards:
+
+- The publishable key becomes your **local** one. Set
+  `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` on the storefront to that `pk_...`
+  token — not the `apk_...` id, which is a different thing (see Step 6).
+- Admin users are replaced by whatever your local database had. Set
+  `ADMIN_EMAIL` and `ADMIN_PASSWORD` on the backend and restart to make yours
+  again, then delete `ADMIN_PASSWORD`.
+- The seed will now correctly skip on every future boot, because designs
+  exist. That is the desired end state.
+
+To read the token out of any database directly, rather than hunting for it in
+the admin:
+
+```bash
+"$PGBIN/psql.exe" "$DATABASE_URL" -c "SELECT token FROM api_key WHERE type = 'publishable';"
+```
+
+### Path A — seed against production from your computer
 
 1. Put the production `DATABASE_URL` in `apps/backend/.env`, replacing the
    local one.
@@ -239,9 +287,41 @@ In this order, because each step rules out the one before:
 6. Add to cart and place a Cash on Delivery order
 7. The order appears in the admin under Orders
 
-**If the site loads but has no products**, it is one of two things, and almost
-never anything else: the publishable key is wrong, or `STORE_CORS` does not
-exactly match the storefront URL — no trailing slash, right protocol.
+**If the site loads but has no products**, it is one of three things, and
+almost never anything else.
+
+**The key is the id, not the token.** `apk_...` and `pk_...` are different
+values on the same record: `apk_` is the row's id, which is what the admin
+puts in the URL, and `pk_` is the token the storefront must send. Copying the
+id out of the address bar gives you the wrong one, and the storefront renders
+an empty grid rather than an error — so it looks like missing data. Read the
+real token straight from the database:
+
+```bash
+"$PGBIN/psql.exe" "$DATABASE_URL" -c "SELECT token FROM api_key WHERE type = 'publishable';"
+```
+
+**`STORE_CORS` does not exactly match the storefront URL** — no trailing
+slash, right protocol.
+
+**The catalogue genuinely is not there.** Check with:
+
+```bash
+"$PGBIN/psql.exe" "$DATABASE_URL" -c "SELECT (SELECT count(*) FROM design) designs, (SELECT count(*) FROM product) products;"
+```
+
+Expect 181 and 525. Anything between 0 and those numbers means a seed was
+interrupted, and the seed will not resume — its guard skips as soon as one
+design exists. Restore a dump over it (Path 0); that is what `--clean` is for.
+
+**On the admin key page 404ing** with `User with id: seed was not found`: that
+was the seed storing a non-id string in `created_by`, which made the dashboard
+look up a user that never existed. Fixed for new seeds. On a database seeded
+before the fix:
+
+```bash
+"$PGBIN/psql.exe" "$DATABASE_URL" -c "UPDATE api_key SET created_by = '' WHERE created_by = 'seed';"
+```
 
 ## Step 7 — staging
 

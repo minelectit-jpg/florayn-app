@@ -135,7 +135,16 @@ export default async function initialDataSeed({
         {
           title: "Florayn Storefront",
           type: "publishable",
-          created_by: "seed",
+          /*
+           * Empty, not "seed". The field is a user id - Medusa's own route
+           * stores req.auth_context.actor_id here - and the admin dashboard
+           * fetches /admin/users/<created_by> to show who made the key. A
+           * non-id string makes that detail page 404 with "User with id: seed
+           * was not found". No user exists yet at seed time, so the honest
+           * value is none. The type requires a string, hence "" rather than
+           * omitting it.
+           */
+          created_by: "",
         },
       ],
     },

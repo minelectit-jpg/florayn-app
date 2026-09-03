@@ -224,10 +224,21 @@ reportDatabaseConfig()
  * Bounded, because `db:migrate` does not fail on an unreachable database - it
  * retries the connection indefinitely. Unbounded, a wrong DATABASE_URL would
  * hang the boot rather than skipping, and "skip on failure" needs a failure
- * that actually arrives. Raise MIGRATION_TIMEOUT_MS if a real migration ever
- * needs longer than this.
+ * that actually arrives.
+ *
+ * Thirty minutes, not five. db:migrate also runs the migration scripts, and
+ * this project's seed builds 525 products and 13,041 variants through the
+ * workflow engine one at a time - work that cannot finish inside a five minute
+ * ceiling. The earlier default silently killed it partway through every boot,
+ * leaving a half-populated catalogue that the seed's own guard then refused to
+ * complete.
+ *
+ * The cost of the larger number is that a genuinely unreachable database now
+ * stalls the boot for half an hour before giving up. That is the right trade
+ * only because the database configuration is printed immediately above this
+ * step, so the log names the cause long before the timeout expires.
  */
-const MIGRATION_TIMEOUT_MS = Number(process.env.MIGRATION_TIMEOUT_MS ?? 300_000)
+const MIGRATION_TIMEOUT_MS = Number(process.env.MIGRATION_TIMEOUT_MS ?? 1_800_000)
 
 function migrate() {
   /*
