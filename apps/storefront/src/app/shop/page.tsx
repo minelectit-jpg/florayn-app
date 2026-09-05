@@ -59,7 +59,7 @@ export default async function ShopPage({ searchParams }: Params) {
    * silently vanish from the results.
    */
   const categoryId = await categoryIdFor(caseTypeSlug)
-  const { products, count } = await listProducts(
+  const { products, count, error } = await listProducts(
     categoryId ? { category_id: [categoryId], limit: 200 } : { limit: 200 }
   )
   const truncated = count > products.length
@@ -90,14 +90,29 @@ export default async function ShopPage({ searchParams }: Params) {
         <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
           {heading}
         </h1>
-        <p className="text-sm text-ink-muted">
-          {filtered.length} {filtered.length === 1 ? "product" : "products"}
-          {device && caseTypeName ? ` · ${caseTypeName}` : ""}
-          {truncated && !device ? ` of ${count}` : ""}
-        </p>
+        {error ? null : (
+          <p className="text-sm text-ink-muted">
+            {filtered.length} {filtered.length === 1 ? "product" : "products"}
+            {device && caseTypeName ? ` · ${caseTypeName}` : ""}
+            {truncated && !device ? ` of ${count}` : ""}
+          </p>
+        )}
       </header>
 
-      {filtered.length ? (
+      {/*
+        A read failure is not an empty catalogue, and must not be dressed as
+        one. "0 products" against a full database is what sent the last
+        investigation to the wrong place entirely.
+      */}
+      {error ? (
+        <div className="rounded-[12px] border border-line bg-surface p-6">
+          <p className="text-sm font-semibold">The catalogue could not be loaded.</p>
+          <p className="mt-2 text-sm text-ink-muted">
+            This is a connection problem, not an empty shop. Please try again
+            shortly.
+          </p>
+        </div>
+      ) : filtered.length ? (
         <div className="fl-grid">
           {filtered.map((product) => (
             <ProductCard

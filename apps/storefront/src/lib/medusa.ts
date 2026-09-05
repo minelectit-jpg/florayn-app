@@ -79,9 +79,31 @@ export function getRegionId(): Promise<string | undefined> {
   return regionIdPromise
 }
 
+export type ProductListResult = {
+  products: StoreProduct[]
+  count: number
+  /**
+   * Set when the catalogue could not be READ - not when it is genuinely
+   * empty. Callers must tell those apart: an empty grid is a truthful answer
+   * to "no products match", and a lie when the backend was unreachable.
+   */
+  error?: string
+}
+
+/**
+ * Why a failure is reported rather than swallowed.
+ *
+ * This used to return an empty list on any error, which turned an unreachable
+ * backend into a page that said "0 products". A production storefront once
+ * sat like that against a database holding 525 of them, and the empty grid
+ * sent the search towards the data instead of the connection. Returning
+ * `error` costs nothing and keeps that mistake from being silent.
+ *
+ * It still does not throw. A blip should degrade the page, not 500 the site.
+ */
 export async function listProducts(
   params: Record<string, unknown> = {}
-): Promise<{ products: StoreProduct[]; count: number }> {
+): Promise<ProductListResult> {
   try {
     const region_id = await getRegionId()
     const result = await sdk.store.product.list({
@@ -90,12 +112,29 @@ export async function listProducts(
       limit: 24,
       ...params,
     })
-    return result as unknown as { products: StoreProduct[]; count: number }
+    return result as unknown as ProductListResult
   } catch (error) {
-    // A missing publishable key or an unreachable backend should render the
-    // empty state with setup instructions, not a 500.
-    console.error("[medusa] product list failed:", error)
-    return { products: [], count: 0 }
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error(`[medusa] product list failed against ${MEDUSA_BACKEND_URL}: ${detail}`)
+
+    /*
+     * NEXT_PUBLIC_* are compiled in, so a production build that fell back to
+     * localhost cannot be repaired by setting a variable and restarting - it
+     * needs rebuilding with the variable in scope. Name that here, because
+     * the symptom looks nothing like the cause.
+     */
+    if (process.env.NODE_ENV === "production" && /localhost|127\.0\.0\.1/.test(MEDUSA_BACKEND_URL)) {
+      console.error(
+        `[medusa] the backend URL is ${MEDUSA_BACKEND_URL} in a production build. ` +
+          `NEXT_PUBLIC_MEDUSA_BACKEND_URL was not set when this was BUILT - ` +
+          `setting it now and restarting will not help, it has to be rebuilt.`
+      )
+    }
+    if (!MEDUSA_PUBLISHABLE_KEY) {
+      console.error("[medusa] NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY is empty in this build.")
+    }
+
+    return { products: [], count: 0, error: detail }
   }
 }
 
