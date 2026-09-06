@@ -226,24 +226,52 @@ export default async function initialDataSeed({
   })
 
   logger.info("Seeding region and tax region...")
-  const {
-    result: [region],
-  } = await createRegionsWorkflow(container).run({
-    input: {
-      regions: [
-        {
-          name: "Bangladesh",
-          currency_code: CURRENCY,
-          countries: [COUNTRY],
-          payment_providers: ["pp_system_default"],
-        },
-      ],
-    },
+
+  /*
+   * Reused for the same reason as the key above. A country belongs to exactly
+   * one region, so creating this a second time fails with `Countries with
+   * codes: "bd" are already assigned to a region` - and that failure is what
+   * used to end the run, leaving behind the freshly minted key it had just
+   * created two steps earlier. The rotated key and the intact catalogue were
+   * the same event.
+   */
+  const regionService: any = container.resolve(Modules.REGION)
+  const existingRegions = await regionService.listRegions({ name: "Bangladesh" })
+
+  const region = existingRegions.length
+    ? existingRegions[0]
+    : (
+        await createRegionsWorkflow(container).run({
+          input: {
+            regions: [
+              {
+                name: "Bangladesh",
+                currency_code: CURRENCY,
+                countries: [COUNTRY],
+                payment_providers: ["pp_system_default"],
+              },
+            ],
+          },
+        })
+      ).result[0]
+
+  if (existingRegions.length) {
+    logger.info(`Reusing region ${region.id}.`)
+  }
+
+  // Same story: the country can only belong to one tax region.
+  const taxService: any = container.resolve(Modules.TAX)
+  const existingTaxRegions = await taxService.listTaxRegions({
+    country_code: COUNTRY,
   })
 
-  await createTaxRegionsWorkflow(container).run({
-    input: [{ country_code: COUNTRY, provider_id: "tp_system" }],
-  })
+  if (existingTaxRegions.length) {
+    logger.info("Reusing tax region.")
+  } else {
+    await createTaxRegionsWorkflow(container).run({
+      input: [{ country_code: COUNTRY, provider_id: "tp_system" }],
+    })
+  }
 
   logger.info("Seeding stock location and fulfillment...")
   const {
