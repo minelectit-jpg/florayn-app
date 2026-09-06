@@ -117,42 +117,101 @@ export default async function initialDataSeed({
   }
 
   logger.info("Seeding store, sales channel and API key...")
-  const {
-    result: [defaultSalesChannel],
-  } = await createSalesChannelsWorkflow(container).run({
-    input: {
-      salesChannelsData: [
-        { name: "Florayn Web", description: "Florayn storefront" },
-      ],
-    },
+
+  /*
+   * Reuse an existing sales channel and publishable key rather than making
+   * new ones.
+   *
+   * The guard at the top of this script only checks for designs, so a
+   * database that is partially seeded - designs missing, but a store and a
+   * key already present - falls straight through to here. Creating
+   * unconditionally then mints a SECOND publishable key with a new token, and
+   * the storefront, which was built with the old one, starts getting
+   * "A valid publishable key is required" against a catalogue that is
+   * perfectly intact. That is not hypothetical: it is what put a rotated key
+   * into production and an empty grid on the shop.
+   *
+   * db:migrate re-runs this script on every boot until it is recorded as
+   * applied, so "creates something new each time it runs" is a rotation on a
+   * timer.
+   */
+  const salesChannelService: any = container.resolve(Modules.SALES_CHANNEL)
+  const apiKeyService: any = container.resolve(Modules.API_KEY)
+
+  const existingChannels = await salesChannelService.listSalesChannels({
+    name: "Florayn Web",
   })
 
-  const {
-    result: [publishableApiKey],
-  } = await createApiKeysWorkflow(container).run({
-    input: {
-      api_keys: [
-        {
-          title: "Florayn Storefront",
-          type: "publishable",
-          /*
-           * Empty, not "seed". The field is a user id - Medusa's own route
-           * stores req.auth_context.actor_id here - and the admin dashboard
-           * fetches /admin/users/<created_by> to show who made the key. A
-           * non-id string makes that detail page 404 with "User with id: seed
-           * was not found". No user exists yet at seed time, so the honest
-           * value is none. The type requires a string, hence "" rather than
-           * omitting it.
-           */
-          created_by: "",
-        },
-      ],
-    },
-  })
+  const defaultSalesChannel = existingChannels.length
+    ? existingChannels[0]
+    : (
+        await createSalesChannelsWorkflow(container).run({
+          input: {
+            salesChannelsData: [
+              { name: "Florayn Web", description: "Florayn storefront" },
+            ],
+          },
+        })
+      ).result[0]
 
-  await linkSalesChannelsToApiKeyWorkflow(container).run({
-    input: { id: publishableApiKey.id, add: [defaultSalesChannel.id] },
-  })
+  if (existingChannels.length) {
+    logger.info(`Reusing sales channel ${defaultSalesChannel.id}.`)
+  }
+
+  const existingKeys = await apiKeyService.listApiKeys({ type: "publishable" })
+  const liveKey = existingKeys.find((key: any) => !key.revoked_at)
+
+  if (liveKey) {
+    logger.info(
+      `Reusing publishable key ${liveKey.id} - NOT minting a new one, so the ` +
+        `token the storefront was built with keeps working.`
+    )
+  }
+
+  const publishableApiKey = liveKey
+    ? liveKey
+    : (
+        await createApiKeysWorkflow(container).run({
+          input: {
+            api_keys: [
+              {
+                title: "Florayn Storefront",
+                type: "publishable",
+                /*
+                 * Empty, not "seed". The field is a user id - Medusa's own
+                 * route stores req.auth_context.actor_id here - and the admin
+                 * dashboard fetches /admin/users/<created_by> to show who made
+                 * the key. A non-id string makes that detail page 404 with
+                 * "User with id: seed was not found". No user exists yet at
+                 * seed time, so the honest value is none. The type requires a
+                 * string, hence "" rather than omitting it.
+                 */
+                created_by: "",
+              },
+            ],
+          },
+        })
+      ).result[0]
+
+  /*
+   * Linking is attempted either way, because a previous run could have minted
+   * the key and then failed before linking it - and an unlinked key is
+   * rejected exactly like a missing one. Re-adding a link that already exists
+   * is harmless but can throw on the duplicate, so that specific outcome is
+   * tolerated and everything else is re-raised.
+   */
+  try {
+    await linkSalesChannelsToApiKeyWorkflow(container).run({
+      input: { id: publishableApiKey.id, add: [defaultSalesChannel.id] },
+    })
+  } catch (error: any) {
+    const message = error?.message ?? String(error)
+    if (/already exist|duplicate/i.test(message)) {
+      logger.info("Publishable key is already linked to the sales channel.")
+    } else {
+      throw error
+    }
+  }
 
   await createStoresWorkflow(container).run({
     input: {
