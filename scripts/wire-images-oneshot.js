@@ -23,9 +23,52 @@
 
 const { spawnSync } = require("node:child_process")
 const fs = require("node:fs")
+const os = require("node:os")
 const path = require("node:path")
 
 const APP_ROOT = path.join(__dirname, "..")
+
+/*
+ * Cron stdout does not surface anywhere on this host, so a run that refuses to
+ * start looks identical to a run that never happened. Everything printed here
+ * is also appended to a file that the gated /diagnose route reads back, which
+ * turns an invisible cron into something answerable from a browser.
+ */
+const LOG_CANDIDATES = [
+  path.join(APP_ROOT, "wire-oneshot.log"),
+  path.join(os.tmpdir(), "wire-oneshot.log"),
+]
+
+let logFile = null
+for (const candidate of LOG_CANDIDATES) {
+  try {
+    fs.appendFileSync(candidate, "")
+    logFile = candidate
+    break
+  } catch {
+    // try the next one; a read-only app directory is normal on some hosts
+  }
+}
+
+function say(line) {
+  console.log(line)
+  if (!logFile) return
+  try {
+    fs.appendFileSync(logFile, `${line}\n`)
+  } catch {
+    // never let logging break the run
+  }
+}
+
+function fail(line) {
+  console.error(line)
+  if (logFile) {
+    try {
+      fs.appendFileSync(logFile, `${line}\n`)
+    } catch {}
+  }
+  process.exit(1)
+}
 const SERVER_DIR = path.join(APP_ROOT, "apps", "backend", ".medusa", "server")
 const MANIFEST = path.join(APP_ROOT, "apps", "backend", "data", "images-device-manifest.json")
 
@@ -72,10 +115,26 @@ function describe(url) {
 
 const source = loadEnvFiles()
 
-console.log(`[wire] node ${process.version}`)
-console.log(`[wire] app root ${APP_ROOT}`)
+say("")
+say(`[wire] ---- run started ${new Date().toISOString()} ----`)
+say(`[wire] node ${process.version}`)
+say(`[wire] app root ${APP_ROOT}`)
+say(`[wire] log file ${logFile ?? "(none writable)"}`)
 for (const file of ENV_CANDIDATES) {
-  console.log(`[wire] .env ${fs.existsSync(file) ? "found  " : "absent "} ${file}`)
+  say(`[wire] .env ${fs.existsSync(file) ? "found  " : "absent "} ${file}`)
+}
+
+/*
+ * Names only, never values. This single block is what tells us whether cron
+ * inherited the app's environment at all - the usual reason a run does nothing
+ * and leaves no trace.
+ */
+for (const key of WANTED) {
+  say(
+    `[wire] ${key}: ${
+      process.env[key] ? `set (from ${source[key] ?? "the environment"})` : "NOT SET"
+    }`
+  )
 }
 
 /*
@@ -83,43 +142,39 @@ for (const file of ENV_CANDIDATES) {
  * value is written back into it for the child - that assignment is what makes
  * the override effective rather than decorative.
  */
-const target = process.env.WIRE_DATABASE_URL || process.env.DATABASE_URL
+const target = process.env.WIRE_DATABASE_URL
 if (!target) {
-  console.error(
-    "[wire] No database. Set WIRE_DATABASE_URL to the connection string from " +
-      "the backend's boot log. Nothing was changed."
+  fail(
+    "[wire] WIRE_DATABASE_URL is not set. Nothing was changed.\n" +
+      "[wire] This is deliberate: it does NOT fall back to DATABASE_URL. A\n" +
+      "[wire] discovered target is how a restore on this project wrote to a\n" +
+      "[wire] database the backend does not read, and a wrong target here\n" +
+      "[wire] would write 27,962 image URLs into the wrong catalogue.\n" +
+      "[wire] Set it to the connection string from the backend's boot log."
   )
-  process.exit(1)
 }
 process.env.DATABASE_URL = target
 
-console.log(
-  `[wire] target ${describe(target)} (from ${
-    process.env.WIRE_DATABASE_URL ? source.WIRE_DATABASE_URL ?? "the environment" : source.DATABASE_URL ?? "the environment"
-  })`
-)
+say(`[wire] target ${describe(target)}`)
 
 if (!process.env.IMAGE_BASE_URL) {
-  console.error("[wire] IMAGE_BASE_URL is not set. Nothing was changed.")
-  process.exit(1)
+  fail("[wire] IMAGE_BASE_URL is not set. Nothing was changed.")
 }
-console.log(`[wire] image host ${process.env.IMAGE_BASE_URL}`)
+say(`[wire] image host ${process.env.IMAGE_BASE_URL}`)
 
 if (!fs.existsSync(MANIFEST)) {
-  console.error(
-    `[wire] Manifest missing at ${MANIFEST}\n` +
-      `It ships in the repository, so this usually means the app has not been ` +
+  fail(
+    `[wire] Manifest missing at ${MANIFEST} - the app has probably not been ` +
       `redeployed since it was added. Nothing was changed.`
   )
-  process.exit(1)
 }
 // medusa build does not copy apps/backend/data into the bundle, so the child
 // is told exactly where the manifest is rather than left to search for it.
 process.env.IMAGE_MANIFEST_DEVICE = MANIFEST
-console.log(`[wire] manifest ${MANIFEST}`)
+say(`[wire] manifest ${MANIFEST}`)
 
 const limit = Number(process.env.WIRE_LIMIT ?? 0)
-console.log(
+say(
   limit > 0
     ? `[wire] WIRE_LIMIT=${limit} - a test batch, not the full catalogue.`
     : `[wire] WIRE_LIMIT unset - wiring all 525 products.`
@@ -127,19 +182,17 @@ console.log(
 
 const script = path.join(SERVER_DIR, "src", "scripts", "wire-images-device.js")
 if (!fs.existsSync(script)) {
-  console.error(`[wire] Built script missing at ${script}. Has the backend been built?`)
-  process.exit(1)
+  fail(`[wire] Built script missing at ${script}. Has the backend been built?`)
 }
 
 let cli
 try {
   cli = require.resolve("@medusajs/cli", { paths: [SERVER_DIR] })
 } catch (error) {
-  console.error(`[wire] Cannot find the Medusa CLI: ${error.message}`)
-  process.exit(1)
+  fail(`[wire] Cannot find the Medusa CLI: ${error.message}`)
 }
 
-console.log(`[wire] running medusa exec ./src/scripts/wire-images-device.js\n`)
+say(`[wire] running medusa exec ./src/scripts/wire-images-device.js`)
 
 /*
  * Run the CLI's JS entry directly with this node binary. Going through npx or
@@ -153,13 +206,12 @@ const result = spawnSync(
 )
 
 if (result.error) {
-  console.error(`[wire] could not start: ${result.error.message}`)
-  process.exit(1)
+  fail(`[wire] could not start: ${result.error.message}`)
 }
 
-console.log(
+say(
   result.status === 0
-    ? `\n[wire] finished. Verify with the Store API before running the rest.`
-    : `\n[wire] exited ${result.status} - check the output above.`
+    ? `[wire] finished OK. Verify with the Store API before running the rest.`
+    : `[wire] exited ${result.status} - see the output above.`
 )
 process.exit(result.status === null ? 1 : result.status)

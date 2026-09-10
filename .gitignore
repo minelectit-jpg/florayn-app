@@ -60,3 +60,6 @@ scripts/*.progress
 
 # MCP server config can carry access tokens; this repo is public.
 .mcp.json
+
+# One-shot wiring log, written by scripts/wire-images-oneshot.js on the host
+wire-oneshot.log

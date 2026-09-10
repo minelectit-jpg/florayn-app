@@ -1,5 +1,41 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+
+/**
+ * Read back the one-shot wiring log.
+ *
+ * Cron stdout does not surface on this host, so a cron that refuses to start
+ * is indistinguishable from one that never ran - which cost a full round trip
+ * once already. The wrapper appends to one of these files; this hands the tail
+ * back through the browser.
+ */
+function readWireLog(): { file: string; tail: string[] } | { file: null } {
+  /*
+   * The web process runs with cwd = apps/backend/.medusa/server, so the
+   * application root - where the cron writes - is four levels up, not three.
+   * The extra candidates cost nothing and cover a differently-rooted deploy.
+   */
+  const candidates = [
+    path.join(process.cwd(), "..", "..", "..", "..", "wire-oneshot.log"),
+    path.join(process.cwd(), "..", "..", "..", "wire-oneshot.log"),
+    path.join(process.cwd(), "..", "..", "wire-oneshot.log"),
+    path.join(process.cwd(), "wire-oneshot.log"),
+    path.join(os.tmpdir(), "wire-oneshot.log"),
+  ]
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue
+      const lines = fs.readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean)
+      return { file, tail: lines.slice(-60) }
+    } catch {
+      // unreadable is the same as absent for this purpose
+    }
+  }
+  return { file: null }
+}
 
 /**
  * GET /diagnose?token=... - read-only, temporary, off by default.
@@ -75,9 +111,35 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     migration_scripts: await rows(
       `SELECT * FROM script_migrations ORDER BY id`
     ),
+    /*
+     * How far the image wiring has got, straight from this process's own pool.
+     * Counting placeholders rather than trusting a cron's exit code is the
+     * only measure that cannot be wrong about it.
+     */
+    image_wiring: await rows(
+      `SELECT count(*) FILTER (WHERE thumbnail LIKE 'http%')  AS wired,
+              count(*) FILTER (WHERE thumbnail LIKE 'data:%') AS placeholder,
+              count(*) FILTER (WHERE thumbnail IS NULL)       AS null_thumb,
+              (SELECT count(*) FROM product_variant WHERE metadata ? 'images')
+                AS variants_with_images
+         FROM product`
+    ),
+    /*
+     * Whether the web process can even see the variables a cron would need.
+     * Names and presence only - never the values, since one is a connection
+     * string with a password in it.
+     */
+    wiring_env_visible_to_web: {
+      WIRE_DATABASE_URL: Boolean(process.env.WIRE_DATABASE_URL),
+      IMAGE_BASE_URL: process.env.IMAGE_BASE_URL ?? "(unset)",
+      WIRE_LIMIT: process.env.WIRE_LIMIT ?? "(unset)",
+      DIAGNOSE_TOKEN: Boolean(process.env.DIAGNOSE_TOKEN),
+    },
+    wire_log: readWireLog(),
     process: {
       worker_mode: process.env.MEDUSA_WORKER_MODE ?? "(unset)",
       node_env: process.env.NODE_ENV ?? "(unset)",
+      cwd: process.cwd(),
       pid: process.pid,
       uptime_seconds: Math.round(process.uptime()),
     },
