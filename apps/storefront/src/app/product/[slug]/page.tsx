@@ -193,6 +193,34 @@ export default async function ProductPage({ params }: Params) {
   for (const d of deviceCatalog) deviceSlugByName[d.name] = d.slug
 
   /*
+   * The base product page's default variant: the cheapest phone (iPhone
+   * preferred, then Samsung), tie-broken by catalogue order. Every product has
+   * a phone, so this resolves for all of them; the non-phone fallback is only
+   * for safety. Computed here rather than in the client so the ordering is
+   * deterministic - the Store API does not guarantee variant order, which is
+   * what made the old variants[0] default jump between iPhone and AirPods.
+   */
+  const familyByName: Record<string, string> = {}
+  const orderByName: Record<string, number> = {}
+  deviceCatalog.forEach((d, i) => {
+    familyByName[d.name] = d.family
+    orderByName[d.name] = i
+  })
+  const rank = (name: string) =>
+    familyByName[name] === "iphone" ? 0 : familyByName[name] === "samsung" ? 1 : 2
+  const defaultVariant = [...(product.variants ?? [])]
+    .map((v) => ({
+      title: v.title,
+      amount: v.calculated_price?.calculated_amount ?? Infinity,
+      rank: rank(v.title),
+      order: orderByName[v.title] ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort(
+      (a, b) => a.rank - b.rank || a.amount - b.amount || a.order - b.order
+    )[0]
+  const defaultDeviceName = defaultVariant?.title ?? null
+
+  /*
    * The fit sentence is generated from the device's own attributes, but an
    * override wins - that is where a wrong claim about a cutout gets corrected,
    * since none of these facts came from Florayn.
@@ -318,6 +346,7 @@ export default async function ProductPage({ params }: Params) {
         bundles={bundles}
         caseTypeName={caseTypeName ?? null}
         deviceName={device?.name ?? null}
+        defaultDeviceName={defaultDeviceName}
         fitCopy={deviceCopy}
         baseHandle={baseHandle}
         deviceSlugByName={deviceSlugByName}

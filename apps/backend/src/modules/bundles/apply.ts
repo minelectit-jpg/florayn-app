@@ -6,7 +6,17 @@ import { PromotionActions } from "@medusajs/framework/utils"
 
 import { BUNDLES_MODULE } from "."
 import { getBundleConfig } from "./config"
-import { lineDiscount } from "./pricing"
+import { cartBundleDiscount } from "./pricing"
+import { DEVICES } from "../catalog/data/devices"
+
+/*
+ * Device name -> whether it is a phone case. A line's variant title is the
+ * device name (the seed sets it so), so this is how a cart line is classified
+ * as a case or an accessory when the bundle scope is "cases".
+ */
+const CASE_BY_DEVICE_NAME: Map<string, boolean> = new Map(
+  DEVICES.map((d) => [d.name, d.family === "iphone" || d.family === "samsung"])
+)
 
 /**
  * Turn the multi-buy tiers into a real discount on a cart.
@@ -53,6 +63,9 @@ export async function applyBundleDiscount({
       "items.id",
       "items.quantity",
       "items.unit_price",
+      // The device name, used to tell a phone case from an accessory when the
+      // bundle scope is "cases".
+      "items.variant_title",
     ],
     filters: { id: cartId },
   })
@@ -63,12 +76,14 @@ export async function applyBundleDiscount({
 
   let discount = 0
   if (enabled.length) {
-    for (const item of cart.items ?? []) {
-      const unit = Number(item.unit_price ?? 0)
-      const qty = Number(item.quantity ?? 0)
-      if (!unit || qty < 2) continue
-      discount += lineDiscount(unit, qty, enabled).discount
-    }
+    const lines = (cart.items ?? []).map((item: any) => ({
+      unit_price: Number(item.unit_price ?? 0),
+      quantity: Number(item.quantity ?? 0),
+      // Unknown titles are treated as NOT a case, so scope "cases" never
+      // discounts something it cannot confirm is a phone case.
+      is_case: CASE_BY_DEVICE_NAME.get(item.variant_title) === true,
+    }))
+    discount = cartBundleDiscount(lines, enabled, { scope: settings.scope })
   }
 
   const subtotal = Number(cart.subtotal ?? 0)

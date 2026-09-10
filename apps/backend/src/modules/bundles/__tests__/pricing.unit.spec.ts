@@ -1,4 +1,4 @@
-import { lineDiscount, tierPricing } from "../pricing"
+import { cartBundleDiscount, lineDiscount, tierPricing } from "../pricing"
 
 /** The two tiers running on florayn.com. */
 const TWO_PACK = {
@@ -117,5 +117,33 @@ describe("lineDiscount", () => {
   it("clamps per pack, not against the whole line", () => {
     // Five items take one 3-pack at 800, not a percentage of all five.
     expect(lineDiscount(1950, 5, tiers)).toMatchObject({ discount: 800 })
+  })
+})
+
+describe("cartBundleDiscount (scope)", () => {
+  const tiers = [TWO_PACK, THREE_PACK]
+  const phone = { unit_price: 1950, quantity: 2, is_case: true }
+  const airpods = { unit_price: 2100, quantity: 2, is_case: false }
+
+  it("under scope 'cases', discounts phone lines but not accessory lines", () => {
+    // Only the phone line's 2-pack discount (312) counts.
+    expect(cartBundleDiscount([phone, airpods], tiers, { scope: "cases" })).toBe(312)
+  })
+
+  it("an accessory-only cart gets nothing under scope 'cases'", () => {
+    expect(cartBundleDiscount([airpods], tiers, { scope: "cases" })).toBe(0)
+  })
+
+  it("under any other scope, every qualifying line is discounted", () => {
+    // 312 (phone) + 336 (airpods 2100 at the 8% floor) = 648.
+    expect(cartBundleDiscount([phone, airpods], tiers, { scope: "all" })).toBe(648)
+  })
+
+  it("still needs quantity >= 2, whatever the scope", () => {
+    expect(
+      cartBundleDiscount([{ unit_price: 1950, quantity: 1, is_case: true }], tiers, {
+        scope: "cases",
+      })
+    ).toBe(0)
   })
 })

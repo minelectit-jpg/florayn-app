@@ -28,6 +28,7 @@ export default function ProductView({
   caseTypeName,
   collection,
   deviceName,
+  defaultDeviceName,
   fitCopy,
   baseHandle,
   deviceSlugByName,
@@ -57,6 +58,8 @@ export default function ProductView({
   collection?: { title: string; handle: string } | null
   /** Set on a device page: the device this URL is for. */
   deviceName?: string | null
+  /** The base page's default device: the cheapest phone, chosen server-side. */
+  defaultDeviceName?: string | null
   /** A sentence about the fit, generated from the device's own attributes. */
   fitCopy?: string | null
   /** Base handle, so the picker can link to each device's own URL. */
@@ -71,8 +74,17 @@ export default function ProductView({
   pairs: ReactNode
 }) {
   // A device page opens on its own device rather than the first variant.
+  /*
+   * A device page opens on its own device. The base product page opens on a
+   * consistent default - the cheapest phone, computed on the server - so the
+   * headline price and image do not jump between iPhone and AirPods from one
+   * product to the next. variants[0] is only a last resort, since the Store
+   * API does not guarantee variant order.
+   */
   const initial =
     (deviceName && variants.find((v) => v.title === deviceName)?.id) ??
+    (defaultDeviceName &&
+      variants.find((v) => v.title === defaultDeviceName)?.id) ??
     variants[0]?.id ??
     ""
   const [selectedId, setSelectedId] = useState(initial)

@@ -12,6 +12,13 @@ import { formatPrice } from "@/lib/money"
 
 type AddState = "idle" | "adding" | "added" | "error"
 
+/*
+ * The device-family labels that count as a phone case. getDeviceFamilyMap
+ * yields these labels; a selection outside this set is an accessory, which the
+ * "cases" bundle scope excludes. Mirrors CASE_BY_DEVICE_NAME on the backend.
+ */
+const CASE_FAMILY_LABELS = new Set(["iPhone", "Samsung Galaxy"])
+
 /**
  * The right-hand column of the product page, from the price down.
  *
@@ -142,6 +149,10 @@ export default function ProductBuyBox({
           config={bundles}
           quantity={qty}
           onPick={setQty}
+          // The multi-buy is a phone-case offer when scope is "cases", so an
+          // AirPods case, wallet or watch band selection hides the pills. The
+          // family map holds a label like "iPhone" / "AirPods".
+          isCase={CASE_FAMILY_LABELS.has(families[selected?.title ?? ""] ?? "")}
         />
       ) : null}
 
@@ -332,13 +343,20 @@ function BundleTiers({
   config,
   quantity,
   onPick,
+  isCase,
 }: {
   unit: number | null
   config: BundleConfig
   quantity: number
   onPick: (quantity: number) => void
+  /** Whether the selected variant is a phone case. */
+  isCase: boolean
 }) {
   if (!config.settings.is_active || !config.tiers.length || unit == null) {
+    return null
+  }
+  // "cases" scope makes this a phone-case offer; accessories show no pills.
+  if (config.settings.scope === "cases" && !isCase) {
     return null
   }
 

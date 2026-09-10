@@ -103,3 +103,34 @@ export function lineDiscount(
 
   return { discount: perPack * packs, tier, packs }
 }
+
+export type CartLine = {
+  unit_price: number
+  quantity: number
+  /** A phone case. When the bundle scope is "cases", only these are counted. */
+  is_case: boolean
+}
+
+/**
+ * The whole-cart multi-buy discount, with scope applied.
+ *
+ * "cases" means the multi-buy is a phone-case promotion: an AirPods case, a
+ * wallet or a watch band pays standard price no matter how many are bought.
+ * Any other scope counts every line. Kept pure and separate from the cart
+ * plumbing in apply.ts so this rule is unit-tested rather than trusted.
+ */
+export function cartBundleDiscount(
+  lines: CartLine[],
+  tiers: TierInput[],
+  opts: { scope: string }
+): number {
+  let discount = 0
+  for (const line of lines) {
+    const unit = Number(line.unit_price ?? 0)
+    const qty = Number(line.quantity ?? 0)
+    if (!unit || qty < 2) continue
+    if (opts.scope === "cases" && !line.is_case) continue
+    discount += lineDiscount(unit, qty, tiers).discount
+  }
+  return discount
+}
