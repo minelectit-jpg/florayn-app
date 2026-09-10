@@ -35,22 +35,48 @@ type Params = { params: Promise<{ slug: string }> }
 export const dynamicParams = true
 export const revalidate = 86400
 
-const SEED_DEVICES = Number(process.env.SEED_DEVICES_PER_PRODUCT ?? 3)
-
+/*
+ * Prerender NOTHING by default.
+ *
+ * There are 13,041 device pages. Building them all at once cannot work on this
+ * host: the parallel prerender saturates the single backend (no Redis, one
+ * process) until every request - the homepage included - times out at 60s and
+ * the export aborts. Measured under a live build, one product fetch took 125s
+ * and returned a Cloudflare 524.
+ *
+ * dynamicParams = true plus revalidate mean each page is instead rendered on
+ * its first request and cached for 24h, still as static HTML - so it stays
+ * fast and crawlable, just built lazily rather than up front. The sitemap and
+ * Googlebot warm the pages that matter. This is the standard model for a
+ * catalogue this size.
+ *
+ * STATIC_PAGE_LIMIT opts a build back into prerendering a seed once the
+ * backend can take it: the first N base products, each with the first
+ * SEED_DEVICES_PER_PRODUCT device pages.
+ */
 export async function generateStaticParams() {
-  const limit = Number(process.env.STATIC_PAGE_LIMIT ?? 0)
-  const { products } = await listProducts({ limit: 600 })
+  const productLimit = Number(process.env.STATIC_PAGE_LIMIT ?? 0)
+  if (productLimit <= 0) return []
+
+  const seedDevices = Number(process.env.SEED_DEVICES_PER_PRODUCT ?? 0)
+
+  // Only the handles and device slugs are needed here - not galleries or
+  // prices - so this fetch stays light even when a seed is requested.
+  const { products } = await listProducts({
+    limit: 600,
+    fields: "handle,*variants.metadata",
+  })
 
   const params: { slug: string }[] = []
-  for (const product of products) {
+  for (const product of products.slice(0, productLimit)) {
     params.push({ slug: product.handle })
-    for (const variant of (product.variants ?? []).slice(0, SEED_DEVICES)) {
+    for (const variant of (product.variants ?? []).slice(0, seedDevices)) {
       const deviceSlug = variant.metadata?.device_slug as string | undefined
       if (deviceSlug) params.push({ slug: `${product.handle}-${deviceSlug}` })
     }
   }
 
-  return limit > 0 ? params.slice(0, limit) : params
+  return params
 }
 
 /** Cheapest variant, which is what a case-type tile shows. */

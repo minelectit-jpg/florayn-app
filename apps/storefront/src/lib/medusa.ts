@@ -22,6 +22,17 @@ export const PRODUCT_FIELDS =
   "*variants.metadata," +
   "*variants.calculated_price,*collection,*categories"
 
+/*
+ * Everything a product CARD renders, and nothing it does not. The card shows a
+ * thumbnail, a price range and a device-aware meta line, so it needs variant
+ * titles and prices but not the 100+ gallery images or the per-variant image
+ * arrays that a listing would otherwise pull for every card. Use this for any
+ * grid or carousel of cards; PRODUCT_FIELDS is for the product page itself.
+ */
+export const CARD_FIELDS =
+  "id,title,handle,thumbnail,metadata," +
+  "*variants,*variants.calculated_price"
+
 export type StoreProduct = {
   id: string
   title: string

@@ -1,6 +1,6 @@
 import HomeSectionRenderer from "@/components/home-sections"
 import { getSiteContent } from "@/lib/content"
-import { listProducts, type StoreProduct } from "@/lib/medusa"
+import { CARD_FIELDS, listProducts, type StoreProduct } from "@/lib/medusa"
 
 /**
  * The home page is assembled from the sections stored in the content module,
@@ -15,7 +15,10 @@ export default async function HomePage() {
 
   let products: StoreProduct[] = []
   if (carousel) {
-    const { products: pool } = await listProducts({ limit: 48 })
+    // Card fields only - the home carousel renders cards, so pulling every
+    // product's full gallery and per-variant image arrays here is what made
+    // this fetch heavy enough to time out during prerender.
+    const { products: pool } = await listProducts({ limit: 48, fields: CARD_FIELDS })
     // One card per design, so a row of five is five artworks rather than the
     // same artwork in five constructions.
     const seen = new Set<string>()
