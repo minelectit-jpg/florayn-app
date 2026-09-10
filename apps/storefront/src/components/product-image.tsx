@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 /**
  * Product imagery that cannot render as an empty box.
@@ -36,6 +36,17 @@ export default function ProductImage({
 }) {
   const [failed, setFailed] = useState(false)
   const owned = fillMode === "absolute"
+
+  /*
+   * Reset on a new src. The gallery stage reuses one ProductImage instance
+   * across thumbnail clicks and device switches (product-gallery.tsx), so
+   * without this a single dead URL would latch `failed` and blank every later
+   * slide with the initials block - one broken image reading as a broken
+   * gallery. Keyed to src so a genuinely bad image still falls back.
+   */
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
 
   if (!src || failed) {
     return (
