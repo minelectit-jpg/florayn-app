@@ -1,5 +1,41 @@
 import { Modules } from "@medusajs/framework/utils"
 import fs from "node:fs"
+import path from "node:path"
+
+/**
+ * Where the device manifest might be, most explicit first.
+ *
+ * The old default was the absolute Windows path this was first written
+ * against. On Linux that string has no leading slash, so it resolved relative
+ * to the working directory as a folder literally named "C:" and failed with a
+ * baffling "Manifest not found at C:/Users/..." on a machine that has no C
+ * drive. The manifest now ships in the repository, but `medusa build` does not
+ * copy apps/backend/data into .medusa/server, so a compiled run cannot reach
+ * it relatively - which is why the one-shot wrapper passes
+ * IMAGE_MANIFEST_DEVICE explicitly and this list is only a fallback.
+ */
+function resolveManifestPath(): string | null {
+  const candidates = [
+    process.env.IMAGE_MANIFEST_DEVICE,
+    path.join(__dirname, "..", "..", "data", "images-device-manifest.json"),
+    path.join(process.cwd(), "data", "images-device-manifest.json"),
+    path.join(process.cwd(), "apps", "backend", "data", "images-device-manifest.json"),
+  ].filter(Boolean) as string[]
+
+  return candidates.find((file) => fs.existsSync(file)) ?? null
+}
+
+/** Host and database only - this goes to a log, and the password does not. */
+function describeTargetDb(): string {
+  const url = process.env.DATABASE_URL
+  if (!url) return "(DATABASE_URL not set)"
+  try {
+    const u = new URL(url)
+    return `${u.hostname}:${u.port || "5432"}/${u.pathname.replace(/^\//, "")} as ${u.username}`
+  } catch {
+    return "(unparseable DATABASE_URL)"
+  }
+}
 
 /**
  * Point every variant at the renders for its own device.
@@ -18,17 +54,39 @@ export default async function wireImagesDevice({ container }: any) {
   const productModule = container.resolve(Modules.PRODUCT)
 
   const base = (process.env.IMAGE_BASE_URL ?? "").replace(/\/+$/, "")
-  const manifestPath =
-    process.env.IMAGE_MANIFEST_DEVICE ??
-    "C:/Users/Md Shamim/florayn-images-device/manifest.json"
+  const manifestPath = resolveManifestPath()
 
   if (!base) throw new Error("IMAGE_BASE_URL is not set (apps/backend/.env)")
-  if (!fs.existsSync(manifestPath)) {
-    throw new Error(`Manifest not found at ${manifestPath}`)
+  if (!manifestPath) {
+    throw new Error(
+      "Device manifest not found. Set IMAGE_MANIFEST_DEVICE, or ship " +
+        "apps/backend/data/images-device-manifest.json with the app."
+    )
   }
 
+  /*
+   * A run against the wrong database is the failure mode with real cost here,
+   * and it has already happened once on this project, so the target is stated
+   * before anything is written rather than left to be inferred afterwards.
+   */
+  logger.info(`Target database: ${describeTargetDb()}`)
+  logger.info(`Image host: ${base}`)
+  logger.info(`Manifest: ${manifestPath}`)
+
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
-  const entries = Object.values(manifest.products) as any[]
+  let entries = Object.values(manifest.products) as any[]
+
+  /*
+   * WIRE_LIMIT exists so the first production run can be a handful of
+   * products that a human looks at on the real site before the other 520 are
+   * touched. Zero or unset means everything.
+   */
+  const limit = Number(process.env.WIRE_LIMIT ?? 0)
+  if (limit > 0) {
+    entries = entries.slice(0, limit)
+    logger.info(`WIRE_LIMIT=${limit} - wiring only the first ${entries.length} products.`)
+  }
+
   logger.info(`Wiring ${entries.length} products at device granularity`)
 
   const products = await productModule.listProducts(
