@@ -16,15 +16,15 @@ const redisUrl = process.env.REDIS_URL
 const redisModules = redisUrl
   ? [
       {
-        resolve: "@medusajs/cache-redis",
+        resolve: "@medusajs/medusa/cache-redis",
         options: { redisUrl },
       },
       {
-        resolve: "@medusajs/event-bus-redis",
+        resolve: "@medusajs/medusa/event-bus-redis",
         options: { redisUrl },
       },
       {
-        resolve: "@medusajs/workflow-engine-redis",
+        resolve: "@medusajs/medusa/workflow-engine-redis",
         options: { redis: { url: redisUrl } },
       },
     ]
