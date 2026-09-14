@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next"
 
 import { getDeviceCatalog } from "@/lib/catalog"
 import { listProducts } from "@/lib/medusa"
+import { buildVariantMatrix } from "@/lib/variant-matrix"
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://florayn.com"
 const CHUNK = 5000
@@ -27,8 +28,10 @@ async function allUrls(): Promise<string[]> {
   const urls: string[] = ["/", "/shop/", "/contact/"]
   for (const product of products) {
     urls.push(`/product/${product.handle}/`)
-    for (const variant of product.variants ?? []) {
-      const slug = slugByName.get(variant.title)
+    // One device page per device the product is sold for. Devices come from the
+    // (Case Type x Device) matrix, deduped, since case types share devices.
+    for (const deviceName of buildVariantMatrix(product).devices) {
+      const slug = slugByName.get(deviceName)
       if (slug) urls.push(`/product/${product.handle}-${slug}/`)
     }
   }

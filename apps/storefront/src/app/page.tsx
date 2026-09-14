@@ -24,6 +24,8 @@ export default async function HomePage() {
     const seen = new Set<string>()
     products = pool
       .filter((product) => {
+        // The phone case is a design's representative card; skip AirPods etc.
+        if ((product.metadata?.form ?? "phone") !== "phone") return false
         const design =
           (product.metadata?.design_slug as string) ?? product.handle
         if (seen.has(design)) return false

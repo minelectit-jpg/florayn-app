@@ -7,6 +7,7 @@ import ProductCard from "@/components/product-card"
 import { getDeviceCatalog } from "@/lib/catalog"
 import { getCollectionPage } from "@/lib/content"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
+import { buildVariantMatrix } from "@/lib/variant-matrix"
 
 type Params = {
   params: Promise<{ slug: string }>
@@ -108,14 +109,21 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     getCollectionPage(slug),
   ])
 
-  // Only offer devices this collection actually has stock for.
-  const availableDeviceNames = new Set<string>()
-  for (const product of products) {
-    for (const variant of product.variants ?? []) {
-      availableDeviceNames.add(variant.title)
-    }
-  }
+  /*
+   * Structure B: a design is one phone-case product (plus separate AirPods etc.
+   * products). A collection is browsed as phone cases, so keep the phone form -
+   * that already yields one card per design. Device and Case Type both come from
+   * the products' own option matrix.
+   */
+  const phoneProducts = products.filter(
+    (p) => (p.metadata?.form ?? "phone") === "phone"
+  )
+  const matrices = new Map(phoneProducts.map((p) => [p.id, buildVariantMatrix(p)]))
 
+  // Only offer devices this collection actually has stock for.
+  const availableDeviceNames = new Set<string>(
+    phoneProducts.flatMap((p) => matrices.get(p.id)!.devices)
+  )
   const deviceOptions = deviceCatalog
     .filter((d) => availableDeviceNames.has(d.name))
     .map((d) => ({ value: d.name, label: d.name }))
@@ -126,30 +134,27 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     deviceOptions.find((o) => o.value === DEFAULT_DEVICE)?.value ??
     deviceOptions[0]?.value ??
     ""
+  const deviceSlug = deviceCatalog.find((d) => d.name === device)?.slug ?? null
 
   const deviceFamily = deviceCatalog.find((d) => d.name === device)?.family
   const showCaseType = MULTI_CASE_TYPE_FAMILIES.has(deviceFamily ?? "")
 
-  // Case types present among the products that fit the chosen device.
+  // Products offered for the chosen device, and the case types available on it.
   const forDevice = device
-    ? products.filter((p) => (p.variants ?? []).some((v) => v.title === device))
-    : products
+    ? phoneProducts.filter((p) => matrices.get(p.id)!.devices.includes(device))
+    : phoneProducts
 
+  const caseTypesForDevice = (p: StoreProduct): string[] => {
+    const m = matrices.get(p.id)!
+    return device ? (m.caseTypesByDevice[device] ?? []) : m.caseTypes
+  }
   const caseTypeOptions = [
-    ...new Map(
-      forDevice
-        .map((p) => [
-          p.metadata?.case_type_slug as string | undefined,
-          p.metadata?.case_type_name as string | undefined,
-        ])
-        .filter(([value, label]) => value && label)
-        .map(([value, label]) => [value!, { value: value!, label: label! }])
-    ).values(),
-  ].sort((a, b) => a.label.localeCompare(b.label))
+    ...new Set(forDevice.flatMap((p) => caseTypesForDevice(p))),
+  ].map((ct) => ({ value: ct, label: ct }))
 
   const caseType = showCaseType ? first(query.case_type) : ""
   const filtered = caseType
-    ? forDevice.filter((p) => p.metadata?.case_type_slug === caseType)
+    ? forDevice.filter((p) => caseTypesForDevice(p).includes(caseType))
     : forDevice
 
   const sort = first(query.sort) || "featured"
@@ -213,6 +218,7 @@ export default async function CollectionPage({ params, searchParams }: Params) {
               key={product.id}
               product={product}
               device={device || null}
+              deviceSlug={deviceSlug}
             />
           ))}
         </div>

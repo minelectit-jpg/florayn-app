@@ -13,7 +13,7 @@ import { getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
 import { resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
-import { buildVariantMatrix, pairKey } from "@/lib/variant-matrix"
+import { buildVariantMatrix } from "@/lib/variant-matrix"
 
 type Params = { params: Promise<{ slug: string }> }
 
@@ -92,9 +92,10 @@ export default async function ProductPage({ params }: Params) {
   const matrix = buildVariantMatrix(product)
 
   /*
-   * The base page's default device: the cheapest phone (iPhone preferred, then
-   * Samsung), tie-broken by catalogue order - so the headline price and image
-   * are consistent across products. A device page opens on its own device.
+   * The base page's default device: the NEWEST flagship phone (iPhone first,
+   * then Samsung), preferring one that every case type is sold for so all the
+   * Case Type tiles are enabled on first load. This keeps the opening view
+   * modern and consistent; a device page opens on its own device instead.
    */
   const familyByName: Record<string, string> = {}
   const orderByName: Record<string, number> = {}
@@ -102,32 +103,22 @@ export default async function ProductPage({ params }: Params) {
     familyByName[d.name] = d.family
     orderByName[d.name] = i
   })
-  const rank = (name: string) =>
-    familyByName[name] === "iphone" ? 0 : familyByName[name] === "samsung" ? 1 : 2
 
-  const variantById = new Map((product.variants ?? []).map((v) => [v.id, v]))
-  const priceForDevice = (deviceName: string): number => {
-    let min = Infinity
-    for (const ct of matrix.caseTypesByDevice[deviceName] ?? []) {
-      const id = matrix.variantIdByPair[pairKey(ct, deviceName)]
-      const amount = id
-        ? variantById.get(id)?.calculated_price?.calculated_amount
-        : undefined
-      if (typeof amount === "number" && amount < min) min = amount
-    }
-    return min
-  }
-
+  // Phones only, iPhone before Samsung, newest first within each.
+  const phonesNewestFirst = matrix.devices
+    .filter(
+      (d) => familyByName[d] === "iphone" || familyByName[d] === "samsung"
+    )
+    .sort((a, b) => {
+      const rank = (n: string) => (familyByName[n] === "iphone" ? 0 : 1)
+      return rank(a) - rank(b) || (orderByName[b] ?? 0) - (orderByName[a] ?? 0)
+    })
+  const inEveryCaseType = (d: string) =>
+    (matrix.caseTypesByDevice[d] ?? []).length === matrix.caseTypes.length
   const defaultDevice =
-    [...matrix.devices]
-      .map((name) => ({
-        name,
-        rank: rank(name),
-        price: priceForDevice(name),
-        order: orderByName[name] ?? Number.MAX_SAFE_INTEGER,
-      }))
-      .sort((a, b) => a.rank - b.rank || a.price - b.price || a.order - b.order)[0]
-      ?.name ?? matrix.devices[0]
+    phonesNewestFirst.find(inEveryCaseType) ??
+    phonesNewestFirst[0] ??
+    matrix.devices[0]
 
   const initialDevice =
     device && matrix.devices.includes(device.name) ? device.name : defaultDevice
