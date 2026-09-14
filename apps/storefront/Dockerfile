@@ -2,13 +2,17 @@
 # with its own package-lock.json and no imports outside its folder).
 #
 #   docker build -f apps/storefront/Dockerfile apps/storefront
+#
+# Debian slim (glibc), not alpine, for the same native-module reliability as the
+# backend (Next's SWC compiler and sharp).
 
-FROM node:22-alpine AS build
-RUN apk add --no-cache libc6-compat
+FROM node:22-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY . .
 
 # NEXT_PUBLIC_* are compiled into the bundle at build time. Coolify passes them
@@ -20,8 +24,9 @@ ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=${NEXT_PUBLIC_MEDUSA_BACKEND_URL}
 ENV NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY}
 RUN npm run build
 
-FROM node:22-alpine AS runtime
-RUN apk add --no-cache libc6-compat
+FROM node:22-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

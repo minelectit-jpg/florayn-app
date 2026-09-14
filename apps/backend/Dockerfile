@@ -3,25 +3,32 @@
 # root node_modules.
 #
 #   docker build -f apps/backend/Dockerfile .
+#
+# Debian slim (glibc), not alpine: @swc/core (which transpiles medusa-config.ts
+# at build) and sharp ship reliable glibc prebuilts; the musl variants on alpine
+# fail to load and the config loader then reports "Cannot find module
+# medusa-config".
 
-FROM node:22-alpine AS build
-# node-gyp / native modules (sharp etc.) need these at build time.
-RUN apk add --no-cache libc6-compat python3 make g++
+FROM node:22-slim AS build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install workspace deps first, for layer caching. The root lockfile covers the
 # backend workspace; only apps/backend's package.json is needed alongside it.
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json apps/backend/package.json
-RUN npm ci
+# --include=dev so build tooling is present even if NODE_ENV leaks in as production.
+RUN npm ci --include=dev
 
 # Build the self-contained server bundle, then install its production deps.
 COPY . .
-RUN npm --prefix apps/backend run build
+RUN cd apps/backend && npm run build
 RUN cd apps/backend/.medusa/server && npm install --omit=dev
 
-FROM node:22-alpine AS runtime
-RUN apk add --no-cache libc6-compat
+FROM node:22-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app/server
 
