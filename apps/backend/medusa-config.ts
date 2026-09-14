@@ -37,8 +37,11 @@ const redisModules = redisUrl
  * local provider is used (fine for local dev). acl:false is required: R2 has no
  * per-object ACLs and rejects the ACL header the S3 provider would otherwise send.
  */
-const fileModule = process.env.R2_ACCESS_KEY_ID
-  ? [
+const fileModule =
+  process.env.R2_ENABLE === "yes" &&
+  process.env.R2_ACCESS_KEY_ID &&
+  process.env.R2_SECRET_ACCESS_KEY
+    ? [
       {
         resolve: "@medusajs/file",
         options: {
