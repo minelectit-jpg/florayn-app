@@ -15,13 +15,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 COPY . .
 
-# NEXT_PUBLIC_* are compiled into the bundle at build time. Coolify passes them
-# as build args; they override the committed .env.production fallback. Always
-# set both in Coolify, or the build bakes the wrong (or empty) values.
-ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
-ARG NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
-ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=${NEXT_PUBLIC_MEDUSA_BACKEND_URL}
-ENV NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=${NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY}
+# NEXT_PUBLIC_* are compiled into the bundle at build time. They come from the
+# committed .env.production (both values are public), which Next loads
+# automatically during the build. Update that file and rebuild to change them.
 RUN npm run build
 
 FROM node:22-slim AS runtime
