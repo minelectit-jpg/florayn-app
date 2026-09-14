@@ -30,6 +30,38 @@ const redisModules = redisUrl
     ]
   : []
 
+/*
+ * File storage. With R2 credentials set, uploads (product images, design
+ * mockups, videos) go to the Cloudflare R2 bucket and are served from its public
+ * URL - keeping media off the small droplet disk. Without them, Medusa's default
+ * local provider is used (fine for local dev). acl:false is required: R2 has no
+ * per-object ACLs and rejects the ACL header the S3 provider would otherwise send.
+ */
+const fileModule = process.env.R2_ACCESS_KEY_ID
+  ? [
+      {
+        resolve: "@medusajs/file",
+        options: {
+          providers: [
+            {
+              resolve: "@medusajs/file-s3",
+              id: "s3",
+              options: {
+                fileUrl: process.env.R2_PUBLIC_URL,
+                accessKeyId: process.env.R2_ACCESS_KEY_ID,
+                secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+                region: "auto",
+                bucket: process.env.R2_BUCKET,
+                endpoint: process.env.R2_ENDPOINT,
+                acl: false,
+              },
+            },
+          ],
+        },
+      },
+    ]
+  : []
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -44,6 +76,7 @@ module.exports = defineConfig({
   },
   modules: [
     ...redisModules,
+    ...fileModule,
     {
       resolve: "./src/modules/catalog",
     },
