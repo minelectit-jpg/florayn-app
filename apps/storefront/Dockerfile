@@ -28,7 +28,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
+# No ./public folder in this storefront (all assets come from R2 / .next), so
+# it is intentionally not copied - the COPY would fail on a missing path.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/next.config.ts ./next.config.ts
