@@ -7,6 +7,7 @@ import {
 import {
   createApiKeysWorkflow,
   createCollectionsWorkflow,
+  createInventoryItemsWorkflow,
   createInventoryLevelsWorkflow,
   createProductCategoriesWorkflow,
   createProductsWorkflow,
@@ -41,6 +42,16 @@ import { placeholderImage } from "../modules/catalog/data/placeholder-image"
 
 const CURRENCY = "bdt"
 const COUNTRY = "bd"
+
+/*
+ * Default stock for each BLANK (a case type x device, e.g. "Signature x iPhone
+ * 17 Pro Max"). Every design printed on that blank shares this one pool, so
+ * when it runs out every design goes out of stock for that case type + device
+ * at once - which is how print-on-demand-on-blanks actually works. The owner
+ * sets real numbers per blank in the Stock admin screen; this is just the seed
+ * starting point.
+ */
+const BLANK_STOCK = Number(process.env.SEED_BLANK_STOCK ?? 10)
 
 const FAMILY_LABELS: Record<DeviceFamily, string> = {
   iphone: "iPhone Cases",
@@ -396,7 +407,7 @@ export default async function initialDataSeed({
   )
 
   logger.info(`Seeding catalog: ${CASE_TYPES.length} case types...`)
-  const caseTypes = await catalogModuleService.createCaseTypes(
+  await catalogModuleService.createCaseTypes(
     CASE_TYPES.map((caseType, index) => {
       const union = new Set(CASE_TYPE_DEVICES[caseType.slug] ?? [])
       return {
@@ -412,10 +423,6 @@ export default async function initialDataSeed({
       }
     })
   )
-  const caseTypeBySlug = new Map<string, any>(
-    caseTypes.map((caseType: any) => [caseType.slug, caseType])
-  )
-
   logger.info(`Seeding catalog: ${seedDesigns.length} designs...`)
   const designs = await catalogModuleService.createDesigns(
     seedDesigns.map((design, index) => ({
@@ -480,6 +487,77 @@ export default async function initialDataSeed({
     collections.map((collection: any) => [collection.title, collection])
   )
 
+  /*
+   * Blank inventory: one shared stock pool per (case type x device). Every
+   * design's variant for that pair links to the SAME inventory item, so the
+   * stock is shared across all designs - sell any design's "Signature x iPhone
+   * 17 Pro Max" and every design's "Signature x iPhone 17 Pro Max" reflects it,
+   * going out of stock together when the pool is empty.
+   */
+  logger.info("Seeding blank inventory (one shared pool per case type x device)...")
+  const blankPairs = new Map<
+    string,
+    { caseTypeSlug: string; deviceSlug: string }
+  >()
+  for (const design of seedDesigns) {
+    for (const caseTypeSlug of design.case_types) {
+      for (const deviceSlug of devicesFor(design.slug, caseTypeSlug)) {
+        blankPairs.set(`${caseTypeSlug}|${deviceSlug}`, {
+          caseTypeSlug,
+          deviceSlug,
+        })
+      }
+    }
+  }
+  const caseTypeSeedBySlug = new Map(CASE_TYPES.map((c) => [c.slug, c]))
+  const deviceSeedBySlug = new Map(DEVICES.map((d) => [d.slug, d]))
+  const pairsArr = [...blankPairs.values()]
+  const { result: blankItems } = await createInventoryItemsWorkflow(
+    container
+  ).run({
+    input: {
+      items: pairsArr.map(({ caseTypeSlug, deviceSlug }) => {
+        const ct = caseTypeSeedBySlug.get(caseTypeSlug)!
+        const dev = deviceSeedBySlug.get(deviceSlug)!
+        return {
+          sku: `${ct.sku_code}-${dev.sku_code}`,
+          title: `${ct.name} - ${dev.name}`,
+          metadata: {
+            case_type_slug: caseTypeSlug,
+            case_type_name: ct.name,
+            device_slug: deviceSlug,
+            device_name: dev.name,
+            is_blank: true,
+          },
+        }
+      }),
+    },
+  })
+  const blankIdBySku = new Map<string, string>(
+    blankItems.map((item: any) => [item.sku, item.id])
+  )
+  const blankItemIdByPair = new Map<string, string>()
+  for (const { caseTypeSlug, deviceSlug } of pairsArr) {
+    const ct = caseTypeSeedBySlug.get(caseTypeSlug)!
+    const dev = deviceSeedBySlug.get(deviceSlug)!
+    blankItemIdByPair.set(
+      `${caseTypeSlug}|${deviceSlug}`,
+      blankIdBySku.get(`${ct.sku_code}-${dev.sku_code}`)!
+    )
+  }
+  for (const batch of chunk(blankItems, 200)) {
+    await createInventoryLevelsWorkflow(container).run({
+      input: {
+        inventory_levels: batch.map((item: any) => ({
+          location_id: stockLocation.id,
+          inventory_item_id: item.id,
+          stocked_quantity: BLANK_STOCK,
+        })),
+      },
+    })
+  }
+  logger.info(`  ${blankItems.length} blanks (stock ${BLANK_STOCK} each).`)
+
   logger.info("Seeding products (one per design x product form)...")
   let productCount = 0
   let variantCount = 0
@@ -543,7 +621,6 @@ export default async function initialDataSeed({
     }
 
     const productsInput: any[] = []
-    const productCaseTypeIds: string[][] = []
 
     for (const form of FORM_ORDER) {
       const ctMap = byForm.get(form)
@@ -573,6 +650,16 @@ export default async function initialDataSeed({
             title: `${caseType.name} / ${device.name}`,
             sku: `${design.sku_code}-${caseType.sku_code}-${device.sku_code}`,
             manage_inventory: true,
+            // Link to the SHARED blank pool for this case type x device, instead
+            // of letting Medusa auto-create a private per-variant stock item.
+            inventory_items: [
+              {
+                inventory_item_id: blankItemIdByPair.get(
+                  `${caseType.slug}|${device.slug}`
+                )!,
+                required_quantity: 1,
+              },
+            ],
             options: { "Case Type": caseType.name, Device: device.name },
             prices: [
               {
@@ -620,49 +707,28 @@ export default async function initialDataSeed({
         variants,
         sales_channels: [{ id: defaultSalesChannel.id }],
       })
-      productCaseTypeIds.push(
-        formCaseTypes.map((c) => caseTypeBySlug.get(c.slug)!.id)
-      )
     }
 
     const { result: created } = await createProductsWorkflow(container).run({
       input: { products: productsInput },
     })
 
-    for (let i = 0; i < created.length; i++) {
-      await link.create([
-        {
-          [Modules.PRODUCT]: { product_id: created[i].id },
-          [CATALOG_MODULE]: { design_id: designRecord.id },
-        },
-        ...productCaseTypeIds[i].map((caseTypeId) => ({
-          [Modules.PRODUCT]: { product_id: created[i].id },
-          [CATALOG_MODULE]: { case_type_id: caseTypeId },
-        })),
-      ])
+    // Case type is a variant OPTION now, not a product<->catalog link, so only
+    // the design link is created. A product spans many case types, which the
+    // one-to-many product<->case_type link could not represent anyway.
+    for (const product of created) {
+      await link.create({
+        [Modules.PRODUCT]: { product_id: product.id },
+        [CATALOG_MODULE]: { design_id: designRecord.id },
+      })
     }
 
     productCount += created.length
     logger.info(`  ${design.name}: ${created.length} products`)
   }
 
-  logger.info("Seeding inventory levels...")
-  const { data: inventoryItems } = await query.graph({
-    entity: "inventory_item",
-    fields: ["id"],
-  })
-
-  for (const batch of chunk(inventoryItems, 200)) {
-    await createInventoryLevelsWorkflow(container).run({
-      input: {
-        inventory_levels: batch.map((item: any) => ({
-          location_id: stockLocation.id,
-          inventory_item_id: item.id,
-          stocked_quantity: 100,
-        })),
-      },
-    })
-  }
+  // Inventory levels are set on the shared blanks above; variants link to those
+  // blanks rather than owning private stock, so there is nothing to level here.
 
   logger.info(
     `Done. ${seedDesigns.length} designs, ${CASE_TYPES.length} case types, ` +
