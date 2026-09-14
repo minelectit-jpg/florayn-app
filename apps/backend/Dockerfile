@@ -42,7 +42,9 @@ ENV IMAGE_MANIFEST_DEVICE=/app/server/data/images-device-manifest.json
 
 EXPOSE 9000
 
-# Run pending migrations (which also runs the seed migration script) then boot.
-# The seed is idempotent and skips once designs exist; SEED_THEME narrows the
-# first seed to one collection.
-CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
+# Just boot. Schema migrations and the seed are applied out-of-band (the
+# in-container `medusa db:migrate` CLI hangs on this host while `medusa start`
+# and the app's own DB connection work fine, so migrations are run against the
+# database directly - e.g. over an SSH tunnel from a machine where the CLI
+# works - and the container only serves).
+CMD ["npm", "run", "start"]
