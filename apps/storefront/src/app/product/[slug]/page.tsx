@@ -11,7 +11,6 @@ import {
   type RelatedProduct,
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
-import { getBundleConfig } from "@/lib/bundles"
 import { getDesign, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
 import { devicePageHref, resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
@@ -160,11 +159,10 @@ export default async function ProductPage({ params }: Params) {
   const caseTypeName = product.metadata?.case_type_name as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, deviceCatalog, designData, bundles] = await Promise.all([
+  const [families, deviceCatalog, designData] = await Promise.all([
     getDeviceFamilyMap(),
     getDeviceCatalog(),
     designSlug ? getDesign(designSlug) : Promise.resolve(null),
-    getBundleConfig(),
   ])
 
   /*
@@ -343,7 +341,7 @@ export default async function ProductPage({ params }: Params) {
         fallbackImages={images.map((i) => i.url)}
         designName={designName}
         productTitle={product.title}
-        bundles={bundles}
+        bundles={null}
         caseTypeName={caseTypeName ?? null}
         deviceName={device?.name ?? null}
         defaultDeviceName={defaultDeviceName}
