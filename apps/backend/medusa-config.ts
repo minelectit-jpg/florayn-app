@@ -38,32 +38,33 @@ const redisModules = redisUrl
  * per-object ACLs and rejects the ACL header the S3 provider would otherwise send.
  */
 const fileModule =
-  process.env.R2_ENABLE === "yes" &&
-  process.env.R2_ACCESS_KEY_ID &&
-  process.env.R2_SECRET_ACCESS_KEY
+  process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
     ? [
-      {
-        resolve: "@medusajs/file",
-        options: {
-          providers: [
-            {
-              resolve: "@medusajs/file-s3",
-              id: "s3",
-              options: {
-                fileUrl: process.env.R2_PUBLIC_URL,
-                accessKeyId: process.env.R2_ACCESS_KEY_ID,
-                secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-                region: "auto",
-                bucket: process.env.R2_BUCKET,
-                endpoint: process.env.R2_ENDPOINT,
-                acl: false,
+        {
+          resolve: "@medusajs/file",
+          options: {
+            providers: [
+              {
+                // NOTE: @medusajs/file-s3 reads SNAKE_CASE option keys
+                // (access_key_id, secret_access_key, file_url) - camelCase is
+                // silently ignored and the provider throws "access key required".
+                resolve: "@medusajs/file-s3",
+                id: "s3",
+                options: {
+                  file_url: process.env.R2_PUBLIC_URL,
+                  access_key_id: process.env.R2_ACCESS_KEY_ID,
+                  secret_access_key: process.env.R2_SECRET_ACCESS_KEY,
+                  region: "auto",
+                  bucket: process.env.R2_BUCKET,
+                  endpoint: process.env.R2_ENDPOINT,
+                  acl: false,
+                },
               },
-            },
-          ],
+            ],
+          },
         },
-      },
-    ]
-  : []
+      ]
+    : []
 
 module.exports = defineConfig({
   projectConfig: {
