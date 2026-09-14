@@ -85,7 +85,6 @@ const MediaLibraryPage = () => {
                           rel="noreferrer"
                           className="block size-20 overflow-hidden rounded-md border border-ui-border-base bg-ui-bg-subtle"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={url}
                             alt={device}
@@ -139,7 +138,6 @@ const MediaLibraryPage = () => {
               >
                 <div className="aspect-square overflow-hidden bg-ui-bg-base">
                   {d.sample ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={d.sample}
                       alt={d.slug}
