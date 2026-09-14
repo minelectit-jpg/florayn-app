@@ -81,6 +81,26 @@ export default async function initialDataSeed({
     return
   }
 
+  /*
+   * SEED_THEME seeds only the designs of one collection - for a phased launch
+   * that goes live with a single collection, gets the site and design right,
+   * then loads the rest. Case types, devices, region and store are global and
+   * still created in full; only the designs, their products and the collections
+   * they belong to are narrowed. Unset seeds the whole catalogue.
+   */
+  const SEED_THEME = process.env.SEED_THEME?.trim()
+  const seedDesigns = SEED_THEME
+    ? DESIGNS.filter((d) => d.theme === SEED_THEME)
+    : DESIGNS
+  if (SEED_THEME) {
+    if (!seedDesigns.length) {
+      throw new Error(`SEED_THEME="${SEED_THEME}" matched no designs in designs.ts`)
+    }
+    logger.info(
+      `SEED_THEME="${SEED_THEME}": seeding ${seedDesigns.length} of ${DESIGNS.length} designs`
+    )
+  }
+
   // An exclusion naming a device that no longer exists filters nothing, so a
   // renamed or dropped device would silently widen a case type's fit list.
   // Fail loudly instead.
@@ -392,9 +412,9 @@ export default async function initialDataSeed({
     caseTypes.map((caseType: any) => [caseType.slug, caseType])
   )
 
-  logger.info(`Seeding catalog: ${DESIGNS.length} designs...`)
+  logger.info(`Seeding catalog: ${seedDesigns.length} designs...`)
   const designs = await catalogModuleService.createDesigns(
-    DESIGNS.map((design, index) => ({
+    seedDesigns.map((design, index) => ({
       slug: design.slug,
       name: design.name,
       description: null,
@@ -437,7 +457,7 @@ export default async function initialDataSeed({
   // only the real collection names become Medusa collections.
   const themes = [
     ...new Set(
-      DESIGNS.map((design) => design.theme).filter(
+      seedDesigns.map((design) => design.theme).filter(
         (theme): theme is string => Boolean(theme)
       )
     ),
@@ -460,7 +480,7 @@ export default async function initialDataSeed({
   let productCount = 0
   let variantCount = 0
 
-  for (const design of DESIGNS) {
+  for (const design of seedDesigns) {
     const designRecord = designBySlug.get(design.slug)!
     const caseTypeIds: string[] = []
 
@@ -574,7 +594,7 @@ export default async function initialDataSeed({
   }
 
   logger.info(
-    `Done. ${DESIGNS.length} designs, ${CASE_TYPES.length} case types, ` +
+    `Done. ${seedDesigns.length} designs, ${CASE_TYPES.length} case types, ` +
       `${DEVICES.length} devices, ${productCount} products, ${variantCount} variants.`
   )
   logger.info(

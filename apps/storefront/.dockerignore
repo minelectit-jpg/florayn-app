@@ -1,0 +1,8 @@
+# Storefront build context = apps/storefront.
+node_modules
+.next
+.turbo
+.env.local
+*.log
+# NOTE: .env.production is intentionally NOT ignored - it is the committed,
+# public fallback for NEXT_PUBLIC_* when a build arg is not supplied.

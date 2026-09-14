@@ -1,0 +1,14 @@
+# Backend build context = repo root. Keep the image lean and reproducible.
+**/node_modules
+apps/backend/.medusa
+.git
+.turbo
+**/.next
+**/.turbo
+florayn-backups
+*.log
+**/*.log
+.env
+**/.env
+**/.env.local
+**/.env.*.local
