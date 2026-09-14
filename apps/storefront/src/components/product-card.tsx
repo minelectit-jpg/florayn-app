@@ -9,31 +9,53 @@ import { buildMetaLine, splitProductTitle } from "@/lib/product-title"
 
 export type CardBadge = { label: string; tone: "hot" | "soldout" | "sale" }
 
+/** Variants sold for a given device (matched on the Device option value). */
+function forDevice(variants: StoreVariant[], device: string): StoreVariant[] {
+  return variants.filter((v) =>
+    (v.options ?? []).some((o) => o.value === device)
+  )
+}
+
 export default function ProductCard({
   product,
   device,
+  deviceSlug,
   badges,
 }: {
   product: StoreProduct
-  /** Selected device from the filter bar; drives the meta line and quick-add. */
+  /** Selected device from the filter bar; drives the link, image and price. */
   device?: string | null
+  /** Device slug, so the card links to that device's own page. */
+  deviceSlug?: string | null
   badges?: CardBadge[]
 }) {
   const metadata = product.metadata ?? {}
-  const caseTypeName = metadata.case_type_name as string | undefined
   const designName =
     (metadata.design_name as string) ?? splitProductTitle(product.title).design
 
   const variants = product.variants ?? []
-  const selected: StoreVariant | undefined = device
-    ? variants.find((v) => v.title === device)
-    : undefined
-  // Price is flat per case type, so any variant gives the card price.
-  const priced = selected ?? variants[0]
-  const range = priceRange(variants)
+  // When a device is chosen, price and image are that device's; otherwise the
+  // whole product's range and its thumbnail.
+  const scoped = device ? forDevice(variants, device) : variants
+  const priced = scoped[0] ?? variants[0]
+  const range = priceRange(scoped.length ? scoped : variants)
 
-  const image = product.thumbnail ?? product.images?.[0]?.url
-  const meta = buildMetaLine({ device, caseType: caseTypeName })
+  const deviceImage = device
+    ? ((priced?.metadata?.images as string[] | undefined) ?? [])[0]
+    : undefined
+  const image = deviceImage ?? product.thumbnail ?? product.images?.[0]?.url
+
+  // Meta line: the chosen device, else the form label (e.g. "AirPods Case").
+  const meta = buildMetaLine({
+    device,
+    caseType: device ? null : (product.subtitle ?? null),
+  })
+
+  // A chosen device deep-links to that device's own page, preselected.
+  const href =
+    device && deviceSlug
+      ? `/product/${product.handle}-${deviceSlug}/`
+      : `/product/${product.handle}/`
 
   const soldOut = variants.length === 0
   const resolvedBadges: CardBadge[] =
@@ -42,7 +64,7 @@ export default function ProductCard({
   return (
     <article className="fl-card">
       <Link
-        href={`/product/${product.handle}/`}
+        href={href}
         className="flex flex-1 flex-col"
         aria-label={`${designName}${meta ? `, ${meta}` : ""}`}
       >
@@ -71,9 +93,6 @@ export default function ProductCard({
         </div>
 
         <div className="fl-card__summary">
-          {/* Title and meta share a wrapper, as they do on the live site,
-              so the summary has two flex children and therefore one 2px gap
-              rather than two. */}
           <div className="fl-card__titles">
             <h3 className="fl-card__title">{designName}</h3>
             {meta ? <p className="fl-card__meta">{meta}</p> : null}

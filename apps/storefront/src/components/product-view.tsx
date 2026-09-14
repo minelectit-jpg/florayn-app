@@ -5,120 +5,110 @@ import { useMemo, useState, type ReactNode } from "react"
 
 import ProductBuyBox from "@/components/product-buy-box"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
-import type { BundleConfig } from "@/lib/bundles"
 import type { StoreVariant } from "@/lib/medusa"
+import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
 /**
  * The two-column top of the product page.
  *
- * Gallery and device picker share the selected variant, because the picture
- * has to follow the device family: on Signature and Alcantara the variants are
- * different objects - a phone case, an AirPods case, a wallet - and showing a
- * phone to somebody buying a wallet would be wrong. Within a family the
- * gallery holds still, which is the case that does not matter.
+ * Structure B: one design product with two options, Case Type and Device. Both
+ * are picked in place here - no navigating to a sibling product - and the two
+ * selectors are linked, so choosing a device greys out the case types that do
+ * not fit it and vice versa. The gallery follows the exact (case type, device)
+ * variant, each of which carries its own renders in metadata.
  */
 export default function ProductView({
+  matrix,
   variants,
   families,
-  imageFamilyByDevice,
-  imagesByFamily,
   fallbackImages,
   designName,
   productTitle,
-  caseTypeName,
   collection,
   deviceName,
-  defaultDeviceName,
+  initialCaseType,
+  initialDevice,
   fitCopy,
-  baseHandle,
-  deviceSlugByName,
   moreDesigns,
-  caseTypes,
   shipping,
-  bundles,
   tabs,
   pairs,
 }: {
+  matrix: VariantMatrix
   variants: StoreVariant[]
+  /** device name -> family label, for grouping the device drawer. */
   families: Record<string, string>
-  /** device name -> image family (phone, airpods, watch, card-wallet, ...) */
-  imageFamilyByDevice: Record<string, string>
-  /** image family -> ordered URLs */
-  imagesByFamily: Record<string, string[]>
-  /** Used when a product has no per-family images yet. */
+  /** Used when a variant has no wired renders yet. */
   fallbackImages: string[]
   designName: string
   productTitle: string
-  /**
-   * The heading is built here from plain values rather than passed in as JSX.
-   * Static JSX children lose their static marker crossing the server/client
-   * boundary, so React sees a keyless array and warns.
-   */
-  caseTypeName?: string | null
   collection?: { title: string; handle: string } | null
-  /** Set on a device page: the device this URL is for. */
+  /** Set on a device page: the device this URL is for (drives the H1). */
   deviceName?: string | null
-  /** The base page's default device: the cheapest phone, chosen server-side. */
-  defaultDeviceName?: string | null
-  /** A sentence about the fit, generated from the device's own attributes. */
+  initialCaseType: string
+  initialDevice: string
   fitCopy?: string | null
-  /** Base handle, so the picker can link to each device's own URL. */
-  baseHandle?: string
-  /** device name -> device slug, for those links. */
-  deviceSlugByName?: Record<string, string>
   moreDesigns?: ReactNode
-  caseTypes?: ReactNode
   shipping?: ReactNode
-  bundles?: BundleConfig | null
   tabs: ReactNode
   pairs: ReactNode
 }) {
-  // A device page opens on its own device rather than the first variant.
-  /*
-   * A device page opens on its own device. The base product page opens on a
-   * consistent default - the cheapest phone, computed on the server - so the
-   * headline price and image do not jump between iPhone and AirPods from one
-   * product to the next. variants[0] is only a last resort, since the Store
-   * API does not guarantee variant order.
-   */
-  const initial =
-    (deviceName && variants.find((v) => v.title === deviceName)?.id) ??
-    (defaultDeviceName &&
-      variants.find((v) => v.title === defaultDeviceName)?.id) ??
-    variants[0]?.id ??
-    ""
-  const [selectedId, setSelectedId] = useState(initial)
-  const selected = variants.find((v) => v.id === selectedId) ?? variants[0]
+  const variantById = useMemo(
+    () => new Map(variants.map((v) => [v.id, v])),
+    [variants]
+  )
 
-  const family = selected ? imageFamilyByDevice[selected.title] : undefined
+  const [caseType, setCaseType] = useState(initialCaseType)
+  const [device, setDevice] = useState(initialDevice)
 
-  /*
-   * The gallery follows the device, not the family: picking iPhone 12 shows
-   * the iPhone 12 render. Each variant carries its own shots in metadata;
-   * the family map is the fallback for anything not yet wired that way.
-   */
-  const perVariant = (selected?.metadata?.images as string[] | undefined) ?? []
+  // Snap to a valid pair when a change makes the current one impossible.
+  function selectCaseType(ct: string) {
+    setCaseType(ct)
+    const devs = matrix.devicesByCaseType[ct] ?? []
+    if (!devs.includes(device) && devs[0]) setDevice(devs[0])
+  }
+  function selectDevice(d: string) {
+    setDevice(d)
+    const cts = matrix.caseTypesByDevice[d] ?? []
+    if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
+  }
+
+  const selectedId = matrix.variantIdByPair[pairKey(caseType, device)]
+  const selected = (selectedId && variantById.get(selectedId)) || null
 
   const items: GalleryItem[] = useMemo(() => {
-    const urls =
-      (perVariant.length ? perVariant : null) ??
-      (family && imagesByFamily[family]?.length ? imagesByFamily[family] : null) ??
-      (imagesByFamily.phone?.length ? imagesByFamily.phone : fallbackImages)
-
+    const imgs = (selected?.metadata?.images as string[] | undefined) ?? []
+    const urls = imgs.length ? imgs : fallbackImages
     return urls.map((url, i) => ({
-      // Keyed by device so changing device remounts the gallery on slide 1
-      // rather than holding an index that no longer exists.
-      id: `${selected?.id ?? family ?? "default"}-${i}`,
+      id: `${selected?.id ?? "default"}-${i}`,
       url,
       video: null,
     }))
-  }, [perVariant, family, imagesByFamily, fallbackImages, selected?.id])
+  }, [selected?.id, selected?.metadata, fallbackImages])
+
+  // The picture / price a case-type tile shows: that case type at the current
+  // device when it fits, otherwise at the case type's own first device.
+  function variantForCaseType(ct: string): StoreVariant | undefined {
+    const devs = matrix.devicesByCaseType[ct] ?? []
+    const dev = devs.includes(device) ? device : devs[0]
+    if (!dev) return undefined
+    const id = matrix.variantIdByPair[pairKey(ct, dev)]
+    return id ? variantById.get(id) : undefined
+  }
+  function imageForCaseType(ct: string): string | null {
+    const imgs =
+      (variantForCaseType(ct)?.metadata?.images as string[] | undefined) ?? []
+    return imgs[0] ?? null
+  }
+  function priceForCaseType(ct: string): number | null {
+    return variantForCaseType(ct)?.calculated_price?.calculated_amount ?? null
+  }
 
   return (
     <div className="grid gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
       <div>
         <ProductGallery
-          key={selected?.id ?? family ?? "default"}
+          key={selected?.id ?? "default"}
           items={items}
           label={designName}
         />
@@ -136,9 +126,7 @@ export default function ProductView({
 
         <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
           {deviceName ? `${designName} ${deviceName} Case` : designName}
-          {caseTypeName ? (
-            <span className="text-ink-muted"> &ndash; {caseTypeName}</span>
-          ) : null}
+          <span className="text-ink-muted"> &ndash; {caseType}</span>
         </h1>
 
         {fitCopy ? (
@@ -149,18 +137,19 @@ export default function ProductView({
 
         <div className="mt-3">
           <ProductBuyBox
-            variants={variants}
+            matrix={matrix}
+            selected={selected}
             families={families}
             productTitle={productTitle}
             thumbnail={items[0]?.url ?? null}
+            caseType={caseType}
+            device={device}
+            onSelectCaseType={selectCaseType}
+            onSelectDevice={selectDevice}
+            imageForCaseType={imageForCaseType}
+            priceForCaseType={priceForCaseType}
             moreDesigns={moreDesigns}
-            caseTypes={caseTypes}
             shipping={shipping}
-            bundles={bundles}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            baseHandle={baseHandle}
-            deviceSlugByName={deviceSlugByName}
           />
         </div>
 

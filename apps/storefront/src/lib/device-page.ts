@@ -41,8 +41,12 @@ export async function resolveProductPage(
   const product = await getProductByHandle(baseHandle)
   if (!product) return null
 
-  // The device page only exists if the product is actually sold for it.
-  const fits = (product.variants ?? []).some((v) => v.title === device.name)
+  // The device page only exists if the product is actually sold for it. A
+  // variant's title is now "<Case Type> / <Device>", so match the Device option
+  // value (device names never collide with case type names).
+  const fits = (product.variants ?? []).some((v) =>
+    (v.options ?? []).some((o) => o.value === device.name)
+  )
   if (!fits) return null
 
   return { product, device, baseHandle }

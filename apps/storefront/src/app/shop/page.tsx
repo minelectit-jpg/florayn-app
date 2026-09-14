@@ -18,17 +18,36 @@ function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? ""
 }
 
-async function categoryIdFor(slug: string): Promise<string | null> {
+async function categoryFor(
+  slug: string
+): Promise<{ id: string; name: string } | null> {
   if (!slug) return null
   try {
     const { product_categories } = await sdk.store.category.list({
       handle: slug,
       limit: 1,
     })
-    return product_categories?.[0]?.id ?? null
+    const c = product_categories?.[0]
+    return c ? { id: c.id, name: c.name } : null
   } catch {
     return null
   }
+}
+
+/**
+ * Which product FORM a device belongs to. A phone case product lists only
+ * phones; AirPods / watch / wallet are their own products, so browsing an
+ * AirPods device shows AirPods-case products, never phone cases.
+ */
+function formForFamily(family: string): string {
+  return family === "iphone" || family === "samsung" ? "phone" : family
+}
+
+/** Whether a product is sold for a device (matched on the Device option). */
+function hasDevice(product: StoreProduct, deviceName: string): boolean {
+  return (product.variants ?? []).some((v) =>
+    (v.options ?? []).some((o) => o.value === deviceName)
+  )
 }
 
 export async function generateMetadata({
@@ -51,36 +70,32 @@ export default async function ShopPage({ searchParams }: Params) {
   const devices = await getDeviceCatalog()
   const device = devices.find((d) => d.slug === deviceSlug) ?? null
 
+  // Which product form this page is about: phones by default, or the family of
+  // the chosen device (AirPods / watch / wallet browse their own products).
+  const targetForm = device ? formForFamily(device.family) : "phone"
+
   /*
-   * Narrowing by case type first keeps the query small: every product carries
-   * its case type as a category, and there are only six of them. The limit has
-   * to clear the largest case type - Signature, at 165 products - because the
-   * device filter runs over what comes back, so anything truncated here would
-   * silently vanish from the results.
+   * Narrow by case type first (a category) to keep the query small; the limit
+   * clears the largest case type (Signature) because the form/device filters
+   * run over what comes back. Structure B gives one product per design PER
+   * FORM, so filtering to the target form yields one card per design.
    */
-  const categoryId = await categoryIdFor(caseTypeSlug)
+  const category = await categoryFor(caseTypeSlug)
   const { products, count, error } = await listProducts(
-    categoryId ? { category_id: [categoryId], limit: 200 } : { limit: 200 }
+    category ? { category_id: [category.id], limit: 200 } : { limit: 200 }
   )
   const truncated = count > products.length
 
-  // A device is a variant, so "fits this device" means the product has a
-  // variant with that name.
-  const filtered: StoreProduct[] = device
-    ? products.filter((p) =>
-        (p.variants ?? []).some((v) => v.title === device.name)
-      )
-    : products
-
-  const caseTypeName =
-    filtered[0]?.metadata?.case_type_name ??
-    products[0]?.metadata?.case_type_name ??
-    null
+  const filtered: StoreProduct[] = products.filter(
+    (p) =>
+      (p.metadata?.form ?? "phone") === targetForm &&
+      (!device || hasDevice(p, device.name))
+  )
 
   const heading = device
     ? `${device.name} Cases`
-    : caseTypeName
-      ? `${caseTypeName} Cases`
+    : category
+      ? `${category.name} Cases`
       : "Shop"
 
   return (
@@ -93,7 +108,7 @@ export default async function ShopPage({ searchParams }: Params) {
         {error ? null : (
           <p className="text-sm text-ink-muted">
             {filtered.length} {filtered.length === 1 ? "product" : "products"}
-            {device && caseTypeName ? ` · ${caseTypeName}` : ""}
+            {device && category ? ` · ${category.name}` : ""}
             {truncated && !device ? ` of ${count}` : ""}
           </p>
         )}
@@ -119,6 +134,7 @@ export default async function ShopPage({ searchParams }: Params) {
               key={product.id}
               product={product}
               device={device?.name ?? null}
+              deviceSlug={device?.slug ?? null}
             />
           ))}
         </div>

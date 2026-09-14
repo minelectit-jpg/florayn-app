@@ -2,63 +2,51 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
-import Link from "next/link"
-
-import { useCart } from "@/components/cart-provider"
+import ProductImage from "@/components/product-image"
 import { Spinner } from "@/components/ui/button"
-import { tierPricing, type BundleConfig } from "@/lib/bundles"
+import { useCart } from "@/components/cart-provider"
 import type { StoreVariant } from "@/lib/medusa"
 import { formatPrice } from "@/lib/money"
+import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
 type AddState = "idle" | "adding" | "added" | "error"
 
-/*
- * The device-family labels that count as a phone case. getDeviceFamilyMap
- * yields these labels; a selection outside this set is an accessory, which the
- * "cases" bundle scope excludes. Mirrors CASE_BY_DEVICE_NAME on the backend.
- */
-const CASE_FAMILY_LABELS = new Set(["iPhone", "Samsung Galaxy"])
-
 /**
- * The right-hand column of the product page, from the price down.
- *
- * On the live site the device picker and the add-to-cart form are separated by
- * the MORE DESIGNS and CASE TYPE blocks, but they share the selected device -
- * so those two blocks are passed in as slots rather than rendered as siblings.
+ * The right-hand column of the product page, from the price down. Owns the two
+ * linked selectors (Case Type tiles + Device drawer) and the add-to-cart form.
+ * Selection state lives in the parent so the gallery can follow it; this only
+ * renders the controls and reports changes back.
  */
 export default function ProductBuyBox({
-  variants,
+  matrix,
+  selected,
   families,
   productTitle,
   thumbnail,
+  caseType,
+  device,
+  onSelectCaseType,
+  onSelectDevice,
+  imageForCaseType,
+  priceForCaseType,
   moreDesigns,
-  caseTypes,
   shipping,
-  bundles,
-  selectedId,
-  onSelect,
-  baseHandle,
-  deviceSlugByName,
 }: {
-  variants: StoreVariant[]
+  matrix: VariantMatrix
+  /** The variant for the current (caseType, device) pair, or null. */
+  selected: StoreVariant | null
   /** device name -> family label, for grouping the drawer. */
   families: Record<string, string>
   productTitle: string
   thumbnail: string | null
+  caseType: string
+  device: string
+  onSelectCaseType: (caseType: string) => void
+  onSelectDevice: (device: string) => void
+  imageForCaseType: (caseType: string) => string | null
+  priceForCaseType: (caseType: string) => number | null
   moreDesigns?: ReactNode
-  caseTypes?: ReactNode
   shipping?: ReactNode
-  /** Multi-buy tiers. Null hides the widget. */
-  bundles?: BundleConfig | null
-  /** Selection is lifted so the gallery can follow the chosen device. */
-  selectedId: string
-  onSelect: (variantId: string) => void
-  /**
-   * When set, each device is a link to its own indexable URL rather than a
-   * button that only changes state - so the picker is crawlable.
-   */
-  baseHandle?: string
-  deviceSlugByName?: Record<string, string>
 }) {
   const { add } = useCart()
   const [open, setOpen] = useState(false)
@@ -68,7 +56,6 @@ export default function ProductBuyBox({
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
 
-  const selected = variants.find((v) => v.id === selectedId)
   const price = selected?.calculated_price
 
   useEffect(() => {
@@ -96,18 +83,21 @@ export default function ProductBuyBox({
     }
   }, [open])
 
+  // Devices available for the selected case type, grouped by family for the
+  // drawer. Switching case type changes this list.
+  const availableDevices = matrix.devicesByCaseType[caseType] ?? []
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    const groups = new Map<string, StoreVariant[]>()
-    for (const variant of variants) {
-      if (needle && !variant.title.toLowerCase().includes(needle)) continue
-      const label = families[variant.title] ?? "Other"
+    const groups = new Map<string, string[]>()
+    for (const d of availableDevices) {
+      if (needle && !d.toLowerCase().includes(needle)) continue
+      const label = families[d] ?? "Other"
       const bucket = groups.get(label) ?? []
-      bucket.push(variant)
+      bucket.push(d)
       groups.set(label, bucket)
     }
     return [...groups.entries()]
-  }, [variants, families, query])
+  }, [availableDevices, families, query])
 
   const matchCount = grouped.reduce((sum, [, list]) => sum + list.length, 0)
 
@@ -117,7 +107,7 @@ export default function ProductBuyBox({
     try {
       await add(selected.id, qty, {
         productTitle,
-        variantTitle: selected.title,
+        variantTitle: `${caseType} / ${device}`,
         unitPrice: price?.calculated_amount ?? 0,
         thumbnail,
       })
@@ -138,22 +128,60 @@ export default function ProductBuyBox({
 
   return (
     <div>
-      {/* Price. 26px/600 on the live page, the same size as the title. */}
+      {/* Price - the selected variant's, 26px/600 to match the title. */}
       <p className="text-[1.625rem] font-semibold leading-none tracking-[-0.034em] tabular-nums">
         {formatPrice(price?.calculated_amount, price?.currency_code)}
       </p>
 
-      {bundles ? (
-        <BundleTiers
-          unit={price?.calculated_amount ?? null}
-          config={bundles}
-          quantity={qty}
-          onPick={setQty}
-          // The multi-buy is a phone-case offer when scope is "cases", so an
-          // AirPods case, wallet or watch band selection hides the pills. The
-          // family map holds a label like "iPhone" / "AirPods".
-          isCase={CASE_FAMILY_LABELS.has(families[selected?.title ?? ""] ?? "")}
-        />
+      {/* CASE TYPE - in-page tiles. A case type not sold for the selected
+          device is disabled rather than hidden, so the range stays visible. */}
+      {matrix.caseTypes.length > 1 ? (
+        <section className="mt-5">
+          <p className="fl-pdp-label">CASE TYPE</p>
+          <ul className="flex flex-wrap gap-[10px]">
+            {matrix.caseTypes.map((ct) => {
+              const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
+              const isCurrent = ct === caseType
+              const img = imageForCaseType(ct)
+              const ctPrice = priceForCaseType(ct)
+              return (
+                <li key={ct}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectCaseType(ct)}
+                    aria-pressed={isCurrent}
+                    disabled={!fits && !isCurrent}
+                    title={!fits ? `${ct} is not made for ${device}` : ct}
+                    className={[
+                      "flex h-[205px] w-[135px] flex-col overflow-hidden rounded-[10px] border bg-surface text-left transition-colors",
+                      isCurrent
+                        ? "border-purple"
+                        : "border-[#e2e2e2] hover:border-purple",
+                      !fits && !isCurrent ? "opacity-40" : "",
+                    ].join(" ")}
+                  >
+                    <span className="relative block h-[150px] w-full overflow-hidden rounded-t-[9px]">
+                      <ProductImage
+                        src={img}
+                        alt={ct}
+                        label={ct}
+                        sizes="135px"
+                      />
+                    </span>
+                    <span className="block px-2 py-2 text-center">
+                      <span className="block text-[13px] font-semibold leading-tight">
+                        {ct}
+                      </span>
+                      <span className="mt-0.5 block text-[13px] tabular-nums text-ink-muted">
+                        {ctPrice != null ? formatPrice(ctPrice) : null}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
       ) : null}
 
       {/* DEVICE */}
@@ -167,7 +195,7 @@ export default function ProductBuyBox({
             aria-haspopup="listbox"
             className="flex h-[52px] w-full items-center justify-between rounded-[12px] border border-[#e2e2e2] bg-surface px-4 text-left text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
           >
-            <span>{selected ? selected.title : "Select a device"}</span>
+            <span>{device || "Select a device"}</span>
             <svg
               width="14"
               height="14"
@@ -192,63 +220,42 @@ export default function ProductBuyBox({
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Search ${variants.length} devices`}
+                placeholder={`Search ${availableDevices.length} devices`}
                 className="field-input mb-3"
               />
-              <div
-                role="listbox"
-                className="max-h-72 space-y-4 overflow-y-auto pr-1"
-              >
+              <div role="listbox" className="max-h-72 space-y-4 overflow-y-auto pr-1">
                 {matchCount === 0 ? (
                   <p className="px-1 py-6 text-sm text-ink-muted">
-                    No device matches &ldquo;{query}&rdquo;. This case type may
-                    not be made for it.
+                    No device matches &ldquo;{query}&rdquo;.
                   </p>
                 ) : (
                   grouped.map(([familyLabel, list]) => (
                     <div key={familyLabel}>
                       <p className="eyebrow px-1 pb-2">{familyLabel}</p>
                       <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                        {list.map((variant) => {
-                          const isSelected = variant.id === selectedId
+                        {list.map((d) => {
+                          const isSelected = d === device
                           return (
-                            (() => {
-                              const cls = [
+                            <button
+                              key={d}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() => {
+                                onSelectDevice(d)
+                                setOpen(false)
+                                setQuery("")
+                                setState("idle")
+                              }}
+                              className={[
                                 "block rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
                                 isSelected
                                   ? "border-purple bg-purple-tint text-ink"
                                   : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
-                              ].join(" ")
-                              const deviceSlug = deviceSlugByName?.[variant.title]
-                              const close = () => {
-                                setState("idle")
-                                setOpen(false)
-                                setQuery("")
-                              }
-                              return baseHandle && deviceSlug ? (
-                                <Link
-                                  key={variant.id}
-                                  href={`/product/${baseHandle}-${deviceSlug}/`}
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  className={cls}
-                                  onClick={close}
-                                >
-                                  {variant.title}
-                                </Link>
-                              ) : (
-                                <button
-                                  key={variant.id}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  onClick={() => { onSelect(variant.id); close() }}
-                                  className={cls}
-                                >
-                                  {variant.title}
-                                </button>
-                              )
-                            })()
+                              ].join(" ")}
+                            >
+                              {d}
+                            </button>
                           )
                         })}
                       </div>
@@ -262,9 +269,8 @@ export default function ProductBuyBox({
       </div>
 
       {moreDesigns}
-      {caseTypes}
 
-      {/* Quantity + add to cart. Live: 50px tall pill, full width beside qty. */}
+      {/* Quantity + add to cart. */}
       <div className="mt-7 flex items-stretch gap-3">
         <div className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
@@ -316,7 +322,7 @@ export default function ProductBuyBox({
         {state === "adding"
           ? "Adding to cart"
           : state === "added"
-            ? `${selected?.title ?? "Item"} added to cart`
+            ? `${caseType} ${device} added to cart`
             : state === "error"
               ? "Could not add to cart. Try again."
               : ""}
@@ -330,131 +336,5 @@ export default function ProductBuyBox({
 
       {shipping}
     </div>
-  )
-}
-
-/**
- * The multi-buy pills. Picking one sets the quantity, so the tier a shopper
- * chose is exactly what lands in the cart; checkout then recomputes the same
- * discount server-side.
- */
-function BundleTiers({
-  unit,
-  config,
-  quantity,
-  onPick,
-  isCase,
-}: {
-  unit: number | null
-  config: BundleConfig
-  quantity: number
-  onPick: (quantity: number) => void
-  /** Whether the selected variant is a phone case. */
-  isCase: boolean
-}) {
-  if (!config.settings.is_active || !config.tiers.length || unit == null) {
-    return null
-  }
-  // "cases" scope makes this a phone-case offer; accessories show no pills.
-  if (config.settings.scope === "cases" && !isCase) {
-    return null
-  }
-
-  const pills = [
-    { key: "single", label: config.settings.single_label, quantity: 1 },
-    ...config.tiers.map((tier) => ({
-      key: tier.id,
-      label: `${tier.quantity}-pack`,
-      quantity: tier.quantity,
-      tier,
-    })),
-  ]
-
-  const activeTotal =
-    config.tiers.find((t) => t.quantity === quantity) != null
-      ? tierPricing(
-          unit,
-          config.tiers.find((t) => t.quantity === quantity)!
-        ).total
-      : unit * quantity
-  const threshold = config.settings.free_shipping_threshold
-
-  return (
-    <section className="mt-5">
-      <p className="fl-pdp-label">{config.settings.heading}</p>
-      <div
-        role="radiogroup"
-        aria-label={config.settings.heading}
-        className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${pills.length}, minmax(0, 1fr))` }}
-      >
-        {pills.map((pill) => {
-          const priced =
-            "tier" in pill && pill.tier
-              ? tierPricing(unit, pill.tier)
-              : { subtotal: unit, discount: 0, total: unit }
-          const isActive = quantity === pill.quantity
-          const badge = "tier" in pill ? pill.tier?.badge : null
-
-          return (
-            <button
-              key={pill.key}
-              type="button"
-              role="radio"
-              aria-checked={isActive}
-              onClick={() => onPick(pill.quantity)}
-              className={[
-                "relative rounded-[11px] border px-2 pb-2.5 text-center transition-colors",
-                badge ? "pt-4" : "pt-2.5",
-                isActive
-                  ? "border-purple bg-purple-tint"
-                  : "border-[#ddd0fb] bg-surface hover:border-purple",
-              ].join(" ")}
-            >
-              {badge ? (
-                <span className="absolute inset-x-0 top-0 truncate rounded-t-[10px] bg-purple px-1 py-[2px] text-[9px] font-semibold uppercase tracking-wide text-white">
-                  {badge}
-                </span>
-              ) : null}
-              <span className="block text-[13px] font-semibold">
-                {pill.label}
-              </span>
-              <span className="mt-0.5 block text-[13px] tabular-nums">
-                {priced.discount > 0 ? (
-                  <>
-                    <s className="text-ink-faint">
-                      {formatPrice(priced.subtotal)}
-                    </s>{" "}
-                    <b className="font-semibold">{formatPrice(priced.total)}</b>
-                  </>
-                ) : (
-                  formatPrice(priced.total)
-                )}
-              </span>
-              {priced.discount > 0 ? (
-                <span className="mt-0.5 block text-[11px] font-semibold text-purple">
-                  Save {formatPrice(priced.discount)}
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
-
-      {threshold > 0 ? (
-        <p className="mt-2 text-[13px] text-ink-muted">
-          {activeTotal >= threshold ? (
-            <span className="font-semibold text-success">
-              Free delivery on this order.
-            </span>
-          ) : (
-            <>
-              Add {formatPrice(threshold - activeTotal)} more for free
-              delivery.
-            </>
-          )}
-        </p>
-      ) : null}
-    </section>
   )
 }
