@@ -32,7 +32,11 @@ import {
   devicesFor,
 } from "../modules/catalog/data/design-devices"
 import { DESIGNS } from "../modules/catalog/data/designs"
-import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
+import {
+  DEVICES,
+  type DeviceFamily,
+  type DeviceSeed,
+} from "../modules/catalog/data/devices"
 import { placeholderImage } from "../modules/catalog/data/placeholder-image"
 
 const CURRENCY = "bdt"
@@ -476,83 +480,150 @@ export default async function initialDataSeed({
     collections.map((collection: any) => [collection.title, collection])
   )
 
-  logger.info("Seeding products (one per design x case type)...")
+  logger.info("Seeding products (one per design x product form)...")
   let productCount = 0
   let variantCount = 0
 
+  /*
+   * Structure B: a product is one design in one product FORM (phone case,
+   * AirPods case, watch band, wallet) - NOT one design x case type. Case Type
+   * and Device are the product's two options, and the variants are the
+   * (case type, device) pairs that are actually sold: a sparse matrix, because
+   * not every case type fits every device. Splitting by form is what keeps a
+   * phone case listing only phones - an AirPods case is its own product under
+   * the earbuds menu, never a "device" in the phone picker.
+   */
+  type ProductForm = "phone" | "airpods" | "watch" | "wallet"
+  const FORM_BY_FAMILY: Record<DeviceFamily, ProductForm> = {
+    iphone: "phone",
+    samsung: "phone",
+    airpods: "airpods",
+    watch: "watch",
+    wallet: "wallet",
+  }
+  // Storefront label + URL/handle suffix per form. Phone keeps the bare design
+  // slug so the main product page stays /product/<design>.
+  const FORM_LABEL: Record<ProductForm, string> = {
+    phone: "Phone Case",
+    airpods: "AirPods Case",
+    watch: "Watch Band",
+    wallet: "Card Wallet",
+  }
+  const FORM_SUFFIX: Record<ProductForm, string> = {
+    phone: "",
+    airpods: "airpods",
+    watch: "watch",
+    wallet: "wallet",
+  }
+  const FORM_ORDER: ProductForm[] = ["phone", "airpods", "watch", "wallet"]
+
   for (const design of seedDesigns) {
     const designRecord = designBySlug.get(design.slug)!
-    const caseTypeIds: string[] = []
 
-    const productsInput = design.case_types.map((caseTypeSlug) => {
-      const caseTypeSeed = CASE_TYPES.find((c) => c.slug === caseTypeSlug)!
-      // Which devices this design is actually sold for in this construction,
-      // read from the live catalogue rather than derived from the case type.
+    // form -> caseTypeSlug -> the devices of that form sold in that case type.
+    const byForm = new Map<ProductForm, Map<string, DeviceSeed[]>>()
+    for (const caseTypeSlug of design.case_types) {
       const sold = new Set(devicesFor(design.slug, caseTypeSlug))
       const compatible = DEVICES.filter((device) => sold.has(device.slug))
-      // A product with no variants cannot be bought, so fail rather than
-      // quietly publish one if the swept data ever loses a pair.
-      if (!compatible.length) {
-        throw new Error(
-          `no devices for ${design.slug} in ${caseTypeSlug}; re-sweep design-devices.ts`
-        )
+      for (const device of compatible) {
+        const form = FORM_BY_FAMILY[device.family]
+        let ctMap = byForm.get(form)
+        if (!ctMap) {
+          ctMap = new Map()
+          byForm.set(form, ctMap)
+        }
+        const list = ctMap.get(caseTypeSlug) ?? []
+        list.push(device)
+        ctMap.set(caseTypeSlug, list)
       }
-      const families = [...new Set(compatible.map((device) => device.family))]
+    }
+    // A design with no sold pair at all is a data error, not a silent skip.
+    if (byForm.size === 0) {
+      throw new Error(`no devices for ${design.slug}; re-sweep design-devices.ts`)
+    }
 
-      caseTypeIds.push(caseTypeBySlug.get(caseTypeSlug)!.id)
-      variantCount += compatible.length
+    const productsInput: any[] = []
+    const productCaseTypeIds: string[][] = []
 
-      return {
-        title: `${design.name} - ${caseTypeSeed.name}`,
-        // This handle is the /product/<slug>/ URL. Keep the shape stable.
-        handle: `${design.slug}-${caseTypeSlug}`,
-        subtitle: caseTypeSeed.name,
-        description: caseTypeSeed.description,
+    for (const form of FORM_ORDER) {
+      const ctMap = byForm.get(form)
+      if (!ctMap) continue
+
+      // Case types in this form, cheapest-first (CASE_TYPES order).
+      const formCaseTypes = CASE_TYPES.filter((c) => ctMap.has(c.slug))
+      // Devices in this form, union across its case types, in picker order.
+      const formDeviceSlugs = new Set<string>()
+      for (const list of ctMap.values()) {
+        for (const device of list) formDeviceSlugs.add(device.slug)
+      }
+      const formDevices = DEVICES.filter((d) => formDeviceSlugs.has(d.slug))
+      const formFamilies = [...new Set(formDevices.map((d) => d.family))]
+
+      const suffix = FORM_SUFFIX[form]
+      const handle = suffix ? `${design.slug}-${suffix}` : design.slug
+      const title =
+        form === "phone" ? design.name : `${design.name} - ${FORM_LABEL[form]}`
+
+      // The sparse variant matrix: only the (case type, device) pairs sold.
+      const variants: any[] = []
+      for (const caseType of formCaseTypes) {
+        for (const device of ctMap.get(caseType.slug)!) {
+          variants.push({
+            // Composite title, since a variant is now a (case type, device) pair.
+            title: `${caseType.name} / ${device.name}`,
+            sku: `${design.sku_code}-${caseType.sku_code}-${device.sku_code}`,
+            manage_inventory: true,
+            options: { "Case Type": caseType.name, Device: device.name },
+            prices: [
+              {
+                // Flat for five constructions; Alcantara varies by device group.
+                amount: priceForDevice(caseType, device.slug),
+                currency_code: CURRENCY,
+              },
+            ],
+          })
+        }
+      }
+      variantCount += variants.length
+
+      productsInput.push({
+        title,
+        // handle is the /product/<slug>/ URL. Phone form = the bare design slug.
+        handle,
+        ...(form === "phone" ? {} : { subtitle: FORM_LABEL[form] }),
         status: ProductStatus.PUBLISHED,
         shipping_profile_id: shippingProfile.id,
         ...(design.theme
           ? { collection_id: collectionByTitle.get(design.theme)!.id }
           : {}),
         category_ids: [
-          categoryByHandle.get(caseTypeSlug)!.id,
-          ...families.map(
+          ...formCaseTypes.map((c) => categoryByHandle.get(c.slug)!.id),
+          ...formFamilies.map(
             (family) => categoryByHandle.get(FAMILY_SLUGS[family])!.id
           ),
         ],
         images: [1, 2, 3].map((n) => ({
-          url: placeholderImage(`${design.slug}-${caseTypeSlug}-${n}`, design.name),
+          url: placeholderImage(`${handle}-${n}`, design.name),
         })),
-        // Mirrored onto the product so the Store API can render a card without
-        // a second round trip for the linked design and case type.
+        // Mirrored so the Store API can render a card without extra joins. Case
+        // type is now an OPTION, so it is intentionally not on the product.
         metadata: {
           design_slug: design.slug,
           design_name: design.name,
-          case_type_slug: caseTypeSlug,
-          case_type_name: caseTypeSeed.name,
+          form,
           ...(design.theme ? { theme: design.theme } : {}),
         },
         options: [
-          {
-            title: "Device",
-            values: compatible.map((device) => device.name),
-          },
+          { title: "Case Type", values: formCaseTypes.map((c) => c.name) },
+          { title: "Device", values: formDevices.map((d) => d.name) },
         ],
-        variants: compatible.map((device) => ({
-          title: device.name,
-          sku: `${design.sku_code}-${caseTypeSeed.sku_code}-${device.sku_code}`,
-          manage_inventory: true,
-          options: { Device: device.name },
-          prices: [
-            {
-              // Flat for five constructions; Alcantara varies by device group.
-              amount: priceForDevice(caseTypeSeed, device.slug),
-              currency_code: CURRENCY,
-            },
-          ],
-        })),
+        variants,
         sales_channels: [{ id: defaultSalesChannel.id }],
-      }
-    })
+      })
+      productCaseTypeIds.push(
+        formCaseTypes.map((c) => caseTypeBySlug.get(c.slug)!.id)
+      )
+    }
 
     const { result: created } = await createProductsWorkflow(container).run({
       input: { products: productsInput },
@@ -564,10 +635,10 @@ export default async function initialDataSeed({
           [Modules.PRODUCT]: { product_id: created[i].id },
           [CATALOG_MODULE]: { design_id: designRecord.id },
         },
-        {
+        ...productCaseTypeIds[i].map((caseTypeId) => ({
           [Modules.PRODUCT]: { product_id: created[i].id },
-          [CATALOG_MODULE]: { case_type_id: caseTypeIds[i] },
-        },
+          [CATALOG_MODULE]: { case_type_id: caseTypeId },
+        })),
       ])
     }
 

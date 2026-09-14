@@ -78,25 +78,31 @@ export async function wireImagesDevice({
   }
 
   const manifest = JSON.parse(fs.readFileSync(resolved, "utf8"))
-  let entries = Object.values(manifest.products) as any[]
-  if (limit > 0) entries = entries.slice(0, limit)
+  // The manifest is keyed "design|caseType" with device slugs underneath. A
+  // Structure-B product is one design in one form and spans several case types,
+  // so images are resolved PER VARIANT from its Case Type + Device options.
+  const entryByPair = new Map<string, any>(Object.entries(manifest.products))
 
-  const products = await productModule.listProducts(
+  let products = await productModule.listProducts(
     {},
-    { select: ["id", "handle", "metadata"], relations: ["variants"], take: 2000 }
+    {
+      select: ["id", "handle", "metadata"],
+      relations: ["variants", "variants.options", "options"],
+      take: 3000,
+    }
   )
-  const byPair = new Map<string, any>()
-  for (const product of products) {
-    const design = product.metadata?.design_slug
-    const caseType = product.metadata?.case_type_slug
-    if (design && caseType) byPair.set(`${design}|${caseType}`, product)
-  }
+  if (limit > 0) products = products.slice(0, limit)
 
-  // Variant title is the device name; the manifest is keyed by device slug.
-  const devices = await container
-    .resolve("catalog")
-    .listDevices({}, { select: ["slug", "name"] })
-  const slugByName = new Map<string, string>(devices.map((d: any) => [d.name, d.slug]))
+  // Option values are names; the manifest is keyed by slug.
+  const catalog = container.resolve("catalog")
+  const devices = await catalog.listDevices({}, { select: ["slug", "name"] })
+  const deviceSlugByName = new Map<string, string>(
+    devices.map((d: any) => [d.name, d.slug])
+  )
+  const caseTypes = await catalog.listCaseTypes({}, { select: ["slug", "name"] })
+  const caseTypeSlugByName = new Map<string, string>(
+    caseTypes.map((c: any) => [c.name, c.slug])
+  )
 
   let wiredProducts = 0
   let wiredVariants = 0
@@ -104,20 +110,50 @@ export async function wireImagesDevice({
   let skippedProducts = 0
   let urls = 0
 
-  for (const entry of entries) {
-    const product = byPair.get(`${entry.design}|${entry.case_type}`)
-    if (!product) {
+  for (const product of products) {
+    const design = product.metadata?.design_slug as string | undefined
+    if (!design) {
       skippedProducts++
       continue
     }
 
-    const byDevice = entry.images as Record<string, string[]>
+    // option id -> title ("Case Type" / "Device"), to read each variant's pair.
+    const optionTitleById = new Map<string, string>(
+      (product.options ?? []).map((o: any) => [o.id, o.title])
+    )
+
     const variantUpdates: { id: string; metadata: Record<string, unknown> }[] = []
     const flattened: string[] = []
 
     for (const variant of product.variants ?? []) {
-      const slug = slugByName.get(variant.title)
-      const paths = slug ? byDevice[slug] : undefined
+      let caseTypeName: string | undefined
+      let deviceName: string | undefined
+      for (const ov of variant.options ?? []) {
+        const title = optionTitleById.get(ov.option_id) ?? ov.option?.title
+        if (title === "Case Type") caseTypeName = ov.value
+        else if (title === "Device") deviceName = ov.value
+      }
+      // Fallback: the variant title is "<Case Type> / <Device>" (device names
+      // like "AirPods 1/2" have no spaces, so " / " splits cleanly).
+      if (!caseTypeName || !deviceName) {
+        const parts = (variant.title ?? "").split(" / ")
+        if (parts.length === 2) {
+          caseTypeName = caseTypeName ?? parts[0]
+          deviceName = deviceName ?? parts[1]
+        }
+      }
+
+      const caseTypeSlug = caseTypeName
+        ? caseTypeSlugByName.get(caseTypeName)
+        : undefined
+      const deviceSlug = deviceName
+        ? deviceSlugByName.get(deviceName)
+        : undefined
+      const entry = caseTypeSlug
+        ? entryByPair.get(`${design}|${caseTypeSlug}`)
+        : undefined
+      const paths: string[] | undefined =
+        entry && deviceSlug ? entry.images?.[deviceSlug] : undefined
       if (!paths?.length) {
         missingVariants++
         continue
@@ -127,7 +163,12 @@ export async function wireImagesDevice({
       flattened.push(...full)
       variantUpdates.push({
         id: variant.id,
-        metadata: { ...(variant.metadata ?? {}), images: full, device_slug: slug },
+        metadata: {
+          ...(variant.metadata ?? {}),
+          images: full,
+          device_slug: deviceSlug,
+          case_type_slug: caseTypeSlug,
+        },
       })
     }
 
@@ -137,7 +178,9 @@ export async function wireImagesDevice({
     }
 
     for (const update of variantUpdates) {
-      await productModule.updateProductVariants(update.id, { metadata: update.metadata })
+      await productModule.updateProductVariants(update.id, {
+        metadata: update.metadata,
+      })
       wiredVariants++
     }
 
@@ -150,8 +193,10 @@ export async function wireImagesDevice({
     })
     wiredProducts++
 
-    if (onProgress && wiredProducts % 50 === 0) {
-      onProgress(`${wiredProducts}/${entries.length} products, ${wiredVariants} variants`)
+    if (onProgress && wiredProducts % 25 === 0) {
+      onProgress(
+        `${wiredProducts}/${products.length} products, ${wiredVariants} variants`
+      )
     }
   }
 

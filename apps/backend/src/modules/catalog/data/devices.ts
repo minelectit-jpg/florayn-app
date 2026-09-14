@@ -39,8 +39,8 @@ const IPHONE: DeviceSeed[] = [
   { slug: "iphone-15-plus", name: "iPhone 15 Plus", sku_code: "IP15PL" },
   { slug: "iphone-15-pro", name: "iPhone 15 Pro", sku_code: "IP15P" },
   { slug: "iphone-15-pro-max", name: "iPhone 15 Pro Max", sku_code: "IP15PM" },
-  // Spelled "16e", not "16E" - it is the entry model of the 16 family.
-  { slug: "iphone-16e", name: "iPhone 16e", sku_code: "IP16E" },
+  // iPhone 16e is deliberately omitted: Florayn sells no case for it, so it has
+  // no design/case-type mapping and no images - a dummy device if seeded.
   { slug: "iphone-16", name: "iPhone 16", sku_code: "IP16" },
   { slug: "iphone-16-plus", name: "iPhone 16 Plus", sku_code: "IP16PL" },
   { slug: "iphone-16-pro", name: "iPhone 16 Pro", sku_code: "IP16P" },
