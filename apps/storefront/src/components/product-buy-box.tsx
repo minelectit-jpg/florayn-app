@@ -61,10 +61,26 @@ export default function ProductBuyBox({
 
   const price = selected?.calculated_price
 
+  // The product page is cached (ISR), so its baked stock can be stale. Refresh
+  // the shared blank availability client-side on mount so sold-out is current
+  // and we do not oversell.
+  const [liveStock, setLiveStock] = useState(stock)
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL
+    const key = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
+    if (!base || !key) return
+    fetch(`${base}/store/stock`, { headers: { "x-publishable-api-key": key } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.stock) setLiveStock(d.stock)
+      })
+      .catch(() => {})
+  }, [])
+
   // Shared blank availability. A missing key means the pair is outside the blank
   // system (e.g. a stock not tracked), so treat it as available.
   const availableFor = (ct: string, dev: string) =>
-    stock[`${ct}|${dev}`] ?? Infinity
+    liveStock[`${ct}|${dev}`] ?? Infinity
   const selectedOut = availableFor(caseType, device) <= 0
 
   useEffect(() => {
