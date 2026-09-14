@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import ProductView from "@/components/product-view"
+import RegularProductView from "@/components/regular-product-view"
 import {
   MoreDesigns,
   PairsWellWith,
@@ -90,6 +91,26 @@ export default async function ProductPage({ params }: Params) {
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
+
+  // A regular product (no Case Type + Device options) - e.g. a manually-added
+  // one-off - renders as a plain product page instead of the linked selectors.
+  if (!(matrix.caseTypes.length && matrix.devices.length)) {
+    return (
+      <article className="mx-auto w-full max-w-[1260px] px-[30px]">
+        <RegularProductView
+          product={product}
+          collection={
+            product.collection
+              ? {
+                  title: product.collection.title,
+                  handle: product.collection.handle,
+                }
+              : null
+          }
+        />
+      </article>
+    )
+  }
 
   /*
    * The base page's default device: the NEWEST flagship phone (iPhone first,
