@@ -21,6 +21,7 @@ export default function ProductBuyBox({
   matrix,
   selected,
   families,
+  stock,
   productTitle,
   thumbnail,
   caseType,
@@ -37,6 +38,8 @@ export default function ProductBuyBox({
   selected: StoreVariant | null
   /** device name -> family label, for grouping the drawer. */
   families: Record<string, string>
+  /** "<Case Type>|<Device>" -> available quantity (shared blank stock). */
+  stock: Record<string, number>
   productTitle: string
   thumbnail: string | null
   caseType: string
@@ -57,6 +60,12 @@ export default function ProductBuyBox({
   const drawerRef = useRef<HTMLDivElement>(null)
 
   const price = selected?.calculated_price
+
+  // Shared blank availability. A missing key means the pair is outside the blank
+  // system (e.g. a stock not tracked), so treat it as available.
+  const availableFor = (ct: string, dev: string) =>
+    stock[`${ct}|${dev}`] ?? Infinity
+  const selectedOut = availableFor(caseType, device) <= 0
 
   useEffect(() => {
     return () => {
@@ -119,12 +128,14 @@ export default function ProductBuyBox({
     resetTimer.current = setTimeout(() => setState("idle"), 2500)
   }
 
-  const cta = {
-    idle: "Add to cart",
-    adding: "Adding...",
-    added: "Added",
-    error: "Try again",
-  }[state]
+  const cta = selectedOut
+    ? "Sold out"
+    : {
+        idle: "Add to cart",
+        adding: "Adding...",
+        added: "Added",
+        error: "Try again",
+      }[state]
 
   return (
     <div>
@@ -142,6 +153,7 @@ export default function ProductBuyBox({
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
+              const soldOut = fits && availableFor(ct, device) <= 0
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
@@ -157,7 +169,7 @@ export default function ProductBuyBox({
                       isCurrent
                         ? "border-purple"
                         : "border-[#e2e2e2] hover:border-purple",
-                      !fits && !isCurrent ? "opacity-40" : "",
+                      (!fits && !isCurrent) || soldOut ? "opacity-40" : "",
                     ].join(" ")}
                   >
                     <span className="relative block h-[150px] w-full overflow-hidden rounded-t-[9px]">
@@ -173,7 +185,11 @@ export default function ProductBuyBox({
                         {ct}
                       </span>
                       <span className="mt-0.5 block text-[13px] tabular-nums text-ink-muted">
-                        {ctPrice != null ? formatPrice(ctPrice) : null}
+                        {soldOut
+                          ? "Sold out"
+                          : ctPrice != null
+                            ? formatPrice(ctPrice)
+                            : null}
                       </span>
                     </span>
                   </button>
@@ -235,6 +251,7 @@ export default function ProductBuyBox({
                       <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                         {list.map((d) => {
                           const isSelected = d === device
+                          const dOut = availableFor(caseType, d) <= 0
                           return (
                             <button
                               key={d}
@@ -248,13 +265,19 @@ export default function ProductBuyBox({
                                 setState("idle")
                               }}
                               className={[
-                                "block rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
+                                "flex items-center justify-between gap-2 rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
                                 isSelected
                                   ? "border-purple bg-purple-tint text-ink"
                                   : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
+                                dOut ? "opacity-45" : "",
                               ].join(" ")}
                             >
-                              {d}
+                              <span>{d}</span>
+                              {dOut ? (
+                                <span className="text-[11px] text-ink-faint">
+                                  Sold out
+                                </span>
+                              ) : null}
                             </button>
                           )
                         })}
@@ -299,7 +322,7 @@ export default function ProductBuyBox({
         <button
           type="button"
           onClick={onAdd}
-          disabled={!selected || state === "adding"}
+          disabled={!selected || selectedOut || state === "adding"}
           className={[
             "flex h-[50px] flex-1 items-center justify-center gap-2 rounded-[30px] px-6 text-[15px] font-semibold transition-colors",
             state === "error"

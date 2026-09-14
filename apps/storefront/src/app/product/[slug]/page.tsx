@@ -10,7 +10,7 @@ import {
   type RelatedProduct,
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
-import { getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
+import { getBlankStock, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
 import { resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
@@ -84,9 +84,10 @@ export default async function ProductPage({ params }: Params) {
   const designSlug = product.metadata?.design_slug as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, deviceCatalog] = await Promise.all([
+  const [families, deviceCatalog, stock] = await Promise.all([
     getDeviceFamilyMap(),
     getDeviceCatalog(),
+    getBlankStock(),
   ])
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
@@ -222,6 +223,7 @@ export default async function ProductPage({ params }: Params) {
         matrix={matrix}
         variants={product.variants ?? []}
         families={families}
+        stock={stock}
         fallbackImages={fallbackImages}
         designName={designName}
         productTitle={product.title}

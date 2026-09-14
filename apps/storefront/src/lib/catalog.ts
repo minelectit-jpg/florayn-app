@@ -92,3 +92,15 @@ export async function getDeviceCatalog(): Promise<DeviceRecord[]> {
   const data = await storeFetch<{ devices: DeviceRecord[] }>("/store/devices")
   return data?.devices ?? []
 }
+
+/**
+ * Availability per blank (case type x device), keyed "<Case Type>|<Device>".
+ * Shared across every design, so this one number decides sold-out for a
+ * (case type, device) everywhere.
+ */
+export async function getBlankStock(): Promise<Record<string, number>> {
+  const data = await storeFetch<{ stock: Record<string, number> }>(
+    "/store/stock"
+  )
+  return data?.stock ?? {}
+}

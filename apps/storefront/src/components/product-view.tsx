@@ -21,6 +21,7 @@ export default function ProductView({
   matrix,
   variants,
   families,
+  stock,
   fallbackImages,
   designName,
   productTitle,
@@ -38,6 +39,8 @@ export default function ProductView({
   variants: StoreVariant[]
   /** device name -> family label, for grouping the device drawer. */
   families: Record<string, string>
+  /** "<Case Type>|<Device>" -> available quantity (shared blank stock). */
+  stock: Record<string, number>
   /** Used when a variant has no wired renders yet. */
   fallbackImages: string[]
   designName: string
@@ -140,6 +143,7 @@ export default function ProductView({
             matrix={matrix}
             selected={selected}
             families={families}
+            stock={stock}
             productTitle={productTitle}
             thumbnail={items[0]?.url ?? null}
             caseType={caseType}
