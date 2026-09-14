@@ -55,12 +55,15 @@ export async function wireImagesDevice({
   limit = 0,
   baseUrl,
   manifestPath,
+  productIds,
   onProgress,
 }: {
   container: any
   limit?: number
   baseUrl?: string
   manifestPath?: string
+  /** Wire only these products (e.g. a single new design), instead of all. */
+  productIds?: string[]
   onProgress?: (message: string) => void
 }): Promise<WireResult> {
   const productModule = container.resolve(Modules.PRODUCT)
@@ -84,7 +87,7 @@ export async function wireImagesDevice({
   const entryByPair = new Map<string, any>(Object.entries(manifest.products))
 
   let products = await productModule.listProducts(
-    {},
+    productIds?.length ? { id: productIds } : {},
     {
       select: ["id", "handle", "metadata"],
       relations: ["variants", "variants.options", "options"],
