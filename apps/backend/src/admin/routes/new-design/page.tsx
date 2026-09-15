@@ -943,6 +943,7 @@ const NewDesignPage = () => {
   const [q, setQ] = useState("")
   const [onlyPending, setOnlyPending] = useState(true)
   const [adding, setAdding] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<string | null>(null)
 
   function load() {
     setLoading(true)
@@ -972,6 +973,27 @@ const NewDesignPage = () => {
       toast.error(e.message)
     } finally {
       setAdding(null)
+    }
+  }
+
+  async function remove(design: Design) {
+    if (
+      !window.confirm(
+        `Remove "${design.name}" from the store? Its product(s) will be deleted. (Shared blank stock is kept.)`
+      )
+    )
+      return
+    setRemoving(design.slug)
+    try {
+      const d = await api(`/admin/designs/${design.slug}`, { method: "DELETE" })
+      setDesigns((list) =>
+        list.map((x) => (x.slug === design.slug ? { ...x, live: false } : x))
+      )
+      toast.success(`${design.name}: ${d.deleted} product(s) removed.`)
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setRemoving(null)
     }
   }
 
@@ -1055,9 +1077,20 @@ const NewDesignPage = () => {
                     </Table.Cell>
                     <Table.Cell>
                       {d.live ? (
-                        <Badge size="2xsmall" color="green">
-                          Live
-                        </Badge>
+                        <div className="flex items-center justify-end gap-2">
+                          <Badge size="2xsmall" color="green">
+                            Live
+                          </Badge>
+                          <Button
+                            size="small"
+                            variant="secondary"
+                            isLoading={removing === d.slug}
+                            disabled={!!removing}
+                            onClick={() => remove(d)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
                       ) : (
                         <Button
                           size="small"
