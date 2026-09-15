@@ -82,6 +82,10 @@ async function pool<T>(
  * unmatched and the admin picks it from a dropdown.
  */
 const CASE_ALIASES: Record<string, string> = {
+  // "Tough MagSafe" (spelt "Though MagSafe" in the owner's FileBird) = Signature.
+  "tough-magsafe": "signature",
+  "though-magsafe": "signature",
+  "signature-magsafe": "signature",
   "elite-transparent-magsafe": "elite-clear",
   "elite-transparent": "elite-clear",
   "elite-clear-magsafe": "elite-clear",
@@ -89,7 +93,6 @@ const CASE_ALIASES: Record<string, string> = {
   "armor-transparent": "armor-clear",
   "armor-clear-magsafe": "armor-clear",
   "armor-black-magsafe": "armor-black",
-  "signature-magsafe": "signature",
   "essentials-magsafe": "essentials",
 }
 
