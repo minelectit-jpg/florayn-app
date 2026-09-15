@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import ShoppingBagIcon from "@/components/shopping-bag-icon"
 
 /**
  * The card's quick-add control, matching .fl-qadd on florayn.com: a bare 23px
@@ -82,29 +83,14 @@ export default function QuickAdd({
         }`}
         aria-label={`Add ${productTitle}, ${variantTitle}, to cart`}
       >
-        <BagPlusIcon />
+        <ShoppingBagIcon className="fl-qadd__icon" />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-[2px] top-[1px] text-[11px] font-semibold leading-none"
+        >
+          +
+        </span>
       </button>
     </span>
-  )
-}
-
-/** Shopping bag with a small plus at the top right, on a 24 grid. */
-function BagPlusIcon() {
-  return (
-    <svg
-      className="fl-qadd__icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M4.5 8.5h11l-.9 11a1.6 1.6 0 0 1-1.6 1.5H7a1.6 1.6 0 0 1-1.6-1.5z" />
-      <path d="M7.6 8.5V6.4A2.4 2.4 0 0 1 10 4a2.4 2.4 0 0 1 2.4 2.4v2.1" />
-      <path d="M18.5 3.2v4.6M20.8 5.5h-4.6" />
-    </svg>
   )
 }

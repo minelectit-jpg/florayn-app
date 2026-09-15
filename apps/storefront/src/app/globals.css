@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /*
  * Florayn brand tokens.
@@ -57,6 +58,60 @@
 
   /* ---- Motion ----------------------------------------------------------- */
   --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * shadcn/ui token layer, BRIDGED to the Florayn brand above. shadcn components
+ * (copied into components/ui) read these semantic tokens, so they inherit our
+ * colours, radius and font instead of the default shadcn look. Change a brand
+ * value once in @theme and it flows through here too.
+ */
+:root {
+  --radius: 0.625rem; /* 10px, our card radius */
+  --background: var(--color-paper);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-ink); /* near-black primary, like florayn's Add to cart */
+  --primary-foreground: #ffffff;
+  --secondary: #f2f0ec;
+  --secondary-foreground: var(--color-ink);
+  --muted: #f2f0ec;
+  --muted-foreground: var(--color-ink-muted);
+  --accent: var(--color-purple-tint);
+  --accent-foreground: var(--color-ink);
+  --destructive: var(--color-danger);
+  --border: var(--color-line);
+  --input: var(--color-line);
+  --ring: var(--color-purple);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 @layer base {

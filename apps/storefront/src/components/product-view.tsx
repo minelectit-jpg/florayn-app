@@ -1,10 +1,10 @@
 "use client"
 
-import Link from "next/link"
 import { useMemo, useState, type ReactNode } from "react"
 
 import ProductBuyBox from "@/components/product-buy-box"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
+import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
@@ -24,13 +24,11 @@ export default function ProductView({
   stock,
   fallbackImages,
   designName,
+  productHandle,
   productTitle,
-  collection,
-  deviceName,
   initialCaseType,
   initialDevice,
-  fitCopy,
-  moreDesigns,
+  moreDesignItems,
   shipping,
   tabs,
   pairs,
@@ -44,6 +42,8 @@ export default function ProductView({
   /** Used when a variant has no wired renders yet. */
   fallbackImages: string[]
   designName: string
+  /** The product handle, passed through as the wishlist's stable key. */
+  productHandle: string
   productTitle: string
   collection?: { title: string; handle: string } | null
   /** Set on a device page: the device this URL is for (drives the H1). */
@@ -51,7 +51,8 @@ export default function ProductView({
   initialCaseType: string
   initialDevice: string
   fitCopy?: string | null
-  moreDesigns?: ReactNode
+  /** Sibling designs for the MORE DESIGNS strip; rendered on the live device. */
+  moreDesignItems?: RelatedProduct[]
   shipping?: ReactNode
   tabs: ReactNode
   pairs: ReactNode
@@ -108,7 +109,7 @@ export default function ProductView({
   }
 
   return (
-    <div className="grid gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
+    <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
       <div>
         <ProductGallery
           key={selected?.id ?? "default"}
@@ -118,25 +119,27 @@ export default function ProductView({
       </div>
 
       <div className="lg:sticky lg:top-[50px] lg:self-start">
-        {collection ? (
-          <Link
-            href={`/collection/${collection.handle}/`}
-            className="eyebrow transition-colors hover:text-purple"
-          >
-            {collection.title}
-          </Link>
-        ) : null}
+        {/* Stock badge, above the title like florayn's "N in stock". Reflects
+            the live (case type, device) blank; an untracked pair reads as in
+            stock. */}
+        {(() => {
+          const n = stock[`${caseType}|${device}`]
+          const inStock = n === undefined || n > 0
+          return (
+            <p
+              className={`mb-1.5 text-[15px] ${inStock ? "text-[#444]" : "text-danger"}`}
+            >
+              {inStock ? "In stock" : "Sold out"}
+            </p>
+          )
+        })()}
 
-        <h1 className="mt-2 text-[1.625rem] font-semibold leading-tight tracking-[-0.034em]">
-          {deviceName ? `${designName} ${deviceName} Case` : designName}
-          <span className="text-ink-muted"> &ndash; {caseType}</span>
+        {/* Title only, matching florayn: "Design – Device Case", no collection
+            eyebrow, no case-type suffix, no fit paragraph above the price. It
+            follows the live device so an in-place model change keeps it true. */}
+        <h1 className="text-[1.625rem] font-semibold leading-[1.21] tracking-[-0.034em] text-[#111]">
+          {device ? `${designName} – ${device} Case` : designName}
         </h1>
-
-        {fitCopy ? (
-          <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
-            {fitCopy}
-          </p>
-        ) : null}
 
         <div className="mt-3">
           <ProductBuyBox
@@ -144,6 +147,7 @@ export default function ProductView({
             selected={selected}
             families={families}
             stock={stock}
+            productHandle={productHandle}
             productTitle={productTitle}
             thumbnail={items[0]?.url ?? null}
             caseType={caseType}
@@ -152,7 +156,15 @@ export default function ProductView({
             onSelectDevice={selectDevice}
             imageForCaseType={imageForCaseType}
             priceForCaseType={priceForCaseType}
-            moreDesigns={moreDesigns}
+            moreDesigns={
+              moreDesignItems?.length ? (
+                <MoreDesigns
+                  items={moreDesignItems}
+                  device={device}
+                  caseType={caseType}
+                />
+              ) : null
+            }
             shipping={shipping}
           />
         </div>

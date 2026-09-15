@@ -1,10 +1,13 @@
 "use client"
 
+import { X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
+import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import Price from "@/components/price"
 import type { CaseTypeRecord, DeviceRecord } from "@/lib/catalog"
+import { cn } from "@/lib/utils"
 
 /**
  * The shop's two selectors, matching the live florayn.com UX: a "Select model"
@@ -41,78 +44,109 @@ function useModalChrome(onClose: () => void) {
   }, [onClose])
 }
 
-/** A full-height panel that slides in from the left - the live site's model picker. */
-function SideDrawer({
-  title,
+/**
+ * The case-type picker - a centred modal matching florayn.com's SELECT CASE
+ * TYPE exactly: close on the left, a 3-col grid of image + name + price cards
+ * (active outlined near-black), the selected type's detail below, and a
+ * full-width purple SELECT that confirms. On mobile it becomes a bottom sheet.
+ */
+function CaseTypeModal({
+  caseTypes,
+  images,
+  current,
   onClose,
-  children,
+  onSelect,
 }: {
-  title: string
+  caseTypes: CaseTypeRecord[]
+  images: Record<string, string>
+  current: string
   onClose: () => void
-  children: React.ReactNode
+  onSelect: (slug: string) => void
 }) {
   useModalChrome(onClose)
-  return (
-    <div className="fixed inset-0 z-50">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/40"
-      />
-      <div className="absolute inset-y-0 left-0 flex w-[88%] max-w-[380px] flex-col bg-paper shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)]">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid size-8 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink"
-          >
-            &times;
-          </button>
-          <p className="flex-1 text-center text-[13px] font-semibold uppercase tracking-[0.14em]">
-            {title}
-          </p>
-          <span className="size-8 shrink-0" aria-hidden="true" />
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
-      </div>
-    </div>
-  )
-}
+  const [pending, setPending] = useState(current)
+  const active = caseTypes.find((c) => c.slug === pending) ?? caseTypes[0]
 
-/** A centred modal - the live site's case-type picker. */
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
-  useModalChrome(onClose)
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
         className="absolute inset-0 bg-ink/40"
       />
-      <div className="relative flex max-h-[85vh] w-full max-w-[560px] flex-col overflow-hidden rounded-[16px] border border-line bg-paper shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)]">
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.14em]">{title}</p>
+      <div className="relative flex max-h-[92vh] w-full max-w-[720px] flex-col overflow-hidden rounded-t-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)] sm:max-h-[88vh] sm:rounded-[12px]">
+        <div className="relative border-b border-[#ededed] px-[52px] py-4 text-center">
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid size-8 place-items-center rounded-full border border-line text-ink-muted transition-colors hover:text-ink"
+            className="absolute left-4 top-1/2 grid size-6 -translate-y-1/2 place-items-center text-ink transition-opacity hover:opacity-60"
           >
-            &times;
+            <X className="size-[18px]" strokeWidth={1.5} />
           </button>
+          <p className="text-[14px] font-semibold uppercase tracking-[1.12px] text-[#111]">
+            Select case type
+          </p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-[18px]">
+          <div className="grid grid-cols-3 gap-3">
+            {caseTypes.map((c) => {
+              const isActive = c.slug === pending
+              return (
+                <button
+                  key={c.slug}
+                  type="button"
+                  onClick={() => setPending(c.slug)}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "flex flex-col overflow-hidden rounded-[8px] border text-center transition-colors",
+                    isActive ? "border-[#111]" : "border-[#e6e6e6] hover:border-[#111]"
+                  )}
+                >
+                  <span className="block aspect-square w-full overflow-hidden bg-[#f5f5f5]">
+                    {images[c.slug] ? (
+                      <img
+                        src={images[c.slug]}
+                        alt={c.name}
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : null}
+                  </span>
+                  <span className="px-1.5 pb-2.5 pt-2">
+                    <span className="block text-[12px] font-medium text-[#111]">
+                      {c.name}
+                    </span>
+                    <span className="block text-[12px] text-[#111]">
+                      <Price amount={c.price} />
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {active ? (
+            <div className="mt-5">
+              <h3 className="mb-2 text-[18px] font-semibold text-[#111]">{active.name}</h3>
+              {active.description ? (
+                <p className="text-[13px] leading-[1.6] text-[#333]">
+                  {active.description}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onSelect(pending)}
+          className="w-full bg-purple py-4 text-[14px] font-semibold uppercase tracking-[0.06em] text-white transition-colors hover:bg-purple-deep"
+        >
+          Select
+        </button>
       </div>
     </div>
   )
@@ -123,16 +157,18 @@ export default function ShopSelectors({
   caseTypeSlug,
   devices,
   caseTypes,
+  caseTypeImages = {},
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
   devices: DeviceRecord[]
   caseTypes: CaseTypeRecord[]
+  /** case type slug -> a sample render for the current device (florayn shows one). */
+  caseTypeImages?: Record<string, string>
 }) {
   const router = useRouter()
   const [openModel, setOpenModel] = useState(false)
   const [openCase, setOpenCase] = useState(false)
-  const [query, setQuery] = useState("")
 
   const curDevice = deviceSlug || DEFAULT_DEVICE
   const curCase = caseTypeSlug || DEFAULT_CASE_TYPE
@@ -145,25 +181,23 @@ export default function ShopSelectors({
   function go(nextDevice: string, nextCase: string) {
     setOpenModel(false)
     setOpenCase(false)
-    setQuery("")
     router.push(`/shop/${nextDevice}/${nextCase}/`)
   }
 
-  const grouped = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    const byFamily = new Map<string, DeviceRecord[]>()
-    for (const d of devices) {
-      if (needle && !d.name.toLowerCase().includes(needle)) continue
-      const bucket = byFamily.get(d.family) ?? []
-      bucket.push(d)
-      byFamily.set(d.family, bucket)
-    }
-    return FAMILY_ORDER.filter((f) => byFamily.has(f)).map(
-      (f) => [FAMILY_LABEL[f] ?? f, byFamily.get(f)!] as const
-    )
-  }, [devices, query])
-
-  const matchCount = grouped.reduce((n, [, l]) => n + l.length, 0)
+  // The whole catalogue as drawer items, family-grouped in FAMILY_ORDER.
+  const modelItems: ModelItem[] = useMemo(
+    () =>
+      devices
+        .map((d) => ({
+          value: d.slug,
+          label: d.name,
+          group: FAMILY_LABEL[d.family] ?? d.family,
+          rank: FAMILY_ORDER.indexOf(d.family),
+        }))
+        .sort((a, b) => (a.rank === -1 ? 99 : a.rank) - (b.rank === -1 ? 99 : b.rank))
+        .map(({ rank: _rank, ...item }) => item),
+    [devices]
+  )
 
   return (
     <div className="flex flex-wrap items-stretch gap-3">
@@ -195,88 +229,24 @@ export default function ShopSelectors({
         </span>
       </button>
 
-      {openModel ? (
-        <SideDrawer title="Select model" onClose={() => setOpenModel(false)}>
-          <input
-            type="search"
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type to search"
-            className="field-input mb-4"
-          />
-          {matchCount === 0 ? (
-            <p className="px-1 py-6 text-sm text-ink-muted">
-              No model matches &ldquo;{query}&rdquo;.
-            </p>
-          ) : (
-            <div className="space-y-5">
-              {grouped.map(([label, list]) => (
-                <div key={label}>
-                  <p className="mb-1 text-[13px] font-semibold">{label}</p>
-                  <div className="flex flex-col">
-                    {list.map((d) => {
-                      const isCurrent = d.slug === curDevice
-                      return (
-                        <button
-                          key={d.slug}
-                          type="button"
-                          onClick={() => go(d.slug, curCase)}
-                          aria-pressed={isCurrent}
-                          className={[
-                            "flex items-center justify-between gap-2 rounded-[8px] px-2 py-2.5 text-left text-[15px] transition-colors",
-                            isCurrent
-                              ? "font-semibold text-ink"
-                              : "text-ink-muted hover:bg-purple-tint hover:text-ink",
-                          ].join(" ")}
-                        >
-                          {d.name}
-                          {isCurrent ? (
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-purple">
-                              Selected
-                            </span>
-                          ) : null}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </SideDrawer>
-      ) : null}
+      {/* Model picker - the shared florayn SELECT MODEL drawer; picking a device
+          navigates to its clean /shop URL. */}
+      <ModelDrawer
+        open={openModel}
+        onOpenChange={setOpenModel}
+        items={modelItems}
+        current={curDevice}
+        onSelect={(slug) => go(slug, curCase)}
+      />
 
       {openCase ? (
-        <Modal title="Select case type" onClose={() => setOpenCase(false)}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {caseTypes.map((c) => {
-              const isCurrent = c.slug === curCase
-              return (
-                <button
-                  key={c.slug}
-                  type="button"
-                  onClick={() => go(curDevice, c.slug)}
-                  aria-pressed={isCurrent}
-                  className={[
-                    "flex flex-col gap-1 rounded-[12px] border bg-surface px-4 py-4 text-left transition-colors",
-                    isCurrent ? "border-purple" : "border-line hover:border-purple",
-                  ].join(" ")}
-                >
-                  <span className="text-[15px] font-semibold">{c.name}</span>
-                  <span className="text-[13px] tabular-nums text-ink-muted">
-                    <Price amount={c.price} />
-                  </span>
-                  {c.description ? (
-                    <span className="mt-1 line-clamp-3 text-[12px] leading-snug text-ink-muted">
-                      {c.description}
-                    </span>
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
-        </Modal>
+        <CaseTypeModal
+          caseTypes={caseTypes}
+          images={caseTypeImages}
+          current={curCase}
+          onClose={() => setOpenCase(false)}
+          onSelect={(slug) => go(curDevice, slug)}
+        />
       ) : null}
     </div>
   )

@@ -10,37 +10,59 @@ export type RelatedProduct = {
   thumbnail?: string | null
   label: string
   price?: number | null
+  /** "device|caseType" -> that design in the exact same finish and model. */
+  imageByPair?: Record<string, string>
+  /** device name -> that design on that device, when the exact pair is absent. */
+  imageByDevice?: Record<string, string>
 }
 
 /**
  * MORE DESIGNS - other artwork in the same finish. A 108px drag-scroll strip
- * on the live page, 12px apart.
+ * on the live page, 12px apart. Each thumbnail follows the customer's current
+ * choice: the same case type on the same device where that design offers it,
+ * else the same device, else the design's own thumbnail.
  */
-export function MoreDesigns({ items }: { items: RelatedProduct[] }) {
+export function MoreDesigns({
+  items,
+  device,
+  caseType,
+}: {
+  items: RelatedProduct[]
+  device?: string
+  caseType?: string
+}) {
   if (!items.length) return null
 
   return (
     <section className="mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
       <ul className="flex gap-[12px] overflow-x-auto pb-2">
-        {items.map((item) => (
-          <li key={item.id} className="shrink-0">
-            <Link
-              href={`/product/${item.handle}/`}
-              title={item.label}
-              className="block size-[108px] overflow-hidden rounded-[10px] border border-[#ececec] transition-colors hover:border-purple"
-            >
-              <span className="relative block size-full">
-                <ProductImage
-                  src={item.thumbnail}
-                  alt={item.label}
-                  label={item.label}
-                  sizes="108px"
-                />
-              </span>
-            </Link>
-          </li>
-        ))}
+        {items.map((item) => {
+          const src =
+            (device && caseType
+              ? item.imageByPair?.[`${device}|${caseType}`]
+              : null) ??
+            (device ? item.imageByDevice?.[device] : null) ??
+            item.thumbnail
+          return (
+            <li key={item.id} className="shrink-0">
+              <Link
+                href={`/product/${item.handle}/`}
+                title={item.label}
+                className="block size-[108px] overflow-hidden rounded-[10px] border border-[#ececec] transition-colors hover:border-purple"
+              >
+                <span className="relative block size-full">
+                  <ProductImage
+                    src={src}
+                    alt={item.label}
+                    label={item.label}
+                    sizes="108px"
+                  />
+                </span>
+              </Link>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

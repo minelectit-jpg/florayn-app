@@ -83,16 +83,42 @@ export default async function ShopView({
   const targetForm = device ? formForFamily(device.family) : "phone"
 
   const category = await categoryFor(caseTypeSlug)
-  const { products, count, error } = await listProducts(
+  const { products, error } = await listProducts(
     category ? { category_id: [category.id], limit: 200 } : { limit: 200 }
   )
-  const truncated = count > products.length
 
   const filtered: StoreProduct[] = products.filter(
     (p) =>
       (p.metadata?.form ?? "phone") === targetForm &&
       (!device || hasDevice(p, device.name))
   )
+
+  // Which case types the current device is actually sold in - with a sample
+  // render for each - so the case-type picker only offers real options (a case
+  // type the model has no product for is hidden) and can show its image.
+  const caseTypeByName = new Map(caseTypes.map((c) => [c.name, c]))
+  const caseTypeImages: Record<string, string> = {}
+  const availableSlugs = new Set<string>()
+  if (device) {
+    for (const p of filtered) {
+      for (const v of p.variants ?? []) {
+        const values = (v.options ?? []).map((o) => o.value)
+        if (!values.includes(device.name)) continue
+        const ctName = values.find((x) => x && caseTypeByName.has(x))
+        if (!ctName) continue
+        const ct = caseTypeByName.get(ctName)!
+        availableSlugs.add(ct.slug)
+        if (!caseTypeImages[ct.slug]) {
+          const img = (v.metadata?.images as string[] | undefined)?.[0]
+          if (img) caseTypeImages[ct.slug] = img
+        }
+      }
+    }
+  }
+  const shownCaseTypes =
+    device && availableSlugs.size
+      ? caseTypes.filter((c) => availableSlugs.has(c.slug))
+      : caseTypes
 
   const heading = device
     ? `${device.name} Cases`
@@ -102,24 +128,17 @@ export default async function ShopView({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-3">
-        <p className="eyebrow">Shop</p>
-        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
-          {heading}
-        </h1>
-        {error ? null : (
-          <p className="text-sm text-ink-muted">
-            {filtered.length} {filtered.length === 1 ? "product" : "products"}
-            {category ? ` · ${category.name}` : ""}
-            {truncated && !device ? ` of ${count}` : ""}
-          </p>
-        )}
+      <header>
+        {/* Kept for SEO / screen readers only - the selectors below show the
+            same context (device + case type), so the big title block is hidden. */}
+        <h1 className="sr-only">{heading}</h1>
 
         <ShopSelectors
           deviceSlug={device?.slug}
           caseTypeSlug={category ? caseTypeSlug : undefined}
           devices={devices}
-          caseTypes={caseTypes}
+          caseTypes={shownCaseTypes}
+          caseTypeImages={caseTypeImages}
         />
       </header>
 

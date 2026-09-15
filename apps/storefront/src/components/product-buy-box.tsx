@@ -1,8 +1,12 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
+import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import ProductImage from "@/components/product-image"
+import ShareButton from "@/components/share-button"
+import WishlistButton from "@/components/wishlist-button"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
 import type { StoreVariant } from "@/lib/medusa"
@@ -10,6 +14,33 @@ import { formatPrice } from "@/lib/money"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
 type AddState = "idle" | "adding" | "added" | "error"
+
+/**
+ * Family group order in the device drawer, matching the shop's SELECT MODEL.
+ * A device whose family the /store/devices map does not label (e.g. one that is
+ * deactivated but still has blanks) is placed by inferring the family from its
+ * name, so an iPhone never lands in a stray "Other" bucket.
+ */
+const GROUP_ORDER = [
+  "iPhone",
+  "Samsung Galaxy",
+  "AirPods",
+  "Apple Watch",
+  "Card Wallet",
+  "Other",
+]
+
+function groupLabel(name: string, families: Record<string, string>): string {
+  const known = families[name]
+  if (known) return known
+  const n = name.toLowerCase()
+  if (n.includes("iphone")) return "iPhone"
+  if (n.includes("galaxy") || n.includes("samsung")) return "Samsung Galaxy"
+  if (n.includes("airpods")) return "AirPods"
+  if (n.includes("watch")) return "Apple Watch"
+  if (n.includes("wallet") || n.includes("card")) return "Card Wallet"
+  return "Other"
+}
 
 /**
  * The right-hand column of the product page, from the price down. Owns the two
@@ -22,6 +53,7 @@ export default function ProductBuyBox({
   selected,
   families,
   stock,
+  productHandle,
   productTitle,
   thumbnail,
   caseType,
@@ -40,6 +72,8 @@ export default function ProductBuyBox({
   families: Record<string, string>
   /** "<Case Type>|<Device>" -> available quantity (shared blank stock). */
   stock: Record<string, number>
+  /** The product handle, the wishlist's stable key. */
+  productHandle: string
   productTitle: string
   thumbnail: string | null
   caseType: string
@@ -51,13 +85,13 @@ export default function ProductBuyBox({
   moreDesigns?: ReactNode
   shipping?: ReactNode
 }) {
+  const router = useRouter()
   const { add } = useCart()
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
+  const [openModel, setOpenModel] = useState(false)
   const [qty, setQty] = useState(1)
+  const [buying, setBuying] = useState(false)
   const [state, setState] = useState<AddState>("idle")
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const drawerRef = useRef<HTMLDivElement>(null)
 
   const price = selected?.calculated_price
 
@@ -89,42 +123,24 @@ export default function ProductBuyBox({
     }
   }, [])
 
-  // Close the drawer on Escape or a click outside it.
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false)
-    }
-    function onClick(e: MouseEvent) {
-      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener("keydown", onKey)
-    document.addEventListener("mousedown", onClick)
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.removeEventListener("mousedown", onClick)
-    }
-  }, [open])
-
-  // Devices available for the selected case type, grouped by family for the
-  // drawer. Switching case type changes this list.
+  // Devices available for the selected case type only (not all 39), turned into
+  // the shared model-drawer's items: family-grouped in the shop's order, with a
+  // "Sold out" note when that device's blank is empty for this case type.
   const availableDevices = matrix.devicesByCaseType[caseType] ?? []
-  const grouped = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    const groups = new Map<string, string[]>()
-    for (const d of availableDevices) {
-      if (needle && !d.toLowerCase().includes(needle)) continue
-      const label = families[d] ?? "Other"
-      const bucket = groups.get(label) ?? []
-      bucket.push(d)
-      groups.set(label, bucket)
-    }
-    return [...groups.entries()]
-  }, [availableDevices, families, query])
-
-  const matchCount = grouped.reduce((sum, [, list]) => sum + list.length, 0)
+  const deviceItems: ModelItem[] = useMemo(() => {
+    return availableDevices
+      .map((d) => ({
+        value: d,
+        label: d,
+        group: groupLabel(d, families),
+        note: availableFor(caseType, d) <= 0 ? "Sold out" : null,
+      }))
+      .sort((a, b) => {
+        const ga = GROUP_ORDER.indexOf(a.group)
+        const gb = GROUP_ORDER.indexOf(b.group)
+        return (ga === -1 ? 99 : ga) - (gb === -1 ? 99 : gb)
+      })
+  }, [availableDevices, families, caseType, liveStock])
 
   async function onAdd() {
     if (!selected || state === "adding") return
@@ -144,6 +160,30 @@ export default function ProductBuyBox({
     resetTimer.current = setTimeout(() => setState("idle"), 2500)
   }
 
+  // Buy it now: add the selected variant, then go straight to checkout instead
+  // of opening the cart drawer.
+  async function onBuyNow() {
+    if (!selected || buying || selectedOut) return
+    setBuying(true)
+    try {
+      await add(
+        selected.id,
+        qty,
+        {
+          productTitle,
+          variantTitle: `${caseType} / ${device}`,
+          unitPrice: price?.calculated_amount ?? 0,
+          thumbnail,
+        },
+        { openDrawer: false }
+      )
+      router.push("/checkout")
+    } catch {
+      setBuying(false)
+      setState("error")
+    }
+  }
+
   const cta = selectedOut
     ? "Sold out"
     : {
@@ -160,10 +200,55 @@ export default function ProductBuyBox({
         {formatPrice(price?.calculated_amount, price?.currency_code)}
       </p>
 
-      {/* CASE TYPE - in-page tiles. A case type not sold for the selected
-          device is disabled rather than hidden, so the range stays visible. */}
+      {/* DEVICE - opens the same florayn SELECT MODEL drawer as the shop, but
+          picks the device in place (no navigation). Order matches florayn:
+          Device, then More designs, then Case type. */}
+      <div className="mt-6">
+        <p className="fl-pdp-label">DEVICE</p>
+        <button
+          type="button"
+          onClick={() => setOpenModel(true)}
+          aria-haspopup="dialog"
+          className="flex h-[52px] w-full items-center justify-between rounded-[12px] border border-[#e2e2e2] bg-surface px-4 text-left text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
+        >
+          <span>{device || "Select a device"}</span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            aria-hidden="true"
+            className="shrink-0"
+          >
+            <path
+              d="M3 5l4 4 4-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+
+        <ModelDrawer
+          open={openModel}
+          onOpenChange={setOpenModel}
+          items={deviceItems}
+          current={device}
+          onSelect={(d) => {
+            onSelectDevice(d)
+            setOpenModel(false)
+            setState("idle")
+          }}
+        />
+      </div>
+
+      {moreDesigns}
+
+      {/* CASE TYPE - in-page tiles, below Device + More designs to match
+          florayn. A case type not sold for the selected device is disabled
+          rather than hidden, so the range stays visible. */}
       {matrix.caseTypes.length > 1 ? (
-        <section className="mt-5">
+        <section className="mt-6">
           <p className="fl-pdp-label">CASE TYPE</p>
           <ul className="flex flex-wrap gap-[10px]">
             {matrix.caseTypes.map((ct) => {
@@ -216,101 +301,11 @@ export default function ProductBuyBox({
         </section>
       ) : null}
 
-      {/* DEVICE */}
-      <div className="mt-6">
-        <p className="fl-pdp-label">DEVICE</p>
-        <div ref={drawerRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-haspopup="listbox"
-            className="flex h-[52px] w-full items-center justify-between rounded-[12px] border border-[#e2e2e2] bg-surface px-4 text-left text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
-          >
-            <span>{device || "Select a device"}</span>
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              aria-hidden="true"
-              className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-            >
-              <path
-                d="M3 5l4 4 4-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+      {/* Share - grey link above the cart form, matching florayn. */}
+      <ShareButton title={productTitle} />
 
-          {open ? (
-            <div className="absolute inset-x-0 top-[calc(100%+6px)] z-30 rounded-[12px] border border-line bg-surface p-3 shadow-[0_18px_34px_-18px_rgba(26,22,37,0.28)]">
-              <input
-                type="search"
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Search ${availableDevices.length} devices`}
-                className="field-input mb-3"
-              />
-              <div role="listbox" className="max-h-72 space-y-4 overflow-y-auto pr-1">
-                {matchCount === 0 ? (
-                  <p className="px-1 py-6 text-sm text-ink-muted">
-                    No device matches &ldquo;{query}&rdquo;.
-                  </p>
-                ) : (
-                  grouped.map(([familyLabel, list]) => (
-                    <div key={familyLabel}>
-                      <p className="eyebrow px-1 pb-2">{familyLabel}</p>
-                      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                        {list.map((d) => {
-                          const isSelected = d === device
-                          const dOut = availableFor(caseType, d) <= 0
-                          return (
-                            <button
-                              key={d}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              onClick={() => {
-                                onSelectDevice(d)
-                                setOpen(false)
-                                setQuery("")
-                                setState("idle")
-                              }}
-                              className={[
-                                "flex items-center justify-between gap-2 rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
-                                isSelected
-                                  ? "border-purple bg-purple-tint text-ink"
-                                  : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
-                                dOut ? "opacity-45" : "",
-                              ].join(" ")}
-                            >
-                              <span>{d}</span>
-                              {dOut ? (
-                                <span className="text-[11px] text-ink-faint">
-                                  Sold out
-                                </span>
-                              ) : null}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {moreDesigns}
-
-      {/* Quantity + add to cart. */}
-      <div className="mt-7 flex items-stretch gap-3">
+      {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
+      <div className="mt-2 flex items-stretch gap-[10px]">
         <div className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
             type="button"
@@ -340,7 +335,7 @@ export default function ProductBuyBox({
           onClick={onAdd}
           disabled={!selected || selectedOut || state === "adding"}
           className={[
-            "flex h-[50px] flex-1 items-center justify-center gap-2 rounded-[30px] px-6 text-[15px] font-semibold transition-colors",
+            "flex h-[50px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-[30px] px-4 text-[15px] font-semibold transition-colors",
             state === "error"
               ? "border border-danger text-danger"
               : "bg-ink text-white hover:bg-purple",
@@ -355,7 +350,24 @@ export default function ProductBuyBox({
             </span>
           ) : null}
         </button>
+
+        <WishlistButton
+          handle={productHandle}
+          title={productTitle}
+          thumbnail={thumbnail}
+        />
       </div>
+
+      {/* Buy it now - full-width purple, straight to checkout. */}
+      <button
+        type="button"
+        onClick={onBuyNow}
+        disabled={!selected || selectedOut || buying}
+        className="mt-[10px] flex h-[50px] w-full items-center justify-center gap-2 rounded-[30px] bg-purple px-6 text-[15px] font-semibold text-white transition-colors hover:bg-purple-deep disabled:opacity-60"
+      >
+        {buying ? <Spinner /> : null}
+        {buying ? "Taking you to checkout..." : "Buy it now"}
+      </button>
 
       <p role="status" aria-live="polite" className="sr-only">
         {state === "adding"

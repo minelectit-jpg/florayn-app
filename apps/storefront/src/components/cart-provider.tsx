@@ -36,7 +36,8 @@ type CartContextValue = {
   add: (
     variantId: string,
     quantity: number,
-    optimistic: OptimisticLine
+    optimistic: OptimisticLine,
+    options?: { openDrawer?: boolean }
   ) => Promise<void>
 }
 
@@ -90,7 +91,8 @@ export default function CartProvider({
     async (
       variantId: string,
       quantity: number,
-      optimistic: OptimisticLine
+      optimistic: OptimisticLine,
+      options?: { openDrawer?: boolean }
     ) => {
       const seq = ++requestSeq.current
 
@@ -111,7 +113,8 @@ export default function CartProvider({
         unitPrice: optimistic.unitPrice,
         thumbnail: optimistic.thumbnail,
       })
-      setDrawerOpen(true)
+      // Buy-it-now goes straight to checkout, so it opts out of the drawer.
+      if (options?.openDrawer !== false) setDrawerOpen(true)
 
       try {
         const { summary: serverSummary, added } = await addToCartAction(

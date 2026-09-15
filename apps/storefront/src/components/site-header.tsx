@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import ShoppingBagIcon from "@/components/shopping-bag-icon"
 import type { MenuSection } from "@/lib/content"
 
 /**
@@ -86,18 +87,18 @@ export default function SiteHeader({ menu }: { menu: MenuSection[] }) {
           <button
             type="button"
             onClick={openDrawer}
-            className="relative text-sm transition-colors hover:text-purple"
+            aria-label={`Cart, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
+            className="relative grid size-9 place-items-center rounded-full text-ink transition-colors hover:text-purple"
           >
-            Cart
-            <span
-              aria-live="polite"
-              className={[
-                "ml-1 inline-grid size-5 place-items-center rounded-full text-[11px] tabular-nums transition-colors",
-                itemCount ? "bg-purple text-white" : "bg-line text-ink-muted",
-              ].join(" ")}
-            >
-              {itemCount}
-            </span>
+            <ShoppingBagIcon width={16} />
+            {itemCount > 0 ? (
+              <span
+                aria-live="polite"
+                className="absolute right-0.5 top-0.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-purple px-1 text-[10px] font-semibold tabular-nums text-white"
+              >
+                {itemCount}
+              </span>
+            ) : null}
           </button>
         </div>
       </div>

@@ -4,7 +4,6 @@ import { notFound } from "next/navigation"
 import ProductView from "@/components/product-view"
 import RegularProductView from "@/components/regular-product-view"
 import {
-  MoreDesigns,
   PairsWellWith,
   ShippingNote,
   type RelatedProduct,
@@ -168,21 +167,55 @@ export default async function ProductPage({ params }: Params) {
     ? await listProducts({ collection_id: [collectionId], limit: 100 })
     : { products: [] as StoreProduct[] }
 
-  // MORE DESIGNS: other designs' phone cases in the same collection.
+  // MORE DESIGNS: other designs' phone cases in the same collection. Each one
+  // carries renders keyed by "device|caseType" (and by device alone) so the
+  // strip can follow the customer's exact model + finish.
+  const rendersFor = (
+    p: StoreProduct
+  ): { pair: Record<string, string>; device: Record<string, string> } => {
+    const optId = (title: string) =>
+      p.options?.find((o) => o.title.toLowerCase() === title)?.id
+    const deviceOptId = optId("device")
+    const caseOptId = optId("case type")
+    const pair: Record<string, string> = {}
+    const device: Record<string, string> = {}
+    if (!deviceOptId) return { pair, device }
+    for (const v of p.variants ?? []) {
+      const dev = v.options?.find((o) => o.option_id === deviceOptId)?.value
+      if (!dev) continue
+      const img = (v.metadata?.images as string[] | undefined)?.[0]
+      if (!img) continue
+      if (!device[dev]) device[dev] = img
+      const ct = caseOptId
+        ? v.options?.find((o) => o.option_id === caseOptId)?.value
+        : undefined
+      if (ct) {
+        const key = `${dev}|${ct}`
+        if (!pair[key]) pair[key] = img
+      }
+    }
+    return { pair, device }
+  }
+
   const moreDesignItems: RelatedProduct[] = pool
     .filter(
       (p) =>
         p.metadata?.form === "phone" && p.metadata?.design_slug !== designSlug
     )
     .slice(0, 12)
-    .map((p) => ({
-      id: p.id,
-      title: p.title,
-      handle: p.handle,
-      thumbnail: p.thumbnail,
-      label: (p.metadata?.design_name as string) ?? p.title,
-      price: minPrice(p),
-    }))
+    .map((p) => {
+      const renders = rendersFor(p)
+      return {
+        id: p.id,
+        title: p.title,
+        handle: p.handle,
+        thumbnail: p.thumbnail,
+        label: (p.metadata?.design_name as string) ?? p.title,
+        price: minPrice(p),
+        imageByPair: renders.pair,
+        imageByDevice: renders.device,
+      }
+    })
 
   // PAIRS WELL WITH: the same design in another form (AirPods case, wallet...).
   const pairsItems: RelatedProduct[] = pool
@@ -226,6 +259,7 @@ export default async function ProductPage({ params }: Params) {
         stock={stock}
         fallbackImages={fallbackImages}
         designName={designName}
+        productHandle={product.handle}
         productTitle={product.title}
         collection={
           product.collection
@@ -239,7 +273,7 @@ export default async function ProductPage({ params }: Params) {
         initialCaseType={initialCaseType}
         initialDevice={initialDevice}
         fitCopy={deviceCopy}
-        moreDesigns={<MoreDesigns items={moreDesignItems} />}
+        moreDesignItems={moreDesignItems}
         shipping={<ShippingNote />}
         tabs={
           <ProductTabs
