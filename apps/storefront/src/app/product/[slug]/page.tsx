@@ -27,12 +27,16 @@ type Params = {
 }
 
 export const dynamicParams = true
-export const revalidate = 86400
+// The page reads ?case= (searchParams) to preselect a construction, which is a
+// dynamic API - so it must render dynamically. Pairing searchParams with a
+// static `revalidate` throws DYNAMIC_SERVER_USAGE in production, so we render
+// per request instead. (A cacheable path-based variant is a later optimisation.)
+export const dynamic = "force-dynamic"
 
 /*
- * Prerender nothing by default; each product/device page renders on first
- * request and is cached. See the note kept through the Structure B rewrite: the
- * catalogue is too large to prerender on this single-process host.
+ * Prerender nothing by default; each product/device page renders on request.
+ * See the note kept through the Structure B rewrite: the catalogue is too large
+ * to prerender on this single-process host.
  */
 export async function generateStaticParams() {
   return [] as { slug: string }[]
