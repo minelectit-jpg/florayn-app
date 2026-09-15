@@ -26,6 +26,7 @@ export default function ProductCard({
   device,
   deviceSlug,
   caseType,
+  caseTypeSlug,
   badges,
 }: {
   product: StoreProduct
@@ -35,6 +36,8 @@ export default function ProductCard({
   deviceSlug?: string | null
   /** Selected case type; scopes the price and meta so they don't span all types. */
   caseType?: string | null
+  /** Selected case type slug; carried into the PDP link so it opens on it. */
+  caseTypeSlug?: string | null
   badges?: CardBadge[]
 }) {
   const metadata = product.metadata ?? {}
@@ -60,11 +63,13 @@ export default function ProductCard({
     caseType: caseType ?? (device ? null : (product.subtitle ?? null)),
   })
 
-  // A chosen device deep-links to that device's own page, preselected.
+  // A chosen device deep-links to that device's own page, preselected; a chosen
+  // case type rides along as ?case= so the PDP opens on the same construction.
+  const query = caseTypeSlug ? `?case=${caseTypeSlug}` : ""
   const href =
     device && deviceSlug
-      ? `/product/${product.handle}-${deviceSlug}/`
-      : `/product/${product.handle}/`
+      ? `/product/${product.handle}-${deviceSlug}/${query}`
+      : `/product/${product.handle}/${query}`
 
   const soldOut = variants.length === 0
   const resolvedBadges: CardBadge[] =

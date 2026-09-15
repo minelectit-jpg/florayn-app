@@ -159,6 +159,7 @@ export default async function ShopView({
               device={device?.name ?? null}
               deviceSlug={device?.slug ?? null}
               caseType={category?.name ?? null}
+              caseTypeSlug={category ? (caseTypeSlug ?? null) : null}
             />
           ))}
         </div>

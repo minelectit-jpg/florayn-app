@@ -9,13 +9,22 @@ import {
   type RelatedProduct,
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
-import { getBlankStock, getDeviceCatalog, getDeviceFamilyMap } from "@/lib/catalog"
+import {
+  getBlankStock,
+  getCaseTypes,
+  getDeviceCatalog,
+  getDeviceFamilyMap,
+} from "@/lib/catalog"
 import { resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
 
-type Params = { params: Promise<{ slug: string }> }
+type Params = {
+  params: Promise<{ slug: string }>
+  /** ?case=<case-type-slug> preselects that construction (set by shop cards). */
+  searchParams: Promise<{ case?: string }>
+}
 
 export const dynamicParams = true
 export const revalidate = 86400
@@ -73,8 +82,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   }
 }
 
-export default async function ProductPage({ params }: Params) {
+export default async function ProductPage({ params, searchParams }: Params) {
   const { slug } = await params
+  const { case: caseParam } = await searchParams
   const resolved = await resolveProductPage(slug)
   if (!resolved) notFound()
 
@@ -83,10 +93,11 @@ export default async function ProductPage({ params }: Params) {
   const designSlug = product.metadata?.design_slug as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, deviceCatalog, stock] = await Promise.all([
+  const [families, deviceCatalog, stock, caseTypes] = await Promise.all([
     getDeviceFamilyMap(),
     getDeviceCatalog(),
     getBlankStock(),
+    getCaseTypes(),
   ])
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
@@ -143,7 +154,19 @@ export default async function ProductPage({ params }: Params) {
 
   const initialDevice =
     device && matrix.devices.includes(device.name) ? device.name : defaultDevice
+
+  // Honour ?case=<slug> (set by a case-type-filtered shop card) so the PDP
+  // opens on the same construction the customer was browsing - but only if that
+  // case type is actually sold for this device; otherwise fall back to the
+  // device's first construction.
+  const requestedCase = caseParam
+    ? caseTypes.find((c) => c.slug === caseParam)?.name
+    : undefined
+  const fitsDevice =
+    requestedCase &&
+    (matrix.caseTypesByDevice[initialDevice] ?? []).includes(requestedCase)
   const initialCaseType =
+    (fitsDevice ? requestedCase : undefined) ??
     (matrix.caseTypesByDevice[initialDevice] ?? matrix.caseTypes)[0] ??
     matrix.caseTypes[0]
 
