@@ -26,6 +26,9 @@ async function allUrls(): Promise<string[]> {
   const slugByName = new Map(devices.map((d) => [d.name, d.slug]))
 
   const urls: string[] = ["/", "/shop/", "/contact/"]
+  // Clean per-device landing pages (/shop/<device>/) - the entry points search
+  // engines should index over the old ?filter_device= query URLs.
+  for (const device of devices) urls.push(`/shop/${device.slug}/`)
   for (const product of products) {
     urls.push(`/product/${product.handle}/`)
     // One device page per device the product is sold for. Devices come from the
@@ -51,8 +54,12 @@ export default async function sitemap({
   return urls.slice(id * CHUNK, (id + 1) * CHUNK).map((url) => ({
     url: `${SITE}${url}`,
     lastModified: new Date(),
-    // The base product and the landing pages are the entry points; a device
-    // page is a long-tail target and says so.
-    priority: url.split("-").length > 3 ? 0.5 : 0.8,
+    // Landing/base pages are the entry points; a per-device PRODUCT page is a
+    // long-tail target and says so. Shop device landings sit in between.
+    priority: url.startsWith("/product/") && url.split("-").length > 3
+      ? 0.5
+      : url.startsWith("/shop/") && url !== "/shop/"
+        ? 0.7
+        : 0.8,
   }))
 }
