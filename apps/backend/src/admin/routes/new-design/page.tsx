@@ -96,12 +96,94 @@ const CASE_ALIASES: Record<string, string> = {
   "essentials-magsafe": "essentials",
 }
 
+/**
+ * Product-form folder names. They sit between design and device (or design and
+ * files) in the owner's tree and are never a case type, design or device, so
+ * they are skipped when detecting the design.
+ */
+const FORM_SEGMENTS = new Set([
+  "phone-case",
+  "phone-cases",
+  "airpods",
+  "airpods-case",
+  "airpods-cases",
+  "earbuds",
+  "earbuds-case",
+  "watch-bands",
+  "watch-band",
+  "card-holder",
+  "card-holders",
+  "magsafe-card-holder",
+  "card-wallet",
+  "pen",
+  "phone-charms",
+  "stickpad",
+])
+
+/**
+ * Watch/wallet forms have NO device sub-folder - the images sit straight in the
+ * form folder. Treat the form folder itself as its single device.
+ */
+const FORM_DEVICE: Record<string, string> = {
+  "watch-bands": "apple-watch-band",
+  "watch-band": "apple-watch-band",
+  "magsafe-card-holder": "magsafe-wallet",
+  "card-holder": "card-wallet",
+  "card-holders": "card-wallet",
+}
+
 type ParsedFile = {
   file: File
   caseRaw: string
   designRaw: string
   deviceRaw: string
   name: string
+}
+
+/**
+ * Work out which path segment is the case type, which is the design and which
+ * is the device - by CONTENT, not by fixed position, because the owner's
+ * collections nest differently (Garage: .../Form/CaseType/Design/Device/file;
+ * Alcantara: CaseType/Design/Form[/Device]/file). Returns segment indices, or
+ * null when a file cannot be understood.
+ */
+function detectRoles(
+  dirs: string[],
+  caseLookup: Map<string, string>,
+  deviceLookup: Map<string, string>
+): { caseIdx: number; designIdx: number; deviceIdx: number } | null {
+  const slugs = dirs.map(slugify)
+  const last = (test: (i: number) => boolean) => {
+    for (let i = dirs.length - 1; i >= 0; i--) if (test(i)) return i
+    return -1
+  }
+
+  // Device: deepest segment that resolves to a device (watch/wallet form folders
+  // resolve too, see the lookup).
+  const deviceIdx = last((i) => deviceLookup.has(slugs[i]))
+  if (deviceIdx === -1) return null
+
+  // Case type: deepest OTHER segment that resolves to a case type.
+  const caseIdx = last((i) => i !== deviceIdx && caseLookup.has(slugs[i]))
+
+  // Design: deepest remaining segment that is not the device, not the case type
+  // and not a form label.
+  const designIdx = last(
+    (i) => i !== deviceIdx && i !== caseIdx && !FORM_SEGMENTS.has(slugs[i])
+  )
+  if (designIdx === -1) return null
+
+  // When the case type did not resolve, still surface a segment for the manual
+  // picker: the deepest one that is not device, design or form.
+  const caseRawIdx =
+    caseIdx !== -1
+      ? caseIdx
+      : last(
+          (i) => i !== deviceIdx && i !== designIdx && !FORM_SEGMENTS.has(slugs[i])
+        )
+  if (caseRawIdx === -1) return null
+
+  return { caseIdx: caseRawIdx, designIdx, deviceIdx }
 }
 
 // ----------------------------------------------------------------------------
@@ -163,12 +245,17 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
 
   const deviceLookup = useMemo(() => {
     const m = new Map<string, string>()
+    const known = new Set(deviceOptions.map((d) => d.slug))
     for (const d of deviceOptions) {
       m.set(d.slug, d.slug)
       m.set(slugify(d.name), d.slug)
       // The owner's folders drop the brand ("16 Pro Max", "S26 Ultra").
       if (d.slug.startsWith("iphone-")) m.set(d.slug.slice("iphone-".length), d.slug)
       else if (d.slug.startsWith("samsung-")) m.set(d.slug.slice("samsung-".length), d.slug)
+    }
+    // Watch/wallet form folders act as their own (single) device.
+    for (const [form, deviceSlug] of Object.entries(FORM_DEVICE)) {
+      if (known.has(deviceSlug)) m.set(form, deviceSlug)
     }
     return m
   }, [deviceOptions])
@@ -183,15 +270,29 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
       const rel = (file as any).webkitRelativePath || file.name
       const segs = String(rel).split("/").filter(Boolean)
       const dirs = segs.slice(0, -1)
-      // Need at least <case type>/<design>/<device> above the file.
-      if (dirs.length < 3) {
+      // Need at least <case type>/<design>/<device>, or <case type>/<design> for
+      // a device-less watch/wallet form.
+      if (dirs.length < 2) {
         skipped++
         continue
       }
-      const deviceRaw = dirs[dirs.length - 1]
-      const designRaw = dirs[dirs.length - 2]
-      const caseRaw = dirs[dirs.length - 3]
-      if (!collectionGuess && dirs.length >= 5) collectionGuess = dirs[dirs.length - 5]
+      const roles = detectRoles(dirs, caseLookup, deviceLookup)
+      if (!roles) {
+        skipped++
+        continue
+      }
+      const caseRaw = dirs[roles.caseIdx]
+      const designRaw = dirs[roles.designIdx]
+      const deviceRaw = dirs[roles.deviceIdx]
+      // A leftover shallow segment (not case/design/device/form) is the collection.
+      if (!collectionGuess) {
+        for (let i = 0; i < dirs.length; i++) {
+          if (i === roles.caseIdx || i === roles.designIdx || i === roles.deviceIdx) continue
+          if (FORM_SEGMENTS.has(slugify(dirs[i]))) continue
+          collectionGuess = dirs[i]
+          break
+        }
+      }
       parsed.push({ file, caseRaw, designRaw, deviceRaw, name: segs[segs.length - 1] })
     }
     if (!parsed.length) {
