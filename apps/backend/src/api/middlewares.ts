@@ -12,5 +12,11 @@ export default defineMiddlewares({
       method: ["POST"],
       bodyParser: { sizeLimit: "25mb" },
     },
+    {
+      // File Manager uploads a file at a time as base64 JSON.
+      matcher: "/admin/r2/upload",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "25mb" },
+    },
   ],
 })
