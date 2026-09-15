@@ -2,13 +2,14 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import ShopView, { shopMetadata } from "@/components/shop-view"
-import { getDeviceCatalog } from "@/lib/catalog"
 
 type Params = { params: Promise<{ slug: string[] }> }
 
 /**
  * /shop/<device> and /shop/<device>/<case-type> - clean, path-based shop pages.
- * An unknown device 404s so search engines are not fed junk URLs.
+ * A slug that is not a live device still renders (ShopView drops the filter),
+ * and its canonical points back at /shop/, so a menu link to a device that was
+ * later turned off does not 404 - it just falls back to the wider shop.
  */
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params
@@ -20,8 +21,5 @@ export default async function ShopFilterPage({ params }: Params) {
   if (!slug.length || slug.length > 2) notFound()
 
   const [deviceSlug, caseTypeSlug] = slug
-  const devices = await getDeviceCatalog()
-  if (!devices.some((d) => d.slug === deviceSlug)) notFound()
-
   return <ShopView deviceSlug={deviceSlug} caseTypeSlug={caseTypeSlug} />
 }
