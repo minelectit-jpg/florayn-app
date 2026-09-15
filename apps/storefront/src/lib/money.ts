@@ -1,10 +1,9 @@
 /**
- * Prices render as "1,400৳" - figure first, symbol after, no decimals.
+ * Prices render as "1,400.00৳" - figure first, symbol after, two decimals.
  *
  * The symbol follows the number because that is what florayn.com does; the
  * WooCommerce Store API reports an empty currency prefix and a "৳" suffix for
- * BDT. Decimals are dropped because every price in this catalogue is a whole
- * number of taka.
+ * BDT. Two decimals match the live site's "1,400.00৳" display.
  */
 export function formatPrice(
   amount: number | null | undefined,
@@ -15,8 +14,8 @@ export function formatPrice(
   }
 
   const value = amount.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   })
 
   if (currencyCode.toLowerCase() === "bdt") {
@@ -54,8 +53,8 @@ export function splitPrice(
   }
 
   const value = amount.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   })
 
   if (currencyCode.toLowerCase() === "bdt") {

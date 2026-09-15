@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Figtree, Fraunces } from "next/font/google"
+import { Instrument_Sans } from "next/font/google"
 
 import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
@@ -10,27 +10,15 @@ import { getSiteContent } from "@/lib/content"
 import "./globals.css"
 
 /*
- * TODO: replace both of these with the licensed brand faces when the files
- * arrive - ABC Arizona Flare Medium for display, Aeonik for body/UI. Drop the
- * woff2 files into the app, swap these for next/font/local, and point
- * --font-display / --font-sans in globals.css at the new families. Nothing
- * else in the storefront references a font by name.
- *
- * Fraunces stands in for Arizona Flare: it is the closest free flared serif,
- * and its wonk/soft axes give the flared terminals Arizona Flare is known for.
- * Figtree stands in for Aeonik: a geometric humanist sans with similar
- * proportions and a similar single-storey feel at UI sizes.
+ * Instrument Sans is the whole site's typeface - body, UI and headings alike.
+ * It is loaded once here and exposed as --font-instrument; both --font-display
+ * and --font-sans point at it in globals.css, so nothing else references a font
+ * by name. (To give headings a separate face later, load it here and repoint
+ * --font-display.)
  */
-const fraunces = Fraunces({
+const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  axes: ["SOFT", "WONK", "opsz"],
-})
-
-const figtree = Figtree({
-  subsets: ["latin"],
-  variable: "--font-figtree",
+  variable: "--font-instrument",
   display: "swap",
 })
 
@@ -51,7 +39,7 @@ export default async function RootLayout({
   const content = await getSiteContent()
 
   return (
-    <html lang="en" className={`${fraunces.variable} ${figtree.variable}`}>
+    <html lang="en" className={instrumentSans.variable}>
       <body className="min-h-screen bg-paper text-ink">
         <CartProvider>
           <SiteHeader menu={content.primary} />
