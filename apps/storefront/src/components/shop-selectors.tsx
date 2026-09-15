@@ -26,15 +26,7 @@ const FAMILY_ORDER = ["iphone", "samsung", "airpods", "watch", "wallet"]
 const DEFAULT_DEVICE = "iphone-17-pro-max"
 const DEFAULT_CASE_TYPE = "signature"
 
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
+function useModalChrome(onClose: () => void) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
@@ -47,7 +39,59 @@ function Modal({
       document.body.style.overflow = prev
     }
   }, [onClose])
+}
 
+/** A full-height panel that slides in from the left - the live site's model picker. */
+function SideDrawer({
+  title,
+  onClose,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  useModalChrome(onClose)
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/40"
+      />
+      <div className="absolute inset-y-0 left-0 flex w-[88%] max-w-[380px] flex-col bg-paper shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)]">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid size-8 shrink-0 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink"
+          >
+            &times;
+          </button>
+          <p className="flex-1 text-center text-[13px] font-semibold uppercase tracking-[0.14em]">
+            {title}
+          </p>
+          <span className="size-8 shrink-0" aria-hidden="true" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+/** A centred modal - the live site's case-type picker. */
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  useModalChrome(onClose)
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:items-center">
       <button
@@ -152,13 +196,13 @@ export default function ShopSelectors({
       </button>
 
       {openModel ? (
-        <Modal title="Select model" onClose={() => setOpenModel(false)}>
+        <SideDrawer title="Select model" onClose={() => setOpenModel(false)}>
           <input
             type="search"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search iPhone 17 Pro Max, AirPods Pro..."
+            placeholder="Type to search"
             className="field-input mb-4"
           />
           {matchCount === 0 ? (
@@ -169,8 +213,8 @@ export default function ShopSelectors({
             <div className="space-y-5">
               {grouped.map(([label, list]) => (
                 <div key={label}>
-                  <p className="eyebrow px-1 pb-2">{label}</p>
-                  <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+                  <p className="mb-1 text-[13px] font-semibold">{label}</p>
+                  <div className="flex flex-col">
                     {list.map((d) => {
                       const isCurrent = d.slug === curDevice
                       return (
@@ -180,13 +224,18 @@ export default function ShopSelectors({
                           onClick={() => go(d.slug, curCase)}
                           aria-pressed={isCurrent}
                           className={[
-                            "rounded-[8px] border px-3 py-2 text-left text-sm transition-colors",
+                            "flex items-center justify-between gap-2 rounded-[8px] px-2 py-2.5 text-left text-[15px] transition-colors",
                             isCurrent
-                              ? "border-purple bg-purple-tint text-ink"
-                              : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink",
+                              ? "font-semibold text-ink"
+                              : "text-ink-muted hover:bg-purple-tint hover:text-ink",
                           ].join(" ")}
                         >
                           {d.name}
+                          {isCurrent ? (
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-purple">
+                              Selected
+                            </span>
+                          ) : null}
                         </button>
                       )
                     })}
@@ -195,7 +244,7 @@ export default function ShopSelectors({
               ))}
             </div>
           )}
-        </Modal>
+        </SideDrawer>
       ) : null}
 
       {openCase ? (
