@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import ProductCard from "@/components/product-card"
-import { getDeviceCatalog } from "@/lib/catalog"
+import ShopSelectors from "@/components/shop-selectors"
+import { getCaseTypes, getDeviceCatalog } from "@/lib/catalog"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
 
 /**
@@ -72,7 +73,10 @@ export default async function ShopView({
   deviceSlug?: string
   caseTypeSlug?: string
 }) {
-  const devices = await getDeviceCatalog()
+  const [devices, caseTypes] = await Promise.all([
+    getDeviceCatalog(),
+    getCaseTypes(),
+  ])
   const device = devices.find((d) => d.slug === deviceSlug) ?? null
 
   // Phones by default, or the family of the chosen device.
@@ -110,6 +114,13 @@ export default async function ShopView({
             {truncated && !device ? ` of ${count}` : ""}
           </p>
         )}
+
+        <ShopSelectors
+          deviceSlug={device?.slug}
+          caseTypeSlug={category ? caseTypeSlug : undefined}
+          devices={devices}
+          caseTypes={caseTypes}
+        />
       </header>
 
       {error ? (
@@ -128,6 +139,7 @@ export default async function ShopView({
               product={product}
               device={device?.name ?? null}
               deviceSlug={device?.slug ?? null}
+              caseType={category?.name ?? null}
             />
           ))}
         </div>

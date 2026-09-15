@@ -93,6 +93,24 @@ export async function getDeviceCatalog(): Promise<DeviceRecord[]> {
   return data?.devices ?? []
 }
 
+export type CaseTypeRecord = {
+  slug: string
+  name: string
+  price: number
+  description?: string | null
+}
+
+/** The active case types (constructions), in catalogue order, for the shop selectors. */
+export async function getCaseTypes(): Promise<CaseTypeRecord[]> {
+  const data = await storeFetch<{ case_types: any[] }>("/store/case-types")
+  return (data?.case_types ?? []).map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    price: c.price,
+    description: c.description ?? null,
+  }))
+}
+
 /**
  * Availability per blank (case type x device), keyed "<Case Type>|<Device>".
  * Shared across every design, so this one number decides sold-out for a

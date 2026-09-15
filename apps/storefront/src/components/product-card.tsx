@@ -9,10 +9,15 @@ import { buildMetaLine, splitProductTitle } from "@/lib/product-title"
 
 export type CardBadge = { label: string; tone: "hot" | "soldout" | "sale" }
 
-/** Variants sold for a given device (matched on the Device option value). */
-function forDevice(variants: StoreVariant[], device: string): StoreVariant[] {
+/** Variants whose options include every given value (device and/or case type). */
+function scopeVariants(
+  variants: StoreVariant[],
+  values: (string | null | undefined)[]
+): StoreVariant[] {
+  const wanted = values.filter(Boolean) as string[]
+  if (!wanted.length) return variants
   return variants.filter((v) =>
-    (v.options ?? []).some((o) => o.value === device)
+    wanted.every((val) => (v.options ?? []).some((o) => o.value === val))
   )
 }
 
@@ -20,6 +25,7 @@ export default function ProductCard({
   product,
   device,
   deviceSlug,
+  caseType,
   badges,
 }: {
   product: StoreProduct
@@ -27,6 +33,8 @@ export default function ProductCard({
   device?: string | null
   /** Device slug, so the card links to that device's own page. */
   deviceSlug?: string | null
+  /** Selected case type; scopes the price and meta so they don't span all types. */
+  caseType?: string | null
   badges?: CardBadge[]
 }) {
   const metadata = product.metadata ?? {}
@@ -34,9 +42,9 @@ export default function ProductCard({
     (metadata.design_name as string) ?? splitProductTitle(product.title).design
 
   const variants = product.variants ?? []
-  // When a device is chosen, price and image are that device's; otherwise the
-  // whole product's range and its thumbnail.
-  const scoped = device ? forDevice(variants, device) : variants
+  // Scope to the chosen device and/or case type so the price is that exact
+  // combination's, not a range spanning every construction ("From 1,400").
+  const scoped = scopeVariants(variants, [device, caseType])
   const priced = scoped[0] ?? variants[0]
   const range = priceRange(scoped.length ? scoped : variants)
 
@@ -45,10 +53,11 @@ export default function ProductCard({
     : undefined
   const image = deviceImage ?? product.thumbnail ?? product.images?.[0]?.url
 
-  // Meta line: the chosen device, else the form label (e.g. "AirPods Case").
+  // Meta line: "iPhone 17 Pro Max Case • Signature" when both are chosen; the
+  // form label (e.g. "AirPods Case") when neither is.
   const meta = buildMetaLine({
     device,
-    caseType: device ? null : (product.subtitle ?? null),
+    caseType: caseType ?? (device ? null : (product.subtitle ?? null)),
   })
 
   // A chosen device deep-links to that device's own page, preselected.
