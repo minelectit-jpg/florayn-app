@@ -1,7 +1,7 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { ArrowPath, ArrowUpTray, Folder, Photo, Plus, Trash } from "@medusajs/icons"
 import { Badge, Button, Container, Heading, IconButton, Input, Text, toast } from "@medusajs/ui"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react"
 
 type Listing = {
   prefix: string
@@ -58,6 +58,7 @@ const FileManagerPage = () => {
   const [loading, setLoading] = useState(true)
   const [newFolder, setNewFolder] = useState("")
   const [busy, setBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
   const filesRef = useRef<HTMLInputElement>(null)
@@ -111,19 +112,17 @@ const FileManagerPage = () => {
     }
   }
 
-  async function upload(fileList: FileList | null, keepStructure: boolean) {
-    if (!fileList || !fileList.length) return
-    const files = Array.from(fileList)
+  async function uploadItems(items: { file: File; relPath: string }[]) {
+    if (!items.length) return
     setBusy(true)
-    setProgress({ done: 0, total: files.length })
+    setProgress({ done: 0, total: items.length })
     let done = 0
     let failed = 0
     const base = prefix ? `${prefix}/` : ""
     try {
-      await pool(files, 5, async (file) => {
+      await pool(items, 5, async ({ file, relPath }) => {
         try {
-          const rel = keepStructure ? (file as any).webkitRelativePath || file.name : file.name
-          const key = `${base}${rel}`
+          const key = `${base}${relPath}`
           const contentBase64 = await readAsBase64(file)
           await api("/admin/r2/upload", {
             method: "POST",
@@ -137,11 +136,11 @@ const FileManagerPage = () => {
           failed++
         } finally {
           done++
-          setProgress({ done, total: files.length })
+          setProgress({ done, total: items.length })
         }
       })
-      if (failed) toast.error(`${failed} of ${files.length} file(s) failed to upload.`)
-      else toast.success(`Uploaded ${files.length} file(s).`)
+      if (failed) toast.error(`${failed} of ${items.length} file(s) failed to upload.`)
+      else toast.success(`Uploaded ${items.length} file(s).`)
       load()
     } finally {
       setBusy(false)
@@ -149,6 +148,64 @@ const FileManagerPage = () => {
       if (filesRef.current) filesRef.current.value = ""
       if (folderRef.current) folderRef.current.value = ""
     }
+  }
+
+  function itemsFromFileList(fileList: FileList | null, keepStructure: boolean) {
+    if (!fileList) return []
+    return Array.from(fileList).map((file) => ({
+      file,
+      relPath: keepStructure ? (file as any).webkitRelativePath || file.name : file.name,
+    }))
+  }
+
+  // Recursively walk a dropped file-system entry, preserving sub-folder paths.
+  async function readEntry(entry: any, path: string, out: { file: File; relPath: string }[]) {
+    if (!entry) return
+    if (entry.isFile) {
+      await new Promise<void>((resolve) =>
+        entry.file(
+          (f: File) => {
+            out.push({ file: f, relPath: path + entry.name })
+            resolve()
+          },
+          () => resolve()
+        )
+      )
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader()
+      const all: any[] = []
+      await new Promise<void>((resolve) => {
+        const readBatch = () =>
+          reader.readEntries((entries: any[]) => {
+            if (!entries.length) resolve()
+            else {
+              all.push(...entries)
+              readBatch()
+            }
+          }, () => resolve())
+        readBatch()
+      })
+      for (const child of all) await readEntry(child, `${path}${entry.name}/`, out)
+    }
+  }
+
+  async function onDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragOver(false)
+    if (busy) return
+    const dt = e.dataTransfer
+    // Read entries synchronously (they expire after the event tick).
+    const entries = Array.from(dt.items ?? [])
+      .map((it: any) => (it.webkitGetAsEntry ? it.webkitGetAsEntry() : null))
+      .filter(Boolean)
+    const out: { file: File; relPath: string }[] = []
+    if (entries.length) {
+      for (const entry of entries) await readEntry(entry, "", out)
+    } else {
+      for (const f of Array.from(dt.files ?? [])) out.push({ file: f, relPath: f.name })
+    }
+    const items = out.filter((i) => i.relPath && !i.relPath.endsWith("/"))
+    if (items.length) uploadItems(items)
   }
 
   async function removeFolder(p: string, name: string) {
@@ -186,14 +243,34 @@ const FileManagerPage = () => {
   const empty = !loading && listing && !listing.folders.length && !listing.files.length
 
   return (
-    <Container className="divide-y p-0">
+    <Container
+      className="divide-y relative p-0"
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!busy) setDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragOver(false)
+      }}
+      onDrop={onDrop}
+    >
+      {dragOver ? (
+        <div className="bg-ui-bg-base/80 pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-ui-fg-interactive">
+          <div className="flex flex-col items-center gap-2">
+            <ArrowUpTray className="text-ui-fg-interactive" />
+            <Text size="base" weight="plus">
+              Drop files or folders here to upload
+            </Text>
+          </div>
+        </div>
+      ) : null}
       <div className="px-6 py-4">
         <Heading level="h1">File manager</Heading>
         <Text size="small" className="text-ui-fg-subtle">
-          Your media on Cloudflare R2. Create folders, upload files or whole
-          folders (the folder structure is kept), and delete. Organise your
-          mockups here once, then point the New Design tool at a folder instead of
-          uploading from your computer each time.
+          Your media on Cloudflare R2. <b>Drag &amp; drop</b> files or whole
+          folders here to upload (structure kept), or use the buttons. Create and
+          delete folders too. Organise your mockups here once, then point the New
+          Design tool at a folder instead of uploading from your computer each time.
         </Text>
       </div>
 
@@ -252,14 +329,14 @@ const FileManagerPage = () => {
             type="file"
             multiple
             className="hidden"
-            onChange={(e) => upload(e.target.files, false)}
+            onChange={(e) => uploadItems(itemsFromFileList(e.target.files, false))}
           />
           <input
             ref={folderRef}
             type="file"
             multiple
             className="hidden"
-            onChange={(e) => upload(e.target.files, true)}
+            onChange={(e) => uploadItems(itemsFromFileList(e.target.files, true))}
           />
           <Button
             variant="secondary"

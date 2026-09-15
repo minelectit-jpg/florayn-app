@@ -107,6 +107,30 @@ export async function listPrefix(prefixInput?: string): Promise<R2Listing> {
   return { prefix, folders, files }
 }
 
+/** Every object key under a prefix (recursive, no delimiter). */
+export async function listAllUnder(prefixInput?: string): Promise<string[]> {
+  const prefix = asPrefix(prefixInput)
+  const keys: string[] = []
+  let ContinuationToken: string | undefined
+  do {
+    const res = await r2Client().send(
+      new ListObjectsV2Command({
+        Bucket: r2Bucket(),
+        Prefix: prefix,
+        ContinuationToken,
+        MaxKeys: 1000,
+      })
+    )
+    for (const obj of res.Contents ?? []) {
+      const key = obj.Key
+      if (!key || key.endsWith("/")) continue
+      keys.push(key)
+    }
+    ContinuationToken = res.IsTruncated ? res.NextContinuationToken : undefined
+  } while (ContinuationToken)
+  return keys
+}
+
 export async function putObject(
   key: string,
   body: Buffer,

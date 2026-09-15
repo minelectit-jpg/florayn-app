@@ -132,6 +132,257 @@ const FORM_DEVICE: Record<string, string> = {
   "card-holders": "card-wallet",
 }
 
+// ----------------------------------------------------------------------------
+// Create designs from a folder already on R2 (uploaded via the File Manager) -
+// no re-upload from the computer. This is the primary path.
+
+type Analysis = {
+  prefix: string
+  totalFiles: number
+  designs: { name: string; slug: string; caseTypes: { slug: string; images: number }[]; images: number }[]
+  skipped: number
+  unmatchedCases: string[]
+  unmatchedDevices: string[]
+}
+
+const CreateFromR2 = ({ onCreated }: { onCreated: () => void }) => {
+  const [prefix, setPrefix] = useState("")
+  const [folders, setFolders] = useState<{ name: string; prefix: string }[]>([])
+  const [loadingFolders, setLoadingFolders] = useState(true)
+  const [theme, setTheme] = useState("")
+  const [blankStock, setBlankStock] = useState("10")
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  function loadFolders(p = prefix) {
+    setLoadingFolders(true)
+    setAnalysis(null)
+    api(`/admin/r2?prefix=${encodeURIComponent(p)}`)
+      .then((d) => setFolders(d.folders ?? []))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoadingFolders(false))
+  }
+  useEffect(() => {
+    loadFolders(prefix)
+  }, [prefix])
+
+  const crumbs = useMemo(() => {
+    const parts = prefix.split("/").filter(Boolean)
+    const acc: { label: string; prefix: string }[] = [{ label: "All media", prefix: "" }]
+    let cur = ""
+    for (const part of parts) {
+      cur = cur ? `${cur}/${part}` : part
+      acc.push({ label: part, prefix: cur })
+    }
+    return acc
+  }, [prefix])
+
+  async function analyze() {
+    if (!prefix) {
+      toast.error("Open a folder first.")
+      return
+    }
+    setAnalyzing(true)
+    try {
+      const d: Analysis = await api(`/admin/designs/from-r2?prefix=${encodeURIComponent(prefix)}`)
+      setAnalysis(d)
+      if (!theme) setTheme(prefix.split("/")[0] ?? "")
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  async function create() {
+    if (!analysis?.designs.length) return
+    setBusy(true)
+    try {
+      const d = await api("/admin/designs/from-r2", {
+        method: "POST",
+        body: JSON.stringify({
+          prefix,
+          theme: theme.trim() || null,
+          blankStock: Number(blankStock) || 10,
+        }),
+      })
+      const parts = [`${d.created.length} created`]
+      if (d.existed.length) parts.push(`${d.existed.length} already existed`)
+      if (d.failed.length) parts.push(`${d.failed.length} failed`)
+      if (d.failed.length) {
+        toast.error(
+          `Done with issues: ${parts.join(", ")}. First: ${d.failed[0].name} - ${d.failed[0].message}`
+        )
+      } else {
+        toast.success(`Done: ${parts.join(", ")}.`)
+      }
+      if (d.created.length) {
+        setAnalysis(null)
+        onCreated()
+      }
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const totalImages = analysis?.designs.reduce((n, d) => n + d.images, 0) ?? 0
+
+  return (
+    <Container className="divide-y p-0">
+      <div className="px-6 py-4">
+        <Heading level="h2">Create from a File Manager folder</Heading>
+        <Text size="small" className="text-ui-fg-subtle">
+          Point at a folder you have already uploaded to the{" "}
+          <b>File Manager</b> and it builds every design inside it - no re-upload
+          from your computer. Open the folder that holds your case-type folders
+          (e.g. <code>Florayn Garage/Phone Case</code>), then Analyse.
+        </Text>
+      </div>
+
+      {/* Folder browser */}
+      <div className="flex flex-wrap items-center gap-1 px-6 py-3">
+        {crumbs.map((c, i) => (
+          <span key={c.prefix} className="flex items-center gap-1">
+            {i > 0 ? <span className="text-ui-fg-muted">/</span> : null}
+            <button
+              type="button"
+              className={
+                i === crumbs.length - 1
+                  ? "text-ui-fg-base text-sm font-medium"
+                  : "text-ui-fg-interactive text-sm hover:underline"
+              }
+              onClick={() => setPrefix(c.prefix)}
+            >
+              {c.label}
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <div className="px-6 py-2">
+        {loadingFolders ? (
+          <Text size="small">Loading&hellip;</Text>
+        ) : folders.length ? (
+          <div className="flex flex-wrap gap-2">
+            {folders.map((f) => (
+              <Button
+                key={f.prefix}
+                variant="secondary"
+                size="small"
+                disabled={busy || analyzing}
+                onClick={() => setPrefix(f.prefix.replace(/\/$/, ""))}
+              >
+                {f.name}
+              </Button>
+            ))}
+          </div>
+        ) : (
+          <Text size="small" className="text-ui-fg-muted">
+            No sub-folders here.
+          </Text>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 px-6 py-3">
+        <Button
+          variant="primary"
+          size="small"
+          isLoading={analyzing}
+          disabled={!prefix || busy}
+          onClick={analyze}
+        >
+          Analyse this folder
+        </Button>
+        {prefix ? (
+          <Text size="xsmall" className="text-ui-fg-muted">
+            Selected: <span className="font-mono">{prefix}</span>
+          </Text>
+        ) : null}
+      </div>
+
+      {analysis && (
+        <>
+          <div className="grid grid-cols-1 gap-4 px-6 py-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <Label size="small">Collection (optional)</Label>
+              <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="e.g. Garage" />
+              <Text size="xsmall" className="text-ui-fg-muted">
+                Applied to every design created here.
+              </Text>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label size="small">Starting blank stock</Label>
+              <Input
+                type="number"
+                min={0}
+                value={blankStock}
+                onChange={(e) => setBlankStock(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="px-6 py-4">
+            <Text size="small" weight="plus" className="mb-2">
+              Found {analysis.designs.length} design(s), {totalImages} image(s)
+              {analysis.skipped ? ` (${analysis.skipped} file(s) skipped)` : ""}
+            </Text>
+            {(analysis.unmatchedCases.length > 0 || analysis.unmatchedDevices.length > 0) && (
+              <Text size="xsmall" className="text-ui-fg-error mb-2">
+                Not matched (these are skipped):{" "}
+                {[...analysis.unmatchedCases, ...analysis.unmatchedDevices].join(", ")}
+              </Text>
+            )}
+            {analysis.designs.length ? (
+              <Table>
+                <Table.Header>
+                  <Table.Row>
+                    <Table.HeaderCell>Design</Table.HeaderCell>
+                    <Table.HeaderCell>Case types</Table.HeaderCell>
+                    <Table.HeaderCell>Images</Table.HeaderCell>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {analysis.designs.map((d) => (
+                    <Table.Row key={d.slug}>
+                      <Table.Cell>
+                        <Text size="small" weight="plus">
+                          {d.name}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="xsmall" className="text-ui-fg-muted">
+                          {d.caseTypes.map((c) => c.slug).join(", ")}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="xsmall">{d.images}</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table>
+            ) : null}
+          </div>
+
+          <div className="px-6 py-4">
+            <Button
+              variant="primary"
+              isLoading={busy}
+              disabled={!analysis.designs.length || busy}
+              onClick={create}
+            >
+              Create {analysis.designs.length > 1 ? `${analysis.designs.length} designs` : "design"}
+            </Button>
+          </div>
+        </>
+      )}
+    </Container>
+  )
+}
+
 type ParsedFile = {
   file: File
   caseRaw: string
@@ -739,6 +990,7 @@ const NewDesignPage = () => {
 
   return (
     <div className="flex flex-col gap-6">
+      <CreateFromR2 onCreated={load} />
       <UploadDesign onCreated={load} />
 
       <Container className="divide-y p-0">
