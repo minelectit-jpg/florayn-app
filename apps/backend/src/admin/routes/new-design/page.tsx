@@ -76,9 +76,27 @@ async function pool<T>(
   await Promise.all(runners)
 }
 
+/**
+ * Folder-name aliases so the owner's FileBird case-type folders auto-map to the
+ * store's case types. Anything not covered here (e.g. "Tough MagSafe") stays
+ * unmatched and the admin picks it from a dropdown.
+ */
+const CASE_ALIASES: Record<string, string> = {
+  "elite-transparent-magsafe": "elite-clear",
+  "elite-transparent": "elite-clear",
+  "elite-clear-magsafe": "elite-clear",
+  "armor-transparent-magsafe": "armor-clear",
+  "armor-transparent": "armor-clear",
+  "armor-clear-magsafe": "armor-clear",
+  "armor-black-magsafe": "armor-black",
+  "signature-magsafe": "signature",
+  "essentials-magsafe": "essentials",
+}
+
 type ParsedFile = {
   file: File
   caseRaw: string
+  designRaw: string
   deviceRaw: string
   name: string
 }
@@ -89,18 +107,20 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
   const [caseOptions, setCaseOptions] = useState<{ slug: string; name: string }[]>([])
   const [deviceOptions, setDeviceOptions] = useState<{ slug: string; name: string }[]>([])
 
-  const [name, setName] = useState("")
   const [theme, setTheme] = useState("")
   const [blankStock, setBlankStock] = useState("10")
   const [files, setFiles] = useState<ParsedFile[]>([])
   const [folderLabel, setFolderLabel] = useState("")
+  const [skippedCount, setSkippedCount] = useState(0)
 
   // raw folder segment (slugified) -> chosen canonical slug ("" = unresolved)
   const [caseMap, setCaseMap] = useState<Record<string, string>>({})
   const [deviceMap, setDeviceMap] = useState<Record<string, string>>({})
 
   const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(
+    null
+  )
 
   const dirRef = useRef<HTMLInputElement>(null)
 
@@ -124,20 +144,28 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
       .catch((e) => toast.error(e.message))
   }, [])
 
-  // Auto-match a raw folder name against known slugs and display names.
+  // Auto-match a raw folder name against known slugs, display names and aliases.
   const caseLookup = useMemo(() => {
     const m = new Map<string, string>()
     for (const c of caseOptions) {
       m.set(c.slug, c.slug)
       m.set(slugify(c.name), c.slug)
     }
+    const known = new Set(caseOptions.map((c) => c.slug))
+    for (const [alias, target] of Object.entries(CASE_ALIASES)) {
+      if (known.has(target)) m.set(alias, target)
+    }
     return m
   }, [caseOptions])
+
   const deviceLookup = useMemo(() => {
     const m = new Map<string, string>()
     for (const d of deviceOptions) {
       m.set(d.slug, d.slug)
       m.set(slugify(d.name), d.slug)
+      // The owner's folders drop the brand ("16 Pro Max", "S26 Ultra").
+      if (d.slug.startsWith("iphone-")) m.set(d.slug.slice("iphone-".length), d.slug)
+      else if (d.slug.startsWith("samsung-")) m.set(d.slug.slice("samsung-".length), d.slug)
     }
     return m
   }, [deviceOptions])
@@ -145,27 +173,36 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
   function onPick(fileList: FileList | null) {
     if (!fileList || !fileList.length) return
     const parsed: ParsedFile[] = []
-    let top = ""
+    let collectionGuess = ""
+    let skipped = 0
     for (const file of Array.from(fileList)) {
       if (!file.type.startsWith("image/")) continue
       const rel = (file as any).webkitRelativePath || file.name
-      const parts = String(rel).split("/").filter(Boolean)
-      const dirs = parts.slice(0, -1)
-      if (dirs.length >= 1) top = top || dirs[0]
-      const deviceRaw = dirs[dirs.length - 1] ?? ""
-      const caseRaw = dirs[dirs.length - 2] ?? ""
-      if (!deviceRaw || !caseRaw) continue
-      parsed.push({ file, caseRaw, deviceRaw, name: parts[parts.length - 1] })
+      const segs = String(rel).split("/").filter(Boolean)
+      const dirs = segs.slice(0, -1)
+      // Need at least <case type>/<design>/<device> above the file.
+      if (dirs.length < 3) {
+        skipped++
+        continue
+      }
+      const deviceRaw = dirs[dirs.length - 1]
+      const designRaw = dirs[dirs.length - 2]
+      const caseRaw = dirs[dirs.length - 3]
+      if (!collectionGuess && dirs.length >= 5) collectionGuess = dirs[dirs.length - 5]
+      parsed.push({ file, caseRaw, designRaw, deviceRaw, name: segs[segs.length - 1] })
     }
     if (!parsed.length) {
-      toast.error("No case-type/device folders found. Expected <caseType>/<device>/image.")
+      toast.error(
+        "No <case type>/<design>/<device>/image folders found. Pick the 'Phone Case' folder."
+      )
       return
     }
     setFiles(parsed)
-    setFolderLabel(`${top || "selection"} - ${parsed.length} image(s)`)
-    if (!name && top) setName(top.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
+    setSkippedCount(skipped)
+    const designs = new Set(parsed.map((p) => p.designRaw)).size
+    setFolderLabel(`${designs} design(s), ${parsed.length} image(s)`)
+    if (!theme && collectionGuess) setTheme(collectionGuess)
 
-    // Seed the resolution maps from auto-matching.
     const cMap: Record<string, string> = {}
     const dMap: Record<string, string> = {}
     for (const p of parsed) {
@@ -178,9 +215,6 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
     setDeviceMap(dMap)
   }
 
-  const slug = useMemo(() => slugify(name), [name])
-
-  // Distinct raw segments, for the mapping UI.
   const caseRaws = useMemo(
     () => [...new Set(files.map((f) => slugify(f.caseRaw)))],
     [files]
@@ -189,43 +223,59 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
     () => [...new Set(files.map((f) => slugify(f.deviceRaw)))],
     [files]
   )
+  // Show a picker only for raw names we could not auto-match, plus the raw label.
+  const caseRawLabel = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const f of files) m.set(slugify(f.caseRaw), f.caseRaw)
+    return m
+  }, [files])
+  const deviceRawLabel = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const f of files) m.set(slugify(f.deviceRaw), f.deviceRaw)
+    return m
+  }, [files])
   const unresolvedCases = caseRaws.filter((r) => !caseMap[r])
   const unresolvedDevices = deviceRaws.filter((r) => !deviceMap[r])
 
-  // Build the resolved pair -> files grouping for the summary + upload.
+  // design name -> case slug -> device slug -> files (natural-sorted).
   const grouped = useMemo(() => {
-    const byCase = new Map<string, Map<string, ParsedFile[]>>()
+    const byDesign = new Map<string, Map<string, Map<string, ParsedFile[]>>>()
     for (const f of files) {
       const cs = caseMap[slugify(f.caseRaw)]
       const ds = deviceMap[slugify(f.deviceRaw)]
       if (!cs || !ds) continue
-      const devMap = byCase.get(cs) ?? new Map<string, ParsedFile[]>()
+      const design = f.designRaw
+      const caseMapForDesign = byDesign.get(design) ?? new Map<string, Map<string, ParsedFile[]>>()
+      const devMap = caseMapForDesign.get(cs) ?? new Map<string, ParsedFile[]>()
       const list = devMap.get(ds) ?? []
       list.push(f)
       devMap.set(ds, list)
-      byCase.set(cs, devMap)
+      caseMapForDesign.set(cs, devMap)
+      byDesign.set(design, caseMapForDesign)
     }
-    for (const devMap of byCase.values()) {
-      for (const list of devMap.values()) list.sort((a, b) => naturalCompare(a.name, b.name))
+    for (const caseMapForDesign of byDesign.values()) {
+      for (const devMap of caseMapForDesign.values()) {
+        for (const list of devMap.values()) list.sort((a, b) => naturalCompare(a.name, b.name))
+      }
     }
-    return byCase
+    return byDesign
   }, [files, caseMap, deviceMap])
 
   const caseName = (slugv: string) => caseOptions.find((c) => c.slug === slugv)?.name ?? slugv
-  const deviceName = (slugv: string) => deviceOptions.find((d) => d.slug === slugv)?.name ?? slugv
 
-  const resolvedImageCount = useMemo(() => {
+  const totalImages = useMemo(() => {
     let n = 0
-    for (const devMap of grouped.values()) for (const list of devMap.values()) n += list.length
+    for (const cm of grouped.values())
+      for (const dm of cm.values()) for (const l of dm.values()) n += l.length
     return n
   }, [grouped])
 
   function reset() {
-    setName("")
     setTheme("")
     setBlankStock("10")
     setFiles([])
     setFolderLabel("")
+    setSkippedCount(0)
     setCaseMap({})
     setDeviceMap({})
     setProgress(null)
@@ -233,9 +283,8 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
   }
 
   const canCreate =
-    !!name.trim() &&
     files.length > 0 &&
-    resolvedImageCount > 0 &&
+    grouped.size > 0 &&
     unresolvedCases.length === 0 &&
     unresolvedDevices.length === 0 &&
     !busy
@@ -243,80 +292,105 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
   async function create() {
     if (!canCreate) return
     setBusy(true)
-    try {
-      // Flatten every resolved file with its target slot, keeping order.
-      const jobs: {
-        caseSlug: string
-        deviceSlug: string
-        slot: number
-        file: File
-        fileName: string
-      }[] = []
-      const pairs: Record<string, Record<string, string[]>> = {}
-      for (const [caseSlug, devMap] of grouped) {
-        pairs[caseSlug] = {}
-        for (const [deviceSlug, list] of devMap) {
-          pairs[caseSlug][deviceSlug] = new Array(list.length).fill("")
-          list.forEach((pf, slot) =>
-            jobs.push({ caseSlug, deviceSlug, slot, file: pf.file, fileName: pf.name })
-          )
-        }
-      }
+    const designList = [...grouped.entries()]
+    const total = totalImages
+    let done = 0
+    const created: string[] = []
+    const existed: string[] = []
+    const failed: string[] = []
 
-      setProgress({ done: 0, total: jobs.length })
-      let done = 0
-      let failed = 0
-      await pool(jobs, 5, async (job) => {
+    try {
+      for (const [designName, caseMapForDesign] of designList) {
+        setProgress({ done, total, label: designName })
+        const slug = slugify(designName)
+
+        // Build the pair -> URL map, uploading every file first (ordered slots).
+        const pairs: Record<string, Record<string, string[]>> = {}
+        const jobs: {
+          caseSlug: string
+          deviceSlug: string
+          slot: number
+          file: File
+          fileName: string
+        }[] = []
+        for (const [caseSlug, devMap] of caseMapForDesign) {
+          pairs[caseSlug] = {}
+          for (const [deviceSlug, list] of devMap) {
+            pairs[caseSlug][deviceSlug] = new Array(list.length).fill("")
+            list.forEach((pf, slot) =>
+              jobs.push({ caseSlug, deviceSlug, slot, file: pf.file, fileName: pf.name })
+            )
+          }
+        }
+
+        let uploadFailed = 0
+        await pool(jobs, 5, async (job) => {
+          try {
+            const contentBase64 = await readAsBase64(job.file)
+            const r = await api("/admin/designs/upload", {
+              method: "POST",
+              body: JSON.stringify({
+                designSlug: slug,
+                caseTypeSlug: job.caseSlug,
+                deviceSlug: job.deviceSlug,
+                index: job.slot + 1,
+                filename: job.fileName,
+                mimeType: job.file.type || "image/webp",
+                contentBase64,
+              }),
+            })
+            pairs[job.caseSlug][job.deviceSlug][job.slot] = r.url
+          } catch {
+            uploadFailed++
+          } finally {
+            done++
+            setProgress({ done, total, label: designName })
+          }
+        })
+
+        if (uploadFailed) {
+          failed.push(`${designName} (${uploadFailed} image upload(s) failed)`)
+          continue
+        }
+        for (const caseSlug of Object.keys(pairs)) {
+          for (const deviceSlug of Object.keys(pairs[caseSlug])) {
+            pairs[caseSlug][deviceSlug] = pairs[caseSlug][deviceSlug].filter(Boolean)
+          }
+        }
+
         try {
-          const contentBase64 = await readAsBase64(job.file)
-          const r = await api("/admin/designs/upload", {
+          await api("/admin/designs/custom", {
             method: "POST",
             body: JSON.stringify({
-              designSlug: slug,
-              caseTypeSlug: job.caseSlug,
-              deviceSlug: job.deviceSlug,
-              index: job.slot + 1,
-              filename: job.fileName,
-              mimeType: job.file.type || "image/webp",
-              contentBase64,
+              name: designName,
+              slug,
+              theme: theme.trim() || null,
+              blankStock: Number(blankStock) || 10,
+              pairs,
             }),
           })
-          pairs[job.caseSlug][job.deviceSlug][job.slot] = r.url
-        } catch {
-          failed++
-        } finally {
-          done++
-          setProgress({ done, total: jobs.length })
-        }
-      })
-
-      if (failed) {
-        throw new Error(`${failed} of ${jobs.length} images failed to upload. Try again.`)
-      }
-      // Drop any empty slots defensively.
-      for (const caseSlug of Object.keys(pairs)) {
-        for (const deviceSlug of Object.keys(pairs[caseSlug])) {
-          pairs[caseSlug][deviceSlug] = pairs[caseSlug][deviceSlug].filter(Boolean)
+          created.push(designName)
+        } catch (e: any) {
+          if (/already exists|already in the store/i.test(e.message ?? "")) {
+            existed.push(designName)
+          } else {
+            failed.push(`${designName}: ${e.message}`)
+          }
         }
       }
 
-      const created = await api("/admin/designs/custom", {
-        method: "POST",
-        body: JSON.stringify({
-          name: name.trim(),
-          slug,
-          theme: theme.trim() || null,
-          blankStock: Number(blankStock) || 10,
-          pairs,
-        }),
-      })
-      const r = created.result
-      toast.success(
-        `${name.trim()} added: ${r.products.length} product(s), ${r.variants} variants, ` +
-          `${r.images} images, ${r.blanksCreated} new blank(s).`
-      )
-      reset()
-      onCreated()
+      const parts = [`${created.length} created`]
+      if (existed.length) parts.push(`${existed.length} already existed`)
+      if (failed.length) parts.push(`${failed.length} failed`)
+      if (failed.length) {
+        toast.error(`Done with issues: ${parts.join(", ")}. First: ${failed[0]}`)
+      } else {
+        toast.success(`Done: ${parts.join(", ")}.`)
+      }
+      if (created.length) {
+        reset()
+        onCreated()
+      }
     } catch (e: any) {
       toast.error(e.message)
     } finally {
@@ -332,28 +406,17 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
       <div className="px-6 py-4">
         <Heading level="h2">Upload a new design</Heading>
         <Text size="small" className="text-ui-fg-subtle">
-          Pick a folder of finished mockups laid out as{" "}
-          <code>&lt;case type&gt;/&lt;device&gt;/1.webp</code> (a design folder on
-          top is fine too). It uploads every image to R2 in that structure, then
-          builds the phone case (and AirPods etc.) product with Case Type + Device
-          options, only the pairs you uploaded, and shared blank stock.
+          Pick your mockup folder laid out as{" "}
+          <code>&lt;case type&gt;/&lt;design&gt;/&lt;device&gt;/1.webp</code> (pick
+          the <b>Phone Case</b> folder to do a whole collection at once). It uploads
+          every image to R2 in that structure, then builds each design&rsquo;s Case
+          Type + Device product with shared blank stock. Case-type and device folder
+          names are matched to the store automatically; anything unmatched you map
+          below.
         </Text>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 px-6 py-4 md:grid-cols-3">
-        <div className="flex flex-col gap-1">
-          <Label size="small">Design name</Label>
-          <Input
-            placeholder="e.g. Amber Leopard"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          {slug ? (
-            <Text size="xsmall" className="text-ui-fg-muted">
-              handle: {slug}
-            </Text>
-          ) : null}
-        </div>
+      <div className="grid grid-cols-1 gap-4 px-6 py-4 md:grid-cols-2">
         <div className="flex flex-col gap-1">
           <Label size="small">Collection (optional)</Label>
           <Input
@@ -361,6 +424,9 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
             value={theme}
             onChange={(e) => setTheme(e.target.value)}
           />
+          <Text size="xsmall" className="text-ui-fg-muted">
+            Applied to every design in this upload.
+          </Text>
         </div>
         <div className="flex flex-col gap-1">
           <Label size="small">Starting blank stock</Label>
@@ -386,18 +452,20 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
           className="text-ui-fg-subtle text-sm"
         />
         {folderLabel ? <Badge color="grey">{folderLabel}</Badge> : null}
+        {skippedCount ? (
+          <Badge color="orange">{skippedCount} file(s) skipped (unexpected layout)</Badge>
+        ) : null}
       </div>
 
       {(unresolvedCases.length > 0 || unresolvedDevices.length > 0) && (
         <div className="flex flex-col gap-3 px-6 py-4">
           <Text size="small" weight="plus" className="text-ui-fg-error">
-            Some folders did not match a known case type / device. Map them to
-            continue:
+            These folder names did not match the store. Pick what they are:
           </Text>
           {unresolvedCases.map((raw) => (
             <div key={`c-${raw}`} className="flex items-center gap-3">
-              <Text size="small" className="w-48 truncate">
-                Case folder: <span className="font-mono">{raw}</span>
+              <Text size="small" className="w-56 truncate">
+                Case type folder: <span className="font-mono">{caseRawLabel.get(raw)}</span>
               </Text>
               <div className="w-64">
                 <Select
@@ -420,8 +488,8 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
           ))}
           {unresolvedDevices.map((raw) => (
             <div key={`d-${raw}`} className="flex items-center gap-3">
-              <Text size="small" className="w-48 truncate">
-                Device folder: <span className="font-mono">{raw}</span>
+              <Text size="small" className="w-56 truncate">
+                Device folder: <span className="font-mono">{deviceRawLabel.get(raw)}</span>
               </Text>
               <div className="w-64">
                 <Select
@@ -448,30 +516,30 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
       {grouped.size > 0 && (
         <div className="px-6 py-4">
           <Text size="small" weight="plus" className="mb-2">
-            Ready to create: {grouped.size} case type(s), {resolvedImageCount} image(s)
+            Ready: {grouped.size} design(s), {totalImages} image(s)
           </Text>
           <Table>
             <Table.Header>
               <Table.Row>
-                <Table.HeaderCell>Case type</Table.HeaderCell>
-                <Table.HeaderCell>Devices</Table.HeaderCell>
+                <Table.HeaderCell>Design</Table.HeaderCell>
+                <Table.HeaderCell>Case types</Table.HeaderCell>
                 <Table.HeaderCell>Images</Table.HeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {[...grouped.entries()].map(([caseSlug, devMap]) => {
+              {[...grouped.entries()].map(([designName, cm]) => {
                 let imgs = 0
-                for (const l of devMap.values()) imgs += l.length
+                for (const dm of cm.values()) for (const l of dm.values()) imgs += l.length
                 return (
-                  <Table.Row key={caseSlug}>
+                  <Table.Row key={designName}>
                     <Table.Cell>
                       <Text size="small" weight="plus">
-                        {caseName(caseSlug)}
+                        {designName}
                       </Text>
                     </Table.Cell>
                     <Table.Cell>
                       <Text size="xsmall" className="text-ui-fg-muted">
-                        {[...devMap.keys()].map(deviceName).join(", ")}
+                        {[...cm.keys()].map(caseName).join(", ")}
                       </Text>
                     </Table.Cell>
                     <Table.Cell>
@@ -487,7 +555,7 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
 
       <div className="flex flex-wrap items-center gap-4 px-6 py-4">
         <Button variant="primary" disabled={!canCreate} isLoading={busy} onClick={create}>
-          Create design
+          Create {grouped.size > 1 ? `${grouped.size} designs` : "design"}
         </Button>
         {files.length > 0 ? (
           <Button variant="secondary" disabled={busy} onClick={reset}>
@@ -503,7 +571,7 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
               />
             </div>
             <Text size="xsmall" className="text-ui-fg-muted">
-              Uploading {progress.done}/{progress.total}
+              {progress.label} &middot; {progress.done}/{progress.total}
             </Text>
           </div>
         ) : null}
