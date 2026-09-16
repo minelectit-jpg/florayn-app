@@ -27,10 +27,6 @@ export default function ProductGallery({
 }) {
   const [activeId, setActiveId] = useState(items[0]?.id ?? "")
   const active = items.find((item) => item.id === activeId) ?? items[0]
-  // The primary render is the front phone shot: crop its white side margins so
-  // the case fills the frame (object-cover in a portrait stage). Secondary
-  // images (the annotated back-view diagram) stay uncropped (object-contain).
-  const isPrimary = active?.id === items[0]?.id
 
   if (!items.length) {
     return (
@@ -89,7 +85,7 @@ export default function ProductGallery({
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
         ) : (
-          <div className="relative aspect-[3/5] w-full overflow-hidden rounded-[10px] bg-surface lg:aspect-[4/5]">
+          <div className="relative aspect-square w-full overflow-hidden rounded-[10px] bg-surface">
             <ProductImage
               src={active?.url ?? null}
               alt={label}
@@ -97,9 +93,7 @@ export default function ProductGallery({
               priority
               sizes="(max-width: 1024px) 100vw, 540px"
               fillMode="absolute"
-              className={`absolute inset-0 h-full w-full ${
-                isPrimary ? "object-cover" : "object-contain"
-              }`}
+              className="absolute inset-0 h-full w-full object-contain"
             />
           </div>
         )}
