@@ -287,7 +287,7 @@ export default function ProductBuyBox({
       {matrix.caseTypes.length > 1 ? (
         <section className="mt-6">
           <p className="fl-pdp-label">CASE TYPE</p>
-          <ul className="flex flex-wrap gap-[10px]">
+          <ul className="flex gap-[8px] md:gap-[10px]">
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -295,7 +295,7 @@ export default function ProductBuyBox({
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
-                <li key={ct}>
+                <li key={ct} className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => onSelectCaseType(ct)}
@@ -303,26 +303,26 @@ export default function ProductBuyBox({
                     disabled={!fits && !isCurrent}
                     title={!fits ? `${ct} is not made for ${device}` : ct}
                     className={[
-                      "flex h-[205px] w-[135px] flex-col overflow-hidden rounded-[10px] border bg-surface text-left transition-colors",
+                      "flex w-full flex-col overflow-hidden rounded-[10px] border bg-surface text-left transition-colors",
                       isCurrent
                         ? "border-purple"
                         : "border-[#e2e2e2] hover:border-purple",
                       (!fits && !isCurrent) || soldOut ? "opacity-40" : "",
                     ].join(" ")}
                   >
-                    <span className="relative block h-[150px] w-full overflow-hidden rounded-t-[9px]">
+                    <span className="relative block aspect-[9/10] w-full overflow-hidden rounded-t-[9px]">
                       <ProductImage
                         src={img}
                         alt={ct}
                         label={ct}
-                        sizes="135px"
+                        sizes="(max-width: 768px) 25vw, 135px"
                       />
                     </span>
-                    <span className="block px-2 py-2 text-center">
-                      <span className="block text-[13px] font-semibold leading-tight">
+                    <span className="block px-1 py-1.5 text-center md:px-2 md:py-2">
+                      <span className="block text-[11px] font-semibold leading-tight md:text-[13px]">
                         {ct}
                       </span>
-                      <span className="mt-0.5 block text-[13px] tabular-nums text-ink-muted">
+                      <span className="mt-0.5 block text-[11px] tabular-nums text-ink-muted md:text-[13px]">
                         {soldOut
                           ? "Sold out"
                           : ctPrice != null

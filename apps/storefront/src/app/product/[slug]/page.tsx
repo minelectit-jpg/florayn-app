@@ -114,7 +114,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
   // one-off - renders as a plain product page instead of the linked selectors.
   if (!(matrix.caseTypes.length && matrix.devices.length)) {
     return (
-      <article className="mx-auto w-full max-w-[1260px] px-[30px]">
+      <article className="mx-auto w-full max-w-[1260px] px-0 md:px-[30px]">
         <RegularProductView
           product={product}
           collection={
@@ -367,7 +367,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
   ]
 
   return (
-    <article className="mx-auto w-full max-w-[1260px] px-[30px]">
+    <article className="mx-auto w-full max-w-[1260px] px-0 md:px-[30px]">
       <ProductView
         matrix={matrix}
         variants={product.variants ?? []}

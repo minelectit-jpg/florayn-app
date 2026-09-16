@@ -5,15 +5,22 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import MegaPanel from "@/components/mega-menu"
 import ShoppingBagIcon from "@/components/shopping-bag-icon"
-import type { MenuSection } from "@/lib/content"
+import type { CaseTypeInfo, MenuSection } from "@/lib/content"
 
 /**
  * The header, matching the live site's arrangement: the WOMEN/MEN pill on the
  * left, the wordmark centred, actions on the right, and the navigation on its
  * own row underneath. Below lg the nav row becomes a drawer.
  */
-export default function SiteHeader({ menu }: { menu: MenuSection[] }) {
+export default function SiteHeader({
+  menu,
+  caseTypes = [],
+}: {
+  menu: MenuSection[]
+  caseTypes?: CaseTypeInfo[]
+}) {
   const pathname = usePathname()
   const { summary, openDrawer } = useCart()
   const itemCount = summary?.itemCount ?? 0
@@ -152,44 +159,13 @@ export default function SiteHeader({ menu }: { menu: MenuSection[] }) {
 
         {menu.map((section) => {
           if (openMenu !== section.id) return null
-          const single = section.groups.length === 1 && !section.groups[0].heading
           return (
             <div
               key={section.id}
-              className="absolute inset-x-0 top-full border-y border-line bg-surface shadow-[0_18px_34px_-18px_rgba(26,22,37,0.28)]"
+              className="absolute left-1/2 top-full z-50 -translate-x-1/2 pt-2"
             >
-              <div
-                className={[
-                  "mx-auto grid w-full max-w-[1470px] gap-x-8 gap-y-6 px-[30px] py-8",
-                  single ? "grid-cols-2 md:grid-cols-3" : "grid-cols-5",
-                ].join(" ")}
-              >
-                {section.groups.map((group, i) => (
-                  <div key={group.heading ?? i} className={single ? "contents" : ""}>
-                    {group.heading ? (
-                      <p className="mb-2 text-[15px] font-semibold">
-                        {group.heading}
-                      </p>
-                    ) : null}
-                    <ul className={single ? "contents" : "space-y-1.5"}>
-                      {group.links.map((link) => (
-                        <li key={link.id}>
-                          <Link
-                            href={link.href}
-                            className="inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-purple"
-                          >
-                            {link.label}
-                            {link.badge ? (
-                              <span className="rounded-full bg-purple px-1.5 py-[1px] text-[9px] font-semibold uppercase text-white">
-                                {link.badge}
-                              </span>
-                            ) : null}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+              <div className="w-max max-w-[calc(100vw-32px)] overflow-hidden rounded-[16px] border border-line bg-surface shadow-[0_20px_48px_-16px_rgba(26,22,37,0.32)]">
+                <MegaPanel section={section} caseTypes={caseTypes} />
               </div>
             </div>
           )

@@ -5,7 +5,7 @@ import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
 import SiteFooter from "@/components/site-footer"
 import SiteHeader from "@/components/site-header"
-import { getSiteContent } from "@/lib/content"
+import { getCaseTypes, getSiteContent } from "@/lib/content"
 
 import "./globals.css"
 
@@ -36,15 +36,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const content = await getSiteContent()
+  const [content, caseTypes] = await Promise.all([
+    getSiteContent(),
+    getCaseTypes(),
+  ])
 
   return (
     <html lang="en" className={instrumentSans.variable}>
       <body className="min-h-screen bg-paper text-ink">
         <CartProvider>
-          <SiteHeader menu={content.primary} />
+          <SiteHeader menu={content.primary} caseTypes={caseTypes} />
 
-          <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-12 md:px-[30px] md:py-16">
+          <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-6 md:px-[30px] md:py-16">
             {children}
           </main>
 

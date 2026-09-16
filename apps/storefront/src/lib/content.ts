@@ -64,6 +64,40 @@ export async function getSiteContent(): Promise<SiteContent> {
   }
 }
 
+export type CaseTypeInfo = {
+  slug: string
+  name: string
+  description: string
+  price: number | null
+}
+
+/** The case constructions (Signature, Elite Clear, Armor, Alcantara, …) with
+ * their copy and starting price, for the "Shop by style" menu. */
+export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
+  try {
+    const res = await fetch(`${BACKEND}/store/case-types`, {
+      headers: { "x-publishable-api-key": KEY },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return []
+    const json = (await res.json()) as {
+      case_types?: any[]
+      data?: any[]
+    }
+    const arr = json.case_types ?? json.data ?? []
+    return arr
+      .filter((c) => c.is_active)
+      .map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        description: c.description ?? "",
+        price: typeof c.price === "number" ? c.price : null,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export type CollectionPage = {
   collection_slug: string
   hero_image_url: string | null
