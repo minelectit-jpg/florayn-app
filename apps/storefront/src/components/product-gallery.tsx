@@ -85,7 +85,7 @@ export default function ProductGallery({
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
         ) : (
-          <div className="relative aspect-square w-full overflow-hidden rounded-[10px] bg-surface">
+          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[10px] bg-surface">
             <ProductImage
               src={active?.url ?? null}
               alt={label}
@@ -93,7 +93,7 @@ export default function ProductGallery({
               priority
               sizes="(max-width: 1024px) 100vw, 540px"
               fillMode="absolute"
-              className="absolute inset-0 h-full w-full scale-[1.22] object-contain"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           </div>
         )}
