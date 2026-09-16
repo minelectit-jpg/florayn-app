@@ -20,6 +20,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const body = (req.body ?? {}) as {
     description?: string
     price?: number
+    image_url?: string | null
   }
 
   const catalog: any = req.scope.resolve(CATALOG_MODULE)
@@ -27,6 +28,9 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const update: Record<string, unknown> = { id }
   if (typeof body.description === "string") update.description = body.description
+  // The "Shop by style" menu photo. Empty string clears it.
+  if (typeof body.image_url === "string" || body.image_url === null)
+    update.image_url = body.image_url ? body.image_url.trim() : null
 
   const wantsReprice =
     Number.isFinite(body.price) &&

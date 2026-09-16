@@ -69,6 +69,8 @@ export type CaseTypeInfo = {
   name: string
   description: string
   price: number | null
+  /** Admin-set photo for the "Shop by style" menu card; null falls back to a default. */
+  image: string | null
 }
 
 /** The case constructions (Signature, Elite Clear, Armor, Alcantara, …) with
@@ -92,6 +94,7 @@ export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
         name: c.name,
         description: c.description ?? "",
         price: typeof c.price === "number" ? c.price : null,
+        image: c.image_url ?? null,
       }))
   } catch {
     return []

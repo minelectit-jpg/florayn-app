@@ -12,6 +12,8 @@ const CaseType = model.define("case_type", {
   slug: model.text().unique(),
   name: model.text(),
   description: model.text().nullable(),
+  // Representative photo for the "Shop by style" menu card; admin-editable.
+  image_url: model.text().nullable(),
   // Short code used when building variant SKUs, e.g. ARMBLK.
   sku_code: model.text(),
   // Flat price in BDT for every variant of every product in this case type.

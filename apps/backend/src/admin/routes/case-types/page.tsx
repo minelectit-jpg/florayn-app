@@ -20,6 +20,7 @@ type CaseType = {
   sku_code: string
   price: number
   sort_order: number
+  image_url: string | null
 }
 
 async function api(path: string, init?: RequestInit) {
@@ -33,7 +34,7 @@ async function api(path: string, init?: RequestInit) {
   return body
 }
 
-type Draft = { price: string; description: string }
+type Draft = { price: string; description: string; image_url: string }
 
 const CaseTypesPage = () => {
   const [rows, setRows] = useState<CaseType[]>([])
@@ -51,7 +52,11 @@ const CaseTypesPage = () => {
           Object.fromEntries(
             list.map((c) => [
               c.id,
-              { price: String(c.price), description: c.description ?? "" },
+              {
+                price: String(c.price),
+                description: c.description ?? "",
+                image_url: c.image_url ?? "",
+              },
             ])
           )
         )
@@ -77,7 +82,11 @@ const CaseTypesPage = () => {
     try {
       const res = await api(`/admin/case-types/${row.id}`, {
         method: "POST",
-        body: JSON.stringify({ price, description: d.description }),
+        body: JSON.stringify({
+          price,
+          description: d.description,
+          image_url: d.image_url,
+        }),
       })
       setRows((list) =>
         list.map((c) => (c.id === row.id ? res.case_type : c))
@@ -98,7 +107,12 @@ const CaseTypesPage = () => {
 
   const dirty = (row: CaseType) => {
     const d = draft[row.id]
-    return d && (Number(d.price) !== row.price || d.description !== (row.description ?? ""))
+    return (
+      d &&
+      (Number(d.price) !== row.price ||
+        d.description !== (row.description ?? "") ||
+        d.image_url !== (row.image_url ?? ""))
+    )
   }
 
   return (
@@ -123,6 +137,7 @@ const CaseTypesPage = () => {
                 <Table.HeaderCell>Case type</Table.HeaderCell>
                 <Table.HeaderCell>Price (৳)</Table.HeaderCell>
                 <Table.HeaderCell>Description</Table.HeaderCell>
+                <Table.HeaderCell>Menu image</Table.HeaderCell>
                 <Table.HeaderCell />
               </Table.Row>
             </Table.Header>
@@ -155,6 +170,23 @@ const CaseTypesPage = () => {
                         edit(row.id, "description", e.target.value)
                       }
                     />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <div className="flex items-center gap-2">
+                      {draft[row.id]?.image_url ? (
+                        <img
+                          src={draft[row.id].image_url}
+                          alt=""
+                          className="h-10 w-10 shrink-0 rounded object-cover"
+                        />
+                      ) : null}
+                      <Input
+                        className="min-w-[220px]"
+                        placeholder="https://…/photo.jpg"
+                        value={draft[row.id]?.image_url ?? ""}
+                        onChange={(e) => edit(row.id, "image_url", e.target.value)}
+                      />
+                    </div>
                   </Table.Cell>
                   <Table.Cell>
                     <Button

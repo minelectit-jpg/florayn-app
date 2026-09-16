@@ -101,7 +101,8 @@ export default function MegaPanel({
       .flatMap((g) => g.links)
       .map((link) => {
         const info = byName.get(link.label.toLowerCase())
-        return { link, info, image: info ? STYLE_IMAGE[info.slug] : undefined }
+        const image = info ? info.image ?? STYLE_IMAGE[info.slug] : undefined
+        return { link, info, image }
       })
 
     return (
