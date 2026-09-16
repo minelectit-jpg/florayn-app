@@ -45,10 +45,12 @@ const EMPTY: Fields = {
 export default function CheckoutForm({
   districts,
   subtotal,
+  bundleDiscount = 0,
   currencyCode,
 }: {
   districts: DistrictsResponse
   subtotal: number
+  bundleDiscount?: number
   currencyCode: string
 }) {
   const router = useRouter()
@@ -64,7 +66,8 @@ export default function CheckoutForm({
   // Until a district is chosen the rate is not known, so show nothing rather
   // than a number that might change once they pick one.
   const shippingKnown = Boolean(fields.district)
-  const total = subtotal + (shippingKnown ? shipping : 0)
+  const total =
+    subtotal - bundleDiscount + (shippingKnown ? shipping : 0)
 
   function set<K extends keyof Fields>(key: K, value: Fields[K]) {
     setFields((f) => ({ ...f, [key]: value }))
@@ -136,7 +139,7 @@ export default function CheckoutForm({
     })
 
     if (result.ok) {
-      applySummary({ itemCount: 0, subtotal: 0, currencyCode })
+      applySummary({ itemCount: 0, subtotal: 0, currencyCode, bundleDiscount: 0 })
       router.push(`/order/${result.order.id}/`)
       return
     }
@@ -311,6 +314,14 @@ export default function CheckoutForm({
             <dt className="text-ink-muted">Subtotal</dt>
             <dd>{formatPrice(subtotal, currencyCode)}</dd>
           </div>
+          {bundleDiscount > 0 ? (
+            <div className="flex justify-between text-purple">
+              <dt className="font-medium">Bundle savings</dt>
+              <dd className="font-semibold">
+                &minus;{formatPrice(bundleDiscount, currencyCode)}
+              </dd>
+            </div>
+          ) : null}
           <div className="flex justify-between">
             <dt className="text-ink-muted">Delivery</dt>
             <dd>

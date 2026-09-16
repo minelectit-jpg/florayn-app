@@ -66,6 +66,77 @@ export function tierPricing(unitPrice: number, tier: BundleTier) {
   return { quantity, subtotal, discount, total: subtotal - discount }
 }
 
+/** A cart line reduced to what the bundle maths needs. */
+export type BundleLine = {
+  unit_price: number
+  quantity: number
+  is_case: boolean
+  form?: string
+  design?: string
+}
+
+function lineDiscountMirror(
+  unitPrice: number,
+  quantity: number,
+  tiers: BundleTier[]
+): number {
+  const tier = tiers
+    .filter((t) => t.quantity > 1 && quantity >= t.quantity)
+    .sort((a, b) => b.quantity - a.quantity)[0]
+  if (!tier) return 0
+  const packs = Math.floor(quantity / tier.quantity)
+  return tierPricing(unitPrice, tier).discount * packs
+}
+
+/**
+ * The whole-cart discount, mirroring modules/bundles/pricing.ts so the cart and
+ * checkout can show the saving before the order is placed. The backend recomputes
+ * and owns the real promotion; this is only for display.
+ */
+export function cartDiscount(
+  lines: BundleLine[],
+  config: BundleConfig | null
+): number {
+  if (!config || !config.settings.is_active) return 0
+  const s = config.settings
+
+  // Packs: aggregate the eligible case quantity, then the tier repeats at the
+  // average unit price.
+  let q = 0
+  let subtotal = 0
+  for (const l of lines) {
+    const u = Number(l.unit_price ?? 0)
+    const qty = Number(l.quantity ?? 0)
+    if (!u || qty < 1) continue
+    if (s.scope === "cases" && !l.is_case) continue
+    q += qty
+    subtotal += u * qty
+  }
+  let discount = q >= 2 ? lineDiscountMirror(subtotal / q, q, config.tiers) : 0
+
+  // Matching Set: a phone case + AirPods case of one design.
+  if ((s.matching_set_enabled ?? true) && (s.matching_set_discount ?? 250) > 0) {
+    const phones = new Map<string, number>()
+    const airpods = new Map<string, number>()
+    for (const l of lines) {
+      const qty = Number(l.quantity ?? 0)
+      if (qty < 1 || !l.design) continue
+      if (l.form === "airpods") {
+        airpods.set(l.design, (airpods.get(l.design) ?? 0) + qty)
+      } else if (l.form === "phone" || l.is_case) {
+        phones.set(l.design, (phones.get(l.design) ?? 0) + qty)
+      }
+    }
+    let pairs = 0
+    for (const [design, count] of phones) {
+      pairs += Math.min(count, airpods.get(design) ?? 0)
+    }
+    discount += pairs * Math.round(s.matching_set_discount ?? 250)
+  }
+
+  return discount
+}
+
 export async function getBundleConfig(): Promise<BundleConfig | null> {
   try {
     const res = await fetch(`${BACKEND}/store/bundles`, {

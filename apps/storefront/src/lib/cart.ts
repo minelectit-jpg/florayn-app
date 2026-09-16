@@ -3,6 +3,7 @@
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 
+import { cartDiscount, getBundleConfig, type BundleLine } from "./bundles"
 import {
   placeOrder,
   type CheckoutInput,
@@ -14,7 +15,7 @@ const CART_COOKIE = "florayn_cart_id"
 
 const CART_FIELDS =
   "id,currency_code,subtotal,shipping_total,tax_total,total,item_total," +
-  "*items,*items.variant,*items.variant.product"
+  "*items,*items.variant,*items.variant.product,items.variant.product.metadata"
 
 export type CartItem = {
   id: string
@@ -27,7 +28,12 @@ export type CartItem = {
     id: string
     title: string
     sku?: string | null
-    product?: { title: string; handle: string; thumbnail?: string | null }
+    product?: {
+      title: string
+      handle: string
+      thumbnail?: string | null
+      metadata?: Record<string, unknown> | null
+    }
   }
 }
 
@@ -37,6 +43,8 @@ export type Cart = {
   subtotal: number
   total: number
   items?: CartItem[]
+  /** The multi-buy / Matching Set saving on this cart, for display. */
+  bundleDiscount?: number
 }
 
 /**
@@ -48,6 +56,8 @@ export type CartSummary = {
   itemCount: number
   subtotal: number
   currencyCode: string
+  /** Multi-buy / Matching Set saving, so the drawer and badge can show it. */
+  bundleDiscount: number
 }
 
 export type AddedLine = {
@@ -64,6 +74,7 @@ const EMPTY_SUMMARY: CartSummary = {
   itemCount: 0,
   subtotal: 0,
   currencyCode: "bdt",
+  bundleDiscount: 0,
 }
 
 function summarize(cart: Cart | null): CartSummary {
@@ -75,6 +86,32 @@ function summarize(cart: Cart | null): CartSummary {
     itemCount: (cart.items ?? []).reduce((sum, i) => sum + i.quantity, 0),
     subtotal: cart.subtotal ?? 0,
     currencyCode: cart.currency_code ?? "bdt",
+    bundleDiscount: cart.bundleDiscount ?? 0,
+  }
+}
+
+/** Whether a device name is a phone case (the pack scope), inferred by family. */
+function deviceIsCase(name: string): boolean {
+  return /iphone|galaxy|samsung/i.test(name)
+}
+
+/** The saving this cart earns, mirrored from the backend for display. */
+async function computeBundleDiscount(cart: Cart): Promise<number> {
+  const lines: BundleLine[] = (cart.items ?? []).map((i) => {
+    const meta = i.variant?.product?.metadata ?? {}
+    return {
+      unit_price: i.unit_price,
+      quantity: i.quantity,
+      is_case: deviceIsCase(i.variant?.title ?? ""),
+      form: (meta.form as string) ?? undefined,
+      design: (meta.design_slug as string) ?? undefined,
+    }
+  })
+  if (!lines.length) return 0
+  try {
+    return cartDiscount(lines, await getBundleConfig())
+  } catch {
+    return 0
   }
 }
 
@@ -93,7 +130,9 @@ export async function getCart(): Promise<Cart | null> {
     const { cart } = await sdk.store.cart.retrieve(cartId, {
       fields: CART_FIELDS,
     })
-    return cart as unknown as Cart
+    const typed = cart as unknown as Cart
+    typed.bundleDiscount = await computeBundleDiscount(typed)
+    return typed
   } catch {
     // The cart was completed or pruned server-side; treat it as empty.
     return null

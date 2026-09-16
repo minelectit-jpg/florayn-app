@@ -28,6 +28,8 @@ export default async function CartPage() {
   }
 
   const subtotal = cart?.subtotal ?? 0
+  const discount = cart?.bundleDiscount ?? 0
+  const total = Math.max(0, subtotal - discount)
 
   return (
     <div className="space-y-10">
@@ -54,10 +56,29 @@ export default async function CartPage() {
 
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-ink-muted">Subtotal</span>
-            <span className="display text-2xl tabular-nums">
+            <span
+              className={`tabular-nums ${discount > 0 ? "text-base text-ink-muted line-through" : "display text-2xl"}`}
+            >
               {formatPrice(subtotal, currencyCode)}
             </span>
           </div>
+
+          {discount > 0 ? (
+            <>
+              <div className="flex items-baseline justify-between text-purple">
+                <span className="text-sm font-medium">Bundle savings</span>
+                <span className="text-sm font-semibold tabular-nums">
+                  &minus;{formatPrice(discount, currencyCode)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between border-t border-line pt-4">
+                <span className="text-sm text-ink-muted">Total</span>
+                <span className="display text-2xl tabular-nums">
+                  {formatPrice(total, currencyCode)}
+                </span>
+              </div>
+            </>
+          ) : null}
 
           {districts ? (
             <p className="border-t border-line pt-4 text-sm text-ink-muted">

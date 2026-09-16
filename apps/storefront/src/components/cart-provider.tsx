@@ -81,7 +81,12 @@ export default function CartProvider({
       })
       .catch(() => {
         if (!cancelled) {
-          setSummary({ itemCount: 0, subtotal: 0, currencyCode: "bdt" })
+          setSummary({
+            itemCount: 0,
+            subtotal: 0,
+            currencyCode: "bdt",
+            bundleDiscount: 0,
+          })
         }
       })
     return () => {
@@ -109,6 +114,7 @@ export default function CartProvider({
         subtotal:
           (current?.subtotal ?? 0) + optimistic.unitPrice * quantity,
         currencyCode: current?.currencyCode ?? "bdt",
+        bundleDiscount: current?.bundleDiscount ?? 0,
       }))
       setLastAdded({
         id: `optimistic-${variantId}`,
@@ -161,6 +167,7 @@ export default function CartProvider({
         itemCount: (current?.itemCount ?? 0) + count,
         subtotal: (current?.subtotal ?? 0) + optimistic.unitPrice,
         currencyCode: current?.currencyCode ?? "bdt",
+        bundleDiscount: current?.bundleDiscount ?? 0,
       }))
       setLastAdded({
         id: `optimistic-pack-${seq}`,

@@ -139,7 +139,7 @@ export default function CartDrawer() {
           ) : null}
         </div>
 
-        <div className="space-y-4 border-t border-line bg-surface px-6 py-6">
+        <div className="space-y-3 border-t border-line bg-surface px-6 py-6">
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-ink-muted">
               Subtotal
@@ -151,10 +151,32 @@ export default function CartDrawer() {
                 </span>
               ) : null}
             </span>
-            <span className="display text-xl tabular-nums">
+            <span
+              className={`tabular-nums ${(summary?.bundleDiscount ?? 0) > 0 ? "text-sm text-ink-muted line-through" : "display text-xl"}`}
+            >
               {formatPrice(summary?.subtotal, summary?.currencyCode)}
             </span>
           </div>
+
+          {(summary?.bundleDiscount ?? 0) > 0 ? (
+            <>
+              <div className="flex items-baseline justify-between text-purple">
+                <span className="text-sm font-medium">Bundle savings</span>
+                <span className="text-sm font-semibold tabular-nums">
+                  &minus;{formatPrice(summary?.bundleDiscount, summary?.currencyCode)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm text-ink-muted">Total</span>
+                <span className="display text-xl tabular-nums">
+                  {formatPrice(
+                    Math.max(0, (summary?.subtotal ?? 0) - (summary?.bundleDiscount ?? 0)),
+                    summary?.currencyCode
+                  )}
+                </span>
+              </div>
+            </>
+          ) : null}
 
           <ButtonLink href="/cart/" onClick={closeDrawer} size="lg" fullWidth>
             View cart

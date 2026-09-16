@@ -63,6 +63,7 @@ export default async function CheckoutPage() {
       <CheckoutForm
         districts={districts}
         subtotal={cart?.subtotal ?? 0}
+        bundleDiscount={cart?.bundleDiscount ?? 0}
         currencyCode={cart?.currency_code ?? "bdt"}
       />
     </div>
