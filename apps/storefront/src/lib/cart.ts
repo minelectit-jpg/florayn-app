@@ -164,6 +164,32 @@ export async function addToCart(
   }
 }
 
+/**
+ * Adds several variants in one go (a 2-pack / 3-pack / bundle). Line items are
+ * created sequentially so the same cart is not mutated concurrently, then one
+ * fresh summary is returned. The multi-buy discount itself is layered on at the
+ * cart/checkout level by the backend, not here.
+ */
+export async function addManyToCart(
+  items: { variantId: string; quantity?: number }[]
+): Promise<{ summary: CartSummary }> {
+  const clean = items.filter((i) => i.variantId)
+  if (!clean.length) {
+    return { summary: await getCartSummary() }
+  }
+
+  const cartId = await getOrCreateCartId()
+  for (const item of clean) {
+    await sdk.store.cart.createLineItem(cartId, {
+      variant_id: item.variantId,
+      quantity: item.quantity ?? 1,
+    })
+  }
+
+  revalidatePath("/cart")
+  return { summary: summarize(await getCart()) }
+}
+
 export async function setLineItemQuantity(
   lineId: string,
   quantity: number

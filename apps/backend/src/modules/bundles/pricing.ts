@@ -109,28 +109,79 @@ export type CartLine = {
   quantity: number
   /** A phone case. When the bundle scope is "cases", only these are counted. */
   is_case: boolean
+  /** Product form ("phone" | "airpods" | ...), for the Matching Set pairing. */
+  form?: string
+  /** Design slug, so a phone case and an AirPods case can be matched as a set. */
+  design?: string
 }
 
 /**
  * The whole-cart multi-buy discount, with scope applied.
  *
+ * The pack is a whole-cart tier: every eligible case counts toward one total,
+ * so two different designs (two lines of one each) are a 2-pack just as two of
+ * the same design are. The tier discount then repeats over that total at the
+ * average unit price - the clamp still runs per pack, so a big order does not
+ * drag the percentage floor up.
+ *
  * "cases" means the multi-buy is a phone-case promotion: an AirPods case, a
- * wallet or a watch band pays standard price no matter how many are bought.
- * Any other scope counts every line. Kept pure and separate from the cart
- * plumbing in apply.ts so this rule is unit-tested rather than trusted.
+ * wallet or a watch band pays standard price. Any other scope counts every
+ * line. Kept pure and separate from the cart plumbing in apply.ts so this rule
+ * is unit-tested rather than trusted.
  */
 export function cartBundleDiscount(
   lines: CartLine[],
   tiers: TierInput[],
   opts: { scope: string }
 ): number {
-  let discount = 0
+  let totalQty = 0
+  let totalSubtotal = 0
   for (const line of lines) {
     const unit = Number(line.unit_price ?? 0)
     const qty = Number(line.quantity ?? 0)
-    if (!unit || qty < 2) continue
+    if (!unit || qty < 1) continue
     if (opts.scope === "cases" && !line.is_case) continue
-    discount += lineDiscount(unit, qty, tiers).discount
+    totalQty += qty
+    totalSubtotal += unit * qty
   }
-  return discount
+  if (totalQty < 2) return 0
+  const avgUnit = totalSubtotal / totalQty
+  return lineDiscount(avgUnit, totalQty, tiers).discount
+}
+
+export type MatchingSetInput = {
+  enabled: boolean
+  /** Flat BDT taken off each phone + AirPods pair of one design. */
+  discount: number
+}
+
+/**
+ * The "Matching Set" bundle discount: a phone case and an AirPods case of the
+ * SAME design, bought together, take a flat saving. Each matched pair earns it
+ * once, so a cart with two phones and one AirPods of a design gets it a single
+ * time. Recomputed from the cart, never trusted from the client.
+ */
+export function matchingSetDiscount(
+  lines: CartLine[],
+  opts: MatchingSetInput
+): number {
+  if (!opts.enabled || opts.discount <= 0) return 0
+
+  const phones = new Map<string, number>()
+  const airpods = new Map<string, number>()
+  for (const line of lines) {
+    const qty = Number(line.quantity ?? 0)
+    if (qty < 1 || !line.design) continue
+    if (line.form === "airpods") {
+      airpods.set(line.design, (airpods.get(line.design) ?? 0) + qty)
+    } else if (line.form === "phone" || line.is_case) {
+      phones.set(line.design, (phones.get(line.design) ?? 0) + qty)
+    }
+  }
+
+  let pairs = 0
+  for (const [design, count] of phones) {
+    pairs += Math.min(count, airpods.get(design) ?? 0)
+  }
+  return pairs * Math.max(0, Math.round(opts.discount))
 }

@@ -9,6 +9,7 @@ import {
   type RelatedProduct,
 } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
+import { getBundleConfig } from "@/lib/bundles"
 import {
   getBlankStock,
   getCaseTypes,
@@ -97,12 +98,14 @@ export default async function ProductPage({ params, searchParams }: Params) {
   const designSlug = product.metadata?.design_slug as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, deviceCatalog, stock, caseTypes] = await Promise.all([
-    getDeviceFamilyMap(),
-    getDeviceCatalog(),
-    getBlankStock(),
-    getCaseTypes(),
-  ])
+  const [families, deviceCatalog, stock, caseTypes, bundleConfig] =
+    await Promise.all([
+      getDeviceFamilyMap(),
+      getDeviceCatalog(),
+      getBlankStock(),
+      getCaseTypes(),
+      getBundleConfig(),
+    ])
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
@@ -224,11 +227,12 @@ export default async function ProductPage({ params, searchParams }: Params) {
     return { pair, device }
   }
 
-  const moreDesignItems: RelatedProduct[] = pool
-    .filter(
-      (p) =>
-        p.metadata?.form === "phone" && p.metadata?.design_slug !== designSlug
-    )
+  const otherPhoneDesigns = pool.filter(
+    (p) =>
+      p.metadata?.form === "phone" && p.metadata?.design_slug !== designSlug
+  )
+
+  const moreDesignItems: RelatedProduct[] = otherPhoneDesigns
     .slice(0, 12)
     .map((p) => {
       const renders = rendersFor(p)
@@ -243,6 +247,91 @@ export default async function ProductPage({ params, searchParams }: Params) {
         imageByDevice: renders.device,
       }
     })
+
+  // PACK PICKER: every other phone design with its variant id + price + render
+  // per "device|caseType", so the Choose-a-design modal can offer and add them
+  // without a cross-origin browser call.
+  const packDesigns = otherPhoneDesigns.map((p) => {
+    const optId = (title: string) =>
+      p.options?.find((o) => o.title.toLowerCase() === title)?.id
+    const deviceOptId = optId("device")
+    const caseOptId = optId("case type")
+    const variants: Record<
+      string,
+      { variantId: string; price: number; image: string | null }
+    > = {}
+    for (const v of p.variants ?? []) {
+      const dev = deviceOptId
+        ? v.options?.find((o) => o.option_id === deviceOptId)?.value
+        : undefined
+      const ct = caseOptId
+        ? v.options?.find((o) => o.option_id === caseOptId)?.value
+        : undefined
+      if (!dev || !ct) continue
+      const key = `${dev}|${ct}`
+      if (variants[key]) continue
+      variants[key] = {
+        variantId: v.id,
+        price: v.calculated_price?.calculated_amount ?? 0,
+        image:
+          (v.metadata?.images as string[] | undefined)?.[0] ??
+          p.thumbnail ??
+          null,
+      }
+    }
+    return {
+      handle: (p.metadata?.design_slug as string) ?? p.handle,
+      name: (p.metadata?.design_name as string) ?? p.title,
+      thumbnail: p.thumbnail ?? null,
+      variants,
+    }
+  })
+
+  // MATCHING SET (bundle): this design's AirPods case, its variants keyed by
+  // AirPods model, so the bundle panel can offer the model and price it.
+  const airpodsProduct = pool.find(
+    (p) =>
+      p.metadata?.design_slug === designSlug &&
+      p.metadata?.form === "airpods"
+  )
+  let bundleAirpods: {
+    name: string
+    handle: string
+    variants: Record<string, { variantId: string; price: number; image: string | null }>
+  } | null = null
+  if (airpodsProduct) {
+    const deviceOptId = airpodsProduct.options?.find(
+      (o) => o.title.toLowerCase() === "device"
+    )?.id
+    const variants: Record<
+      string,
+      { variantId: string; price: number; image: string | null }
+    > = {}
+    for (const v of airpodsProduct.variants ?? []) {
+      const dev = deviceOptId
+        ? v.options?.find((o) => o.option_id === deviceOptId)?.value
+        : undefined
+      if (!dev) continue
+      const price = v.calculated_price?.calculated_amount ?? 0
+      // Keep the cheapest variant per AirPods model (its base construction).
+      if (variants[dev] && variants[dev].price <= price) continue
+      variants[dev] = {
+        variantId: v.id,
+        price,
+        image:
+          (v.metadata?.images as string[] | undefined)?.[0] ??
+          airpodsProduct.thumbnail ??
+          null,
+      }
+    }
+    if (Object.keys(variants).length) {
+      bundleAirpods = {
+        name: (airpodsProduct.metadata?.design_name as string) ?? designName,
+        handle: airpodsProduct.handle,
+        variants,
+      }
+    }
+  }
 
   // PAIRS WELL WITH: the same design in another form (AirPods case, wallet...).
   const pairsItems: RelatedProduct[] = pool
@@ -301,6 +390,10 @@ export default async function ProductPage({ params, searchParams }: Params) {
         initialDevice={initialDevice}
         fitCopy={deviceCopy}
         moreDesignItems={moreDesignItems}
+        bundleConfig={bundleConfig}
+        packDesigns={packDesigns}
+        caseTypeRecords={caseTypes}
+        bundleAirpods={bundleAirpods}
         shipping={<ShippingNote />}
         tabs={
           <ProductTabs

@@ -50,6 +50,27 @@ export const DEFAULT_SETTINGS = {
   free_shipping_threshold: 3400,
   scope: "cases",
   is_active: true,
+  matching_set_enabled: true,
+  matching_set_title: "The Matching Set",
+  matching_set_subtitle: "One design, two pieces",
+  matching_set_discount: 250,
+  matching_set_default_airpods: "AirPods Pro 3",
+}
+
+/**
+ * Fallback matching-set values for a row created before the columns existed
+ * (older DB read after the model gained the fields but before a reseed).
+ */
+export function withMatchingSetDefaults(settings: any) {
+  return {
+    matching_set_enabled: settings.matching_set_enabled ?? true,
+    matching_set_title: settings.matching_set_title ?? "The Matching Set",
+    matching_set_subtitle:
+      settings.matching_set_subtitle ?? "One design, two pieces",
+    matching_set_discount: settings.matching_set_discount ?? 250,
+    matching_set_default_airpods:
+      settings.matching_set_default_airpods ?? "AirPods Pro 3",
+  }
 }
 
 export async function getBundleConfig(service: any): Promise<{

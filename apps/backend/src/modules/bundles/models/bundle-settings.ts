@@ -15,6 +15,15 @@ const BundleSettings = model.define("bundle_settings", {
   /** Which products the tiers apply to. "cases" is everything sold today. */
   scope: model.text().default("cases"),
   is_active: model.boolean().default(true),
+
+  /* The "Matching Set" bundle: one design across forms (phone + AirPods). */
+  matching_set_enabled: model.boolean().default(true),
+  matching_set_title: model.text().default("The Matching Set"),
+  matching_set_subtitle: model.text().default("One design, two pieces"),
+  /** Flat BDT off each phone + AirPods pair of one design. */
+  matching_set_discount: model.number().default(250),
+  /** The AirPods model preselected in the bundle (a device name). */
+  matching_set_default_airpods: model.text().default("AirPods Pro 3"),
 })
 
 export default BundleSettings

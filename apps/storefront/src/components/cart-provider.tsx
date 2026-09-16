@@ -11,6 +11,7 @@ import {
 } from "react"
 
 import {
+  addManyToCart as addManyToCartAction,
   addToCart as addToCartAction,
   getCartSummary,
   type AddedLine,
@@ -38,6 +39,11 @@ type CartContextValue = {
     quantity: number,
     optimistic: OptimisticLine,
     options?: { openDrawer?: boolean }
+  ) => Promise<void>
+  /** Add several variants at once (a 2-pack / 3-pack / bundle). */
+  addMany: (
+    items: { variantId: string; quantity?: number }[],
+    optimistic: OptimisticLine
   ) => Promise<void>
 }
 
@@ -143,6 +149,47 @@ export default function CartProvider({
     []
   )
 
+  const addMany = useCallback(
+    async (
+      items: { variantId: string; quantity?: number }[],
+      optimistic: OptimisticLine
+    ) => {
+      const seq = ++requestSeq.current
+      const count = items.reduce((n, i) => n + (i.quantity ?? 1), 0)
+
+      setSummary((current) => ({
+        itemCount: (current?.itemCount ?? 0) + count,
+        subtotal: (current?.subtotal ?? 0) + optimistic.unitPrice,
+        currencyCode: current?.currencyCode ?? "bdt",
+      }))
+      setLastAdded({
+        id: `optimistic-pack-${seq}`,
+        productTitle: optimistic.productTitle,
+        variantTitle: optimistic.variantTitle,
+        sku: null,
+        // One synthetic "pack" highlight priced at the pack total; the real
+        // per-design lines replace it once the server responds.
+        quantity: 1,
+        unitPrice: optimistic.unitPrice,
+        thumbnail: optimistic.thumbnail,
+      })
+      setDrawerOpen(true)
+
+      try {
+        const { summary: serverSummary } = await addManyToCartAction(items)
+        if (seq === requestSeq.current) setSummary(serverSummary)
+      } catch (error) {
+        if (seq === requestSeq.current) {
+          setDrawerOpen(false)
+          setLastAdded(null)
+          getCartSummary().then(setSummary).catch(() => undefined)
+        }
+        throw error
+      }
+    },
+    []
+  )
+
   const value = useMemo(
     () => ({
       summary,
@@ -152,8 +199,18 @@ export default function CartProvider({
       closeDrawer,
       applySummary,
       add,
+      addMany,
     }),
-    [summary, lastAdded, isDrawerOpen, openDrawer, closeDrawer, applySummary, add]
+    [
+      summary,
+      lastAdded,
+      isDrawerOpen,
+      openDrawer,
+      closeDrawer,
+      applySummary,
+      add,
+      addMany,
+    ]
   )
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

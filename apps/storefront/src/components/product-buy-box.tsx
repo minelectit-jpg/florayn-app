@@ -3,12 +3,16 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
+import type { PackDesign } from "@/components/choose-design-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
+import PackSelector, { type BundleAirpods } from "@/components/pack-selector"
 import ProductImage from "@/components/product-image"
 import ShareButton from "@/components/share-button"
 import WishlistButton from "@/components/wishlist-button"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
+import type { BundleConfig } from "@/lib/bundles"
+import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import { formatPrice } from "@/lib/money"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
@@ -55,6 +59,11 @@ export default function ProductBuyBox({
   stock,
   productHandle,
   productTitle,
+  designName,
+  bundleConfig,
+  packDesigns,
+  caseTypeRecords,
+  bundleAirpods,
   thumbnail,
   caseType,
   device,
@@ -72,9 +81,19 @@ export default function ProductBuyBox({
   families: Record<string, string>
   /** "<Case Type>|<Device>" -> available quantity (shared blank stock). */
   stock: Record<string, number>
-  /** The product handle, the wishlist's stable key. */
+  /** The product handle, the wishlist's stable key + pack base. */
   productHandle: string
   productTitle: string
+  /** The design's display name, shown as the pack's base item. */
+  designName: string
+  /** Multi-buy tier config, or null when the widget is off / unavailable. */
+  bundleConfig: BundleConfig | null
+  /** Other designs a pack slot can be filled from (prepared server-side). */
+  packDesigns: PackDesign[]
+  /** Construction records for the pack picker's case-type popup. */
+  caseTypeRecords: CaseTypeRecord[]
+  /** This design's AirPods case for the Matching Set bundle, or null. */
+  bundleAirpods: BundleAirpods | null
   thumbnail: string | null
   caseType: string
   device: string
@@ -199,6 +218,24 @@ export default function ProductBuyBox({
       <p className="text-[1.625rem] font-semibold leading-none tracking-[-0.034em] tabular-nums">
         {formatPrice(price?.calculated_amount, price?.currency_code)}
       </p>
+
+      {/* Pack selector (Single / 2-pack / 3-pack), florayn's "get more save
+          more" widget - sits under the price, above the option pickers. */}
+      <PackSelector
+        config={bundleConfig}
+        unitPrice={price?.calculated_amount ?? 0}
+        baseItem={{
+          handle: productHandle,
+          variantId: selected?.id ?? null,
+          designName,
+          thumbnail,
+        }}
+        designs={packDesigns}
+        caseTypes={caseTypeRecords}
+        bundleAirpods={bundleAirpods}
+        device={device}
+        caseType={caseType}
+      />
 
       {/* DEVICE - opens the same florayn SELECT MODEL drawer as the shop, but
           picks the device in place (no navigation). Order matches florayn:

@@ -1,7 +1,10 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
 import { BUNDLES_MODULE } from "../../../modules/bundles"
-import { getBundleConfig } from "../../../modules/bundles/config"
+import {
+  getBundleConfig,
+  withMatchingSetDefaults,
+} from "../../../modules/bundles/config"
 
 /**
  * GET /store/bundles - the multi-buy widget's configuration.
@@ -20,6 +23,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       free_shipping_threshold: settings.free_shipping_threshold,
       scope: settings.scope,
       is_active: settings.is_active,
+      ...withMatchingSetDefaults(settings),
     },
     tiers: tiers
       .filter((tier: any) => tier.is_enabled)

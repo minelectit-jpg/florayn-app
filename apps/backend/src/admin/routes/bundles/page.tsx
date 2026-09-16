@@ -32,6 +32,11 @@ type Settings = {
   free_shipping_threshold: number
   scope: string
   is_active: boolean
+  matching_set_enabled: boolean
+  matching_set_title: string
+  matching_set_subtitle: string
+  matching_set_discount: number
+  matching_set_default_airpods: string
 }
 
 /**
@@ -109,6 +114,11 @@ const BundlesPage = () => {
           single_label: settings.single_label,
           free_shipping_threshold: settings.free_shipping_threshold,
           is_active: settings.is_active,
+          matching_set_enabled: settings.matching_set_enabled,
+          matching_set_title: settings.matching_set_title,
+          matching_set_subtitle: settings.matching_set_subtitle,
+          matching_set_discount: settings.matching_set_discount,
+          matching_set_default_airpods: settings.matching_set_default_airpods,
         }),
       })
       setSettings(data.settings)
@@ -252,6 +262,98 @@ const BundlesPage = () => {
                 setSettings({
                   ...settings,
                   free_shipping_threshold: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end px-6 py-4">
+          <Button onClick={saveSettings} isLoading={saving}>
+            Save settings
+          </Button>
+        </div>
+      </Container>
+
+      <Container className="divide-y p-0">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div>
+            <Heading level="h2">Matching Set (bundle)</Heading>
+            <Text size="small" className="text-ui-fg-subtle">
+              A design bought as a phone case + AirPods case together, at a flat
+              saving. Shown as the &ldquo;Bundle&rdquo; option on the product page.
+            </Text>
+          </div>
+          <div className="flex items-center gap-x-3">
+            <Label htmlFor="ms-active" size="small">
+              Show the bundle
+            </Label>
+            <Switch
+              id="ms-active"
+              checked={settings.matching_set_enabled}
+              onCheckedChange={(v) =>
+                setSettings({ ...settings, matching_set_enabled: v })
+              }
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 px-6 py-4 md:grid-cols-2">
+          <div>
+            <Label size="small" htmlFor="ms-title">
+              Title
+            </Label>
+            <Input
+              id="ms-title"
+              value={settings.matching_set_title}
+              onChange={(e) =>
+                setSettings({ ...settings, matching_set_title: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <Label size="small" htmlFor="ms-subtitle">
+              Subtitle
+            </Label>
+            <Input
+              id="ms-subtitle"
+              value={settings.matching_set_subtitle}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  matching_set_subtitle: e.target.value,
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label size="small" htmlFor="ms-discount">
+              Saving (৳ off the phone + AirPods)
+            </Label>
+            <Input
+              id="ms-discount"
+              type="number"
+              min={0}
+              value={settings.matching_set_discount}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  matching_set_discount: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label size="small" htmlFor="ms-airpods">
+              Default AirPods model
+            </Label>
+            <Input
+              id="ms-airpods"
+              value={settings.matching_set_default_airpods}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  matching_set_default_airpods: e.target.value,
                 })
               }
             />

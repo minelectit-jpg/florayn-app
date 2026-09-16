@@ -2,9 +2,13 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 
+import type { PackDesign } from "@/components/choose-design-modal"
+import type { BundleAirpods } from "@/components/pack-selector"
 import ProductBuyBox from "@/components/product-buy-box"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
+import type { BundleConfig } from "@/lib/bundles"
+import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
@@ -29,6 +33,10 @@ export default function ProductView({
   initialCaseType,
   initialDevice,
   moreDesignItems,
+  bundleConfig,
+  packDesigns,
+  caseTypeRecords,
+  bundleAirpods,
   shipping,
   tabs,
   pairs,
@@ -53,6 +61,14 @@ export default function ProductView({
   fitCopy?: string | null
   /** Sibling designs for the MORE DESIGNS strip; rendered on the live device. */
   moreDesignItems?: RelatedProduct[]
+  /** Multi-buy tier config for the pack selector, or null when off. */
+  bundleConfig?: BundleConfig | null
+  /** Other designs a pack slot can be filled from (prepared server-side). */
+  packDesigns?: PackDesign[]
+  /** Construction records for the pack picker's case-type popup. */
+  caseTypeRecords?: CaseTypeRecord[]
+  /** This design's AirPods case for the Matching Set bundle, or null. */
+  bundleAirpods?: BundleAirpods | null
   shipping?: ReactNode
   tabs: ReactNode
   pairs: ReactNode
@@ -149,6 +165,11 @@ export default function ProductView({
             stock={stock}
             productHandle={productHandle}
             productTitle={productTitle}
+            designName={designName}
+            bundleConfig={bundleConfig ?? null}
+            packDesigns={packDesigns ?? []}
+            caseTypeRecords={caseTypeRecords ?? []}
+            bundleAirpods={bundleAirpods ?? null}
             thumbnail={items[0]?.url ?? null}
             caseType={caseType}
             device={device}

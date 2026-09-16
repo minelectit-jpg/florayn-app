@@ -5,8 +5,8 @@ import {
 import { PromotionActions } from "@medusajs/framework/utils"
 
 import { BUNDLES_MODULE } from "."
-import { getBundleConfig } from "./config"
-import { cartBundleDiscount } from "./pricing"
+import { getBundleConfig, withMatchingSetDefaults } from "./config"
+import { cartBundleDiscount, matchingSetDiscount } from "./pricing"
 import { DEVICES } from "../catalog/data/devices"
 
 /*
@@ -66,6 +66,8 @@ export async function applyBundleDiscount({
       // The device name, used to tell a phone case from an accessory when the
       // bundle scope is "cases".
       "items.variant_title",
+      // Product form + design, used to match a phone + AirPods set.
+      "items.product.metadata",
     ],
     filters: { id: cartId },
   })
@@ -74,17 +76,26 @@ export async function applyBundleDiscount({
     return { discount: 0, freeShipping: false }
   }
 
+  const lines = (cart.items ?? []).map((item: any) => ({
+    unit_price: Number(item.unit_price ?? 0),
+    quantity: Number(item.quantity ?? 0),
+    // Unknown titles are treated as NOT a case, so scope "cases" never
+    // discounts something it cannot confirm is a phone case.
+    is_case: CASE_BY_DEVICE_NAME.get(item.variant_title) === true,
+    form: (item.product?.metadata?.form as string) ?? undefined,
+    design: (item.product?.metadata?.design_slug as string) ?? undefined,
+  }))
+
   let discount = 0
   if (enabled.length) {
-    const lines = (cart.items ?? []).map((item: any) => ({
-      unit_price: Number(item.unit_price ?? 0),
-      quantity: Number(item.quantity ?? 0),
-      // Unknown titles are treated as NOT a case, so scope "cases" never
-      // discounts something it cannot confirm is a phone case.
-      is_case: CASE_BY_DEVICE_NAME.get(item.variant_title) === true,
-    }))
-    discount = cartBundleDiscount(lines, enabled, { scope: settings.scope })
+    discount += cartBundleDiscount(lines, enabled, { scope: settings.scope })
   }
+
+  const ms = withMatchingSetDefaults(settings)
+  discount += matchingSetDiscount(lines, {
+    enabled: !!ms.matching_set_enabled,
+    discount: Number(ms.matching_set_discount ?? 0),
+  })
 
   const subtotal = Number(cart.subtotal ?? 0)
   const threshold = Number(settings.free_shipping_threshold ?? 0)

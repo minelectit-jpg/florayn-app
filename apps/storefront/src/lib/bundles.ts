@@ -22,6 +22,18 @@ export type BundleSettings = {
   free_shipping_threshold: number
   scope: string
   is_active: boolean
+  /**
+   * "Matching Set" bundle (a design across forms, e.g. phone + AirPods). Optional
+   * so an older backend without these columns still parses; the widget falls
+   * back to sensible defaults until the admin sets them.
+   */
+  matching_set_enabled?: boolean
+  matching_set_title?: string
+  matching_set_subtitle?: string
+  /** Flat BDT taken off the phone + AirPods subtotal. */
+  matching_set_discount?: number
+  /** The AirPods model preselected in the bundle (device name). */
+  matching_set_default_airpods?: string
 }
 
 export type BundleConfig = {
