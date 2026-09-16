@@ -85,7 +85,7 @@ export default function ProductGallery({
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
         ) : (
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[10px] bg-surface">
+          <div className="relative aspect-[3/5] w-full overflow-hidden rounded-[10px] bg-surface lg:aspect-[4/5]">
             <ProductImage
               src={active?.url ?? null}
               alt={label}
