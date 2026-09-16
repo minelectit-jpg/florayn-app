@@ -92,6 +92,8 @@ export default function ProductGallery({
               label={label}
               priority
               sizes="(max-width: 1024px) 100vw, 540px"
+              fillMode="absolute"
+              className="absolute inset-0 h-full w-full object-contain"
             />
           </div>
         )}

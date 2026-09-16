@@ -24,9 +24,9 @@
   --color-ink-muted: #6b6577; /* secondary text, derived from Ink */
   --color-ink-faint: #9a94a6; /* micro-labels, placeholders */
 
-  /* Warm off-white. Page ground. */
-  --color-paper: #faf9f7;
-  --color-surface: #ffffff; /* cards and panels sitting on Paper */
+  /* Pure white page ground (owner's request). */
+  --color-paper: #ffffff;
+  --color-surface: #ffffff; /* cards and panels; separated from Paper by borders */
   --color-line: #e8e4de; /* hairline rules, warm to match Paper */
   --color-line-strong: #d6d1c9;
 
