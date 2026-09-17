@@ -22,7 +22,11 @@ import {
 } from "@/lib/catalog"
 import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
-import { listProducts, type StoreProduct } from "@/lib/medusa"
+import {
+  getProductByHandle,
+  listProducts,
+  type StoreProduct,
+} from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
 
@@ -115,8 +119,9 @@ export default async function ProductPage({ params, searchParams }: Params) {
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
 
-  // Admin-managed bands below the gallery (Features), needed by both layouts.
-  const { featureBlocks } = await getProductSections()
+  // Admin-managed bands below the gallery (Features, We think you'll love),
+  // needed by both layouts.
+  const { featureBlocks, featuredPicks } = await getProductSections()
 
   // A regular product (no Case Type + Device options) - e.g. a manually-added
   // one-off - renders as a plain product page instead of the linked selectors.
@@ -259,6 +264,15 @@ export default async function ProductPage({ params, searchParams }: Params) {
         imageByDevice: renders.device,
       }
     })
+
+  // WE THINK YOU'LL LOVE: the admin's hand-picked designs, rendered with the
+  // shop card so they follow the live device and case type. Fetched by handle;
+  // a missing or unpublished pick is skipped.
+  const youWillLoveProducts = featuredPicks?.length
+    ? (
+        await Promise.all(featuredPicks.map((h) => getProductByHandle(h)))
+      ).filter((p): p is StoreProduct => Boolean(p))
+    : []
 
   // PACK PICKER: every other phone design with its variant id + price + render
   // per "device|caseType", so the Choose-a-design modal can offer and add them
@@ -479,6 +493,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
+        youWillLoveProducts={youWillLoveProducts}
       />
     </article>
   )

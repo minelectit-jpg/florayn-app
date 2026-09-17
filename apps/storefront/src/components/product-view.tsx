@@ -6,13 +6,14 @@ import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import ProductBuyBox from "@/components/product-buy-box"
+import YouWillLove from "@/components/you-will-love"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
 import type { FeatureBlock, GalleryVideoMap } from "@/lib/content"
 import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
-import type { StoreVariant } from "@/lib/medusa"
+import type { StoreProduct, StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
 /**
@@ -47,6 +48,7 @@ export default function ProductView({
   featureBlocks,
   productForm,
   galleryVideos,
+  youWillLoveProducts,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -91,6 +93,8 @@ export default function ProductView({
   productForm?: string | null
   /** Design gallery videos, keyed by case type; shown first when one matches. */
   galleryVideos?: GalleryVideoMap
+  /** Admin-picked designs for "We think you'll love"; rendered on the live pair. */
+  youWillLoveProducts?: StoreProduct[]
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -233,9 +237,16 @@ export default function ProductView({
         {pairs}
       </div>
 
-      {belowGallery || featureBlocks?.length ? (
+      {belowGallery ||
+      featureBlocks?.length ||
+      youWillLoveProducts?.length ? (
         <div className="lg:col-start-1 lg:row-start-2">
           {belowGallery}
+          <YouWillLove
+            products={youWillLoveProducts ?? []}
+            device={device}
+            caseType={caseType}
+          />
           <FeaturesSection
             blocks={featureBlocks ?? []}
             group={featuresGroup(productForm, caseType)}
