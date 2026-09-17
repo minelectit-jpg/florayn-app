@@ -7,6 +7,7 @@ import RecommendedForYou, {
   type RecommendedVariant,
 } from "@/components/recommended-for-you"
 import RegularProductView from "@/components/regular-product-view"
+import { type YouWillLoveItem } from "@/components/you-will-love"
 import {
   PairsWellWith,
   ShippingNote,
@@ -269,19 +270,55 @@ export default async function ProductPage({ params }: Params) {
         thumbnail: p.thumbnail,
         label: (p.metadata?.design_name as string) ?? p.title,
         price: minPrice(p),
-        imageByPair: renders.pair,
+        // imageByPair (device x case type) is dropped from the payload; the
+        // strip follows imageByDevice, which is ~4x less data in the HTML.
         imageByDevice: renders.device,
       }
     })
 
-  // WE THINK YOU'LL LOVE: the admin's hand-picked designs, rendered with the
-  // shop card so they follow the live device and case type. Fetched by handle;
-  // a missing or unpublished pick is skipped.
-  const youWillLoveProducts = featuredPicks?.length
+  // WE THINK YOU'LL LOVE: the admin's hand-picked designs. Each is reduced to a
+  // compact, device+case-type-aware shape (renders and a variant per pair) so
+  // the card follows the live selection without embedding four whole products
+  // (~600KB) in the page.
+  const pickedProducts = featuredPicks?.length
     ? (
         await Promise.all(featuredPicks.map((h) => getProductByHandle(h)))
       ).filter((p): p is StoreProduct => Boolean(p))
     : []
+  const youWillLoveItems: YouWillLoveItem[] = pickedProducts.map((p) => {
+    const renders = rendersFor(p)
+    const optId = (t: string) =>
+      p.options?.find((o) => o.title.toLowerCase() === t)?.id
+    const devOpt = optId("device")
+    const caseOpt = optId("case type")
+    const variantByPair: Record<string, { id: string; price: number }> = {}
+    for (const v of p.variants ?? []) {
+      const dev = devOpt
+        ? v.options?.find((o) => o.option_id === devOpt)?.value
+        : undefined
+      const ct = caseOpt
+        ? v.options?.find((o) => o.option_id === caseOpt)?.value
+        : undefined
+      if (!dev || !ct) continue
+      const key = `${dev}|${ct}`
+      if (!variantByPair[key]) {
+        variantByPair[key] = {
+          id: v.id,
+          price: v.calculated_price?.calculated_amount ?? 0,
+        }
+      }
+    }
+    return {
+      id: p.id,
+      name: (p.metadata?.design_name as string) ?? p.title,
+      handle: p.handle,
+      thumbnail: p.thumbnail ?? null,
+      imageByPair: renders.pair,
+      imageByDevice: renders.device,
+      variantByPair,
+      price: minPrice(p),
+    }
+  })
 
   // PACK PICKER: every other phone design with its variant id + price + render
   // per "device|caseType", so the Choose-a-design modal can offer and add them
@@ -502,7 +539,7 @@ export default async function ProductPage({ params }: Params) {
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
-        youWillLoveProducts={youWillLoveProducts}
+        youWillLoveItems={youWillLoveItems}
       />
     </article>
   )

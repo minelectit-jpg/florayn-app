@@ -1,28 +1,45 @@
-"use client"
+import Link from "next/link"
 
 import DragScroll from "@/components/drag-scroll"
-import ProductCard from "@/components/product-card"
-import type { StoreProduct } from "@/lib/medusa"
+import Price from "@/components/price"
+import ProductImage from "@/components/product-image"
+import QuickAdd from "@/components/quick-add"
+
+export type YouWillLoveItem = {
+  id: string
+  /** Design name shown on the card. */
+  name: string
+  handle: string
+  thumbnail: string | null
+  /** "device|caseType" -> that design in the exact model and construction. */
+  imageByPair: Record<string, string>
+  /** device -> that design on that device, when the exact pair is absent. */
+  imageByDevice: Record<string, string>
+  /** "device|caseType" -> the variant to quick-add, and its price. */
+  variantByPair: Record<string, { id: string; price: number }>
+  /** Lowest price, shown before an exact pair resolves. */
+  price: number | null
+}
 
 /**
- * "We think you'll love" — a hand-picked row of designs, rendered with the same
- * shop product card. It follows the live device AND case type, so every pick
- * shows in the exact model and construction the customer has chosen.
+ * "We think you'll love" — a hand-picked row of designs, styled like the shop
+ * card. It follows the live device AND case type: each card shows the design in
+ * the exact model and construction the customer has chosen, priced and added
+ * for that same variant. Compact by design (renders + one variant per pair, not
+ * whole products) so the page stays light.
  */
 export default function YouWillLove({
-  products,
+  items,
   device,
   caseType,
   title = "We think you'll love",
 }: {
-  products: StoreProduct[]
-  /** The live device, e.g. "iPhone 16 Pro Max". */
+  items: YouWillLoveItem[]
   device?: string
-  /** The live case type, e.g. "Signature". */
   caseType?: string
   title?: string
 }) {
-  if (!products.length) return null
+  if (!items.length) return null
 
   return (
     <section className="mt-12">
@@ -35,18 +52,64 @@ export default function YouWillLove({
       </div>
 
       <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
-        {products.map((product) => (
-          <li
-            key={product.id}
-            className="w-[190px] shrink-0 snap-start sm:w-[210px]"
-          >
-            <ProductCard
-              product={product}
-              device={device ?? null}
-              caseType={caseType ?? null}
-            />
-          </li>
-        ))}
+        {items.map((item) => {
+          const pair = device && caseType ? `${device}|${caseType}` : ""
+          const image =
+            item.imageByPair[pair] ??
+            (device ? item.imageByDevice[device] : null) ??
+            item.thumbnail
+          const variant = item.variantByPair[pair]
+          const price = variant?.price ?? item.price
+          const meta =
+            device && caseType
+              ? `${device} Case · ${caseType}`
+              : (caseType ?? device ?? "")
+          return (
+            <li
+              key={item.id}
+              className="w-[190px] shrink-0 snap-start sm:w-[210px]"
+            >
+              <article className="fl-card">
+                <Link
+                  href={`/product/${item.handle}/`}
+                  className="flex flex-1 flex-col"
+                  aria-label={item.name}
+                >
+                  <div className="fl-card__media">
+                    <ProductImage
+                      src={image}
+                      alt={item.name}
+                      label={item.name}
+                      sizes="(max-width: 767px) 60vw, 210px"
+                      className="fl-card__img"
+                      fillMode="absolute"
+                    />
+                  </div>
+
+                  <div className="fl-card__summary">
+                    <div className="fl-card__titles">
+                      <h3 className="fl-card__title">{item.name}</h3>
+                      {meta ? <p className="fl-card__meta">{meta}</p> : null}
+                    </div>
+
+                    <div className="fl-card__price-row">
+                      <span className="fl-card__price">
+                        {price != null ? <Price amount={price} /> : "-"}
+                      </span>
+                      <QuickAdd
+                        variantId={variant?.id ?? null}
+                        productTitle={item.name}
+                        variantTitle={caseType ?? ""}
+                        unitPrice={price ?? 0}
+                        thumbnail={image ?? null}
+                      />
+                    </div>
+                  </div>
+                </Link>
+              </article>
+            </li>
+          )
+        })}
       </DragScroll>
     </section>
   )

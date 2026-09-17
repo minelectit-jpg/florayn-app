@@ -6,7 +6,7 @@ import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import ProductBuyBox from "@/components/product-buy-box"
-import YouWillLove from "@/components/you-will-love"
+import YouWillLove, { type YouWillLoveItem } from "@/components/you-will-love"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
@@ -48,7 +48,7 @@ export default function ProductView({
   featureBlocks,
   productForm,
   galleryVideos,
-  youWillLoveProducts,
+  youWillLoveItems,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -94,7 +94,7 @@ export default function ProductView({
   /** Design gallery videos, keyed by case type; shown first when one matches. */
   galleryVideos?: GalleryVideoMap
   /** Admin-picked designs for "We think you'll love"; rendered on the live pair. */
-  youWillLoveProducts?: StoreProduct[]
+  youWillLoveItems?: YouWillLoveItem[]
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -248,11 +248,11 @@ export default function ProductView({
 
       {belowGallery ||
       featureBlocks?.length ||
-      youWillLoveProducts?.length ? (
+      youWillLoveItems?.length ? (
         <div className="lg:col-start-1 lg:row-start-2">
           {belowGallery}
           <YouWillLove
-            products={youWillLoveProducts ?? []}
+            items={youWillLoveItems ?? []}
             device={device}
             caseType={caseType}
           />
