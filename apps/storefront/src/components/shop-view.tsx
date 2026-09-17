@@ -4,7 +4,52 @@ import Link from "next/link"
 import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
 import { getCaseTypes, getDeviceCatalog } from "@/lib/catalog"
-import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
+import {
+  listProducts,
+  sdk,
+  type StoreProduct,
+  type StoreVariant,
+} from "@/lib/medusa"
+
+/**
+ * A shop card is scoped to one device (and often one case type), so it only
+ * needs those variants — not all ~156 of a product. Trimming here is what keeps
+ * the shop HTML from ballooning to megabytes: a device+case-type page carries
+ * one variant per card, a device page a handful.
+ */
+function trimForCard(
+  p: StoreProduct,
+  deviceName: string | null,
+  caseTypeName: string | null,
+  caseTypeNames: Set<string>
+): StoreProduct {
+  const vs = p.variants ?? []
+  const valsOf = (v: StoreVariant) => (v.options ?? []).map((o) => o.value)
+  let kept: StoreVariant[]
+  if (deviceName) {
+    kept = vs.filter((v) => {
+      const vals = valsOf(v)
+      return (
+        vals.includes(deviceName) &&
+        (!caseTypeName || vals.includes(caseTypeName))
+      )
+    })
+  } else {
+    // No device: the cheapest variant per case type keeps the "From" range and
+    // an image without carrying every device.
+    const byCase = new Map<string, StoreVariant>()
+    for (const v of vs) {
+      const ct = valsOf(v).find((x) => caseTypeNames.has(x))
+      if (!ct) continue
+      const cur = byCase.get(ct)
+      const price = v.calculated_price?.calculated_amount ?? Infinity
+      if (!cur || price < (cur.calculated_price?.calculated_amount ?? Infinity))
+        byCase.set(ct, v)
+    }
+    kept = [...byCase.values()]
+  }
+  return { ...p, variants: kept.length ? kept : vs.slice(0, 1) }
+}
 
 /**
  * The shop, rendered from clean path segments rather than query strings:
@@ -152,7 +197,14 @@ export default async function ShopView({
         </div>
       ) : filtered.length ? (
         <ShopGrid
-          products={filtered}
+          products={filtered.map((p) =>
+            trimForCard(
+              p,
+              device?.name ?? null,
+              category?.name ?? null,
+              new Set(caseTypes.map((c) => c.name))
+            )
+          )}
           device={device?.name ?? null}
           deviceSlug={device?.slug ?? null}
           caseType={category?.name ?? null}
