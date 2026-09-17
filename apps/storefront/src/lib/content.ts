@@ -101,6 +101,43 @@ export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
   }
 }
 
+export type FeatureBlock = {
+  id: string
+  title: string | null
+  description: string | null
+  image_url: string | null
+  video_url: string | null
+}
+
+export type ProductSections = {
+  /** The "Features" band blocks, in order. */
+  featureBlocks: FeatureBlock[]
+  /** Hand-picked design handles for "We think you'll love". */
+  featuredPicks: string[]
+}
+
+/**
+ * The admin-managed bands shown below the gallery on every product page: the
+ * "Features" blocks and the "We think you'll love" picks. Empty on any error,
+ * so the product page still renders.
+ */
+export async function getProductSections(): Promise<ProductSections> {
+  try {
+    const res = await fetch(`${BACKEND}/store/content/product-sections`, {
+      headers: { "x-publishable-api-key": KEY },
+      next: { revalidate: 60 },
+    })
+    if (!res.ok) return { featureBlocks: [], featuredPicks: [] }
+    const json = (await res.json()) as Partial<ProductSections>
+    return {
+      featureBlocks: json.featureBlocks ?? [],
+      featuredPicks: json.featuredPicks ?? [],
+    }
+  } catch {
+    return { featureBlocks: [], featuredPicks: [] }
+  }
+}
+
 export type CollectionPage = {
   collection_slug: string
   hero_image_url: string | null

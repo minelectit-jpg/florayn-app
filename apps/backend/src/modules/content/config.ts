@@ -1,5 +1,6 @@
 import { DEFAULT_COLLECTION_PAGES } from "./collection-pages"
 import {
+  DEFAULT_FEATURE_BLOCKS,
   DEFAULT_HOME_SECTIONS,
   DEFAULT_MENU,
   FOOTER_NOTE,
@@ -132,6 +133,36 @@ export async function getCollectionPages(service: any) {
   }
 
   return pages ?? []
+}
+
+/**
+ * The product page's "Features" blocks, seeded from the example set the first
+ * time they are asked for. Ordered top to bottom; editable in the admin.
+ */
+export async function getFeatureBlocks(service: any) {
+  let blocks = await service.listFeatureBlocks(
+    {},
+    { order: { position: "ASC" } }
+  )
+
+  if (!blocks?.length) {
+    await service.createFeatureBlocks(DEFAULT_FEATURE_BLOCKS as any)
+    blocks = await service.listFeatureBlocks({}, { order: { position: "ASC" } })
+  }
+
+  return blocks ?? []
+}
+
+/**
+ * The hand-picked designs for "We think you'll love". Unseeded — an empty list
+ * simply hides the band until the owner adds picks from the admin.
+ */
+export async function getFeaturedPicks(service: any) {
+  const picks = await service.listFeaturedPicks(
+    {},
+    { order: { position: "ASC" } }
+  )
+  return picks ?? []
 }
 
 /** SEO templates and their overrides, seeded on first read. */

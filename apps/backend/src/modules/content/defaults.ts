@@ -307,6 +307,43 @@ export const DEFAULT_MENU: {
   },
 ]
 
+const R2 = "https://pub-1af88507922d437983ab3ffaf7336788.r2.dev"
+
+/**
+ * Example "Features" blocks so the band is populated the first time it renders.
+ * These use real product renders as placeholders; the owner edits, replaces
+ * (with an image or a looping video) or removes them from the admin.
+ */
+export const DEFAULT_FEATURE_BLOCKS = [
+  {
+    title: "Built for MagSafe",
+    description:
+      "A recessed magnet ring snaps to every MagSafe charger, wallet and mount — full-strength, every time.",
+    image_url: `${R2}/sunburst/signature/iphone-17-pro-max/1.webp`,
+    video_url: null,
+    position: 0,
+    is_visible: true,
+  },
+  {
+    title: "Drop-tested protection",
+    description:
+      "Raised edges lift the screen and camera off the surface, with cushioned corners that take the hit for you.",
+    image_url: `${R2}/timeless/signature/iphone-17-pro-max/1.webp`,
+    video_url: null,
+    position: 1,
+    is_visible: true,
+  },
+  {
+    title: "Printed in Dhaka",
+    description:
+      "Every case is printed and finished by hand in our Dhaka studio, then delivered cash-on-delivery across Bangladesh.",
+    image_url: `${R2}/drift-dynasty/signature/iphone-17-pro-max/1.webp`,
+    video_url: null,
+    position: 2,
+    is_visible: true,
+  },
+]
+
 export const FOOTER_NOTE = `© ${new Date().getFullYear()} Florayn Store. All rights reserved.`
 export const SOCIAL_LINKS = [
   { label: "Facebook", href: "https://www.facebook.com/FloraynFashion" },

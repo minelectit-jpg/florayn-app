@@ -40,6 +40,7 @@ export default function ProductView({
   shipping,
   tabs,
   pairs,
+  belowGallery,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -72,6 +73,12 @@ export default function ProductView({
   shipping?: ReactNode
   tabs: ReactNode
   pairs: ReactNode
+  /**
+   * Recommended / We think you'll love / Features. On desktop these sit under
+   * the gallery in the left column (not full width); on mobile they fall below
+   * the buy box, in normal reading order.
+   */
+  belowGallery?: ReactNode
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -125,8 +132,8 @@ export default function ProductView({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
-      <div>
+    <div className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+      <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery
           key={selected?.id ?? "default"}
           items={items}
@@ -134,7 +141,7 @@ export default function ProductView({
         />
       </div>
 
-      <div className="lg:sticky lg:top-[50px] lg:self-start">
+      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[50px] lg:self-start">
         {/* Stock badge, above the title like florayn's "N in stock". Reflects
             the live (case type, device) blank; an untracked pair reads as in
             stock. */}
@@ -193,6 +200,10 @@ export default function ProductView({
         {tabs}
         {pairs}
       </div>
+
+      {belowGallery ? (
+        <div className="lg:col-start-1 lg:row-start-2">{belowGallery}</div>
+      ) : null}
     </div>
   )
 }

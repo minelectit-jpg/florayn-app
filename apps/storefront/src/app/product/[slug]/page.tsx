@@ -1,7 +1,12 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import FeaturesSection from "@/components/features-section"
 import ProductView from "@/components/product-view"
+import RecommendedForYou, {
+  type RecommendedItem,
+  type RecommendedVariant,
+} from "@/components/recommended-for-you"
 import RegularProductView from "@/components/regular-product-view"
 import {
   PairsWellWith,
@@ -16,6 +21,7 @@ import {
   getDeviceCatalog,
   getDeviceFamilyMap,
 } from "@/lib/catalog"
+import { getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
@@ -197,6 +203,9 @@ export default async function ProductPage({ params, searchParams }: Params) {
     ? await listProducts({ collection_id: [collectionId], limit: 100 })
     : { products: [] as StoreProduct[] }
 
+  // Admin-managed bands below the gallery (Features, We think you'll love).
+  const { featureBlocks } = await getProductSections()
+
   // MORE DESIGNS: other designs' phone cases in the same collection. Each one
   // carries renders keyed by "device|caseType" (and by device alone) so the
   // strip can follow the customer's exact model + finish.
@@ -349,6 +358,64 @@ export default async function ProductPage({ params, searchParams }: Params) {
       price: minPrice(p),
     }))
 
+  // RECOMMENDED FOR YOU: matching accessories — this same design in every other
+  // form it is printed on (AirPods case, card holder, ring holder…). Auto for
+  // now; admin curation lands later.
+  const formLabelFor = (form?: unknown): string => {
+    switch (String(form ?? "")) {
+      case "airpods":
+        return "AirPods Case"
+      case "wallet":
+        return "Wallet"
+      case "watch":
+        return "Watch Band"
+      case "card":
+        return "Card Holder"
+      default:
+        return "Accessory"
+    }
+  }
+  // Each accessory's selectable models (one entry per device, cheapest kept),
+  // so the card can offer a model picker before adding.
+  const recommendedVariants = (p: StoreProduct): RecommendedVariant[] => {
+    const devOptId = p.options?.find(
+      (o) => o.title.toLowerCase() === "device"
+    )?.id
+    const byLabel = new Map<string, RecommendedVariant>()
+    for (const v of p.variants ?? []) {
+      const label =
+        (devOptId
+          ? v.options?.find((o) => o.option_id === devOptId)?.value
+          : null) ??
+        v.title ??
+        "Default"
+      const price = v.calculated_price?.calculated_amount ?? null
+      const existing = byLabel.get(label)
+      if (
+        !existing ||
+        (price != null && (existing.price == null || price < existing.price))
+      ) {
+        byLabel.set(label, { id: v.id, label, price })
+      }
+    }
+    return [...byLabel.values()]
+  }
+  const recommendedItems: RecommendedItem[] = pool
+    .filter(
+      (p) =>
+        p.metadata?.design_slug === designSlug && p.handle !== product.handle
+    )
+    .slice(0, 8)
+    .map((p) => ({
+      id: p.id,
+      name: (p.metadata?.design_name as string) ?? designName,
+      handle: p.handle,
+      thumbnail: p.thumbnail ?? p.images?.[0]?.url ?? null,
+      formLabel: p.subtitle ?? formLabelFor(p.metadata?.form),
+      price: minPrice(p),
+      variants: recommendedVariants(p),
+    }))
+
   const fallbackImages = (product.images ?? []).map((i) => i.url)
 
   const facts = [
@@ -367,7 +434,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
   ]
 
   return (
-    <article className="mx-auto w-full max-w-[1260px] px-0 md:px-[30px]">
+    <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
       <ProductView
         matrix={matrix}
         variants={product.variants ?? []}
@@ -405,6 +472,12 @@ export default async function ProductPage({ params, searchParams }: Params) {
           />
         }
         pairs={<PairsWellWith items={pairsItems} />}
+        belowGallery={
+          <>
+            <RecommendedForYou items={recommendedItems} />
+            <FeaturesSection blocks={featureBlocks} />
+          </>
+        }
       />
     </article>
   )
