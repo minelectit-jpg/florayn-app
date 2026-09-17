@@ -2,10 +2,13 @@ import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { PlaySolid } from "@medusajs/icons"
 import {
   Button,
+  Checkbox,
   Container,
   Heading,
   IconButton,
   Input,
+  Label,
+  Select,
   Text,
   toast,
 } from "@medusajs/ui"
@@ -47,6 +50,7 @@ const GalleryVideosPage = () => {
   const [caseType, setCaseType] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
   const [designQuery, setDesignQuery] = useState("")
+  const [showAll, setShowAll] = useState(false)
 
   function loadVideos() {
     return api("/admin/content/gallery-videos")
@@ -78,16 +82,22 @@ const GalleryVideosPage = () => {
   const designName = (slug: string) =>
     designs.find((d) => d.slug === slug)?.name ?? slug
 
+  const liveCount = useMemo(
+    () => designs.filter((d) => d.live).length,
+    [designs]
+  )
+
   const matchingDesigns = useMemo(() => {
     const q = designQuery.trim().toLowerCase()
-    const list = q
-      ? designs.filter(
-          (d) =>
-            d.name.toLowerCase().includes(q) || d.slug.toLowerCase().includes(q)
-        )
-      : designs
-    return list.slice(0, 40)
-  }, [designs, designQuery])
+    let list = showAll ? designs : designs.filter((d) => d.live)
+    if (q) {
+      list = list.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) || d.slug.toLowerCase().includes(q)
+      )
+    }
+    return list.slice(0, 80)
+  }, [designs, designQuery, showAll])
 
   async function addVideo() {
     if (!designSlug || !caseType || !videoUrl.trim()) {
@@ -166,82 +176,115 @@ const GalleryVideosPage = () => {
       </div>
 
       {/* Add form */}
-      <div className="flex flex-col gap-3 px-6 py-4">
+      <div className="flex flex-col gap-4 px-6 py-4">
         <Text size="small" weight="plus">
           Add / replace a video
         </Text>
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="w-64">
+
+        <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+          {/* Design picker */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label size="xsmall" weight="plus">
+                1. Design {designSlug ? `· ${designName(designSlug)}` : ""}
+              </Label>
+              <div className="flex items-center gap-1.5">
+                <Checkbox
+                  id="show-all"
+                  checked={showAll}
+                  onCheckedChange={(v) => setShowAll(!!v)}
+                />
+                <Label htmlFor="show-all" size="xsmall" className="text-ui-fg-muted">
+                  Show all ({designs.length})
+                </Label>
+              </div>
+            </div>
             <Input
-              placeholder="Search designs…"
+              placeholder={`Search ${showAll ? designs.length : liveCount} designs…`}
               value={designQuery}
               onChange={(e) => setDesignQuery(e.target.value)}
             />
-            <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-ui-border-base">
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-ui-border-base">
               {matchingDesigns.map((d) => (
                 <button
                   key={d.slug}
                   type="button"
                   onClick={() => setDesignSlug(d.slug)}
-                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm ${
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                     designSlug === d.slug
                       ? "bg-ui-bg-base-pressed font-medium"
                       : "hover:bg-ui-bg-subtle"
                   }`}
                 >
                   <span>{d.name}</span>
-                  {d.live === false ? (
-                    <span className="text-ui-fg-muted text-xs">not live</span>
-                  ) : null}
+                  <span
+                    className={`text-xs ${
+                      d.live ? "text-ui-fg-interactive" : "text-ui-fg-muted"
+                    }`}
+                  >
+                    {d.live ? "live" : "not live"}
+                  </span>
                 </button>
               ))}
               {matchingDesigns.length === 0 ? (
-                <Text size="xsmall" className="text-ui-fg-muted px-3 py-2">
+                <Text size="xsmall" className="text-ui-fg-muted px-3 py-3">
                   No match.
                 </Text>
               ) : null}
             </div>
           </div>
 
-          <select
-            value={caseType}
-            onChange={(e) => setCaseType(e.target.value)}
-            className="bg-ui-bg-field border-ui-border-base h-9 rounded-md border px-3 text-sm"
-          >
-            <option value="">Case type…</option>
-            {caseTypes.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          {/* Case type + video */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              <Label size="xsmall" weight="plus">
+                2. Case type
+              </Label>
+              <Select value={caseType} onValueChange={setCaseType}>
+                <Select.Trigger>
+                  <Select.Value placeholder="Choose a case type" />
+                </Select.Trigger>
+                <Select.Content>
+                  {caseTypes.map((n) => (
+                    <Select.Item key={n} value={n}>
+                      {n}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Video URL"
-              className="w-64"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-            />
+            <div className="flex flex-col gap-2">
+              <Label size="xsmall" weight="plus">
+                3. Video
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Video URL"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                />
+                <Button
+                  size="small"
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={() => setPicker(true)}
+                >
+                  Choose
+                </Button>
+              </div>
+            </div>
+
             <Button
-              size="small"
-              variant="secondary"
-              onClick={() => setPicker(true)}
+              variant="primary"
+              isLoading={busy}
+              disabled={!designSlug || !caseType || !videoUrl.trim()}
+              onClick={addVideo}
             >
-              Choose
+              Save video
             </Button>
           </div>
-
-          <Button variant="primary" isLoading={busy} onClick={addVideo}>
-            Save video
-          </Button>
         </div>
-        {designSlug ? (
-          <Text size="xsmall" className="text-ui-fg-muted">
-            Selected: <b>{designName(designSlug)}</b>
-            {caseType ? ` · ${caseType}` : ""}
-          </Text>
-        ) : null}
       </div>
 
       {/* List */}
