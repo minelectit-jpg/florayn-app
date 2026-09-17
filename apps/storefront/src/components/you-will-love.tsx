@@ -1,5 +1,6 @@
 "use client"
 
+import DragScroll from "@/components/drag-scroll"
 import ProductCard from "@/components/product-card"
 import type { StoreProduct } from "@/lib/medusa"
 
@@ -33,7 +34,7 @@ export default function YouWillLove({
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      <ul className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
+      <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
         {products.map((product) => (
           <li
             key={product.id}
@@ -46,7 +47,7 @@ export default function YouWillLove({
             />
           </li>
         ))}
-      </ul>
+      </DragScroll>
     </section>
   )
 }

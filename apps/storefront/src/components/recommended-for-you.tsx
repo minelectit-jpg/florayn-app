@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import DragScroll from "@/components/drag-scroll"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
@@ -184,7 +185,7 @@ export default function RecommendedForYou({
         <span className="h-px flex-1 bg-line" />
       </div>
 
-      <ul className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
+      <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
         {items.map((item) => (
           <li
             key={item.id}
@@ -193,7 +194,7 @@ export default function RecommendedForYou({
             <RecommendedCard item={item} />
           </li>
         ))}
-      </ul>
+      </DragScroll>
     </section>
   )
 }
