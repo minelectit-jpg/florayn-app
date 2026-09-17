@@ -128,7 +128,7 @@ export default function ShopGrid({
       </div>
 
       <div className="fl-grid">
-        {sorted.map((product) => (
+        {sorted.map((product, i) => (
           <ProductCard
             key={product.id}
             product={product}
@@ -136,6 +136,9 @@ export default function ShopGrid({
             deviceSlug={deviceSlug ?? null}
             caseType={caseType ?? null}
             caseTypeSlug={caseTypeSlug ?? null}
+            // The first two rows are above the fold; load their images eagerly
+            // so the grid fills in at once instead of after a lazy-load delay.
+            priority={i < 6}
           />
         ))}
       </div>

@@ -28,6 +28,7 @@ export default function ProductCard({
   caseType,
   caseTypeSlug,
   badges,
+  priority,
 }: {
   product: StoreProduct
   /** Selected device from the filter bar; drives the link, image and price. */
@@ -39,6 +40,8 @@ export default function ProductCard({
   /** Selected case type slug; carried into the PDP link so it opens on it. */
   caseTypeSlug?: string | null
   badges?: CardBadge[]
+  /** Above-the-fold cards: load the main image eagerly so it is not lazy. */
+  priority?: boolean
 }) {
   const metadata = product.metadata ?? {}
   const designName =
@@ -102,6 +105,7 @@ export default function ProductCard({
           alt={product.title}
           label={designName}
           sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+          priority={priority}
           className={`fl-card__img transition-opacity duration-300 ${
             hoverImage ? "group-hover:opacity-0" : ""
           }`}
