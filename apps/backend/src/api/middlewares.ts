@@ -13,10 +13,14 @@ export default defineMiddlewares({
       bodyParser: { sizeLimit: "25mb" },
     },
     {
-      // File Manager uploads a file at a time as base64 JSON.
+      // File Manager and the media picker upload a file at a time as base64
+      // JSON. Videos are far larger than images, and base64 adds ~33%, so this
+      // is raised to the practical ceiling in front of the app (Cloudflare's
+      // ~100MB request cap). Feature-band videos should still be short, muted
+      // loops — keep them compressed.
       matcher: "/admin/r2/upload",
       method: ["POST"],
-      bodyParser: { sizeLimit: "25mb" },
+      bodyParser: { sizeLimit: "100mb" },
     },
   ],
 })

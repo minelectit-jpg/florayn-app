@@ -132,7 +132,12 @@ export default function MediaPicker({
         onOpenChange(false)
       }
     } catch (e: any) {
-      toast.error(e.message)
+      const msg = String(e?.message ?? "")
+      toast.error(
+        /413|large|payload/i.test(msg)
+          ? "That file is too large to upload. Use a shorter, compressed video (roughly under 70 MB)."
+          : msg || "Upload failed."
+      )
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ""
