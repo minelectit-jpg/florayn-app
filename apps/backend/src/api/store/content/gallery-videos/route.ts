@@ -16,12 +16,15 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   }
 
   const rows = await getGalleryVideos(service, design)
-  const videos: Record<string, { video_url: string; poster_url: string | null }> =
-    {}
+  const videos: Record<
+    string,
+    { video_url: string; poster_url: string | null; position: number }
+  > = {}
   for (const r of rows) {
     videos[r.case_type] = {
       video_url: r.video_url,
       poster_url: r.poster_url ?? null,
+      position: r.position ?? 1,
     }
   }
   res.json({ videos })

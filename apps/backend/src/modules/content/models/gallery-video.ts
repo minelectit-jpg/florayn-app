@@ -15,8 +15,10 @@ const GalleryVideo = model.define("gallery_video", {
   design_slug: model.text(),
   case_type: model.text(),
   video_url: model.text(),
-  /** Optional still shown before the clip plays; falls back to the render. */
+  /** Optional thumbnail; when empty the clip's own first frame is used. */
   poster_url: model.text().nullable(),
+  /** 1-based slot among the gallery images; clamped to the image count. */
+  position: model.number().default(1),
 })
 
 export default GalleryVideo

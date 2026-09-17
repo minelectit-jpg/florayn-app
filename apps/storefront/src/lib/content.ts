@@ -142,7 +142,7 @@ export async function getProductSections(): Promise<ProductSections> {
 
 export type GalleryVideoMap = Record<
   string,
-  { video_url: string; poster_url: string | null }
+  { video_url: string; poster_url: string | null; position: number }
 >
 
 /**

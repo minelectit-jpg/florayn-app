@@ -123,19 +123,22 @@ export default function ProductView({
       url,
       video: null,
     }))
-    // A design's gallery video is keyed by case type (device-agnostic). When
-    // one exists for the live case type it leads the rail, with the current
-    // render as its poster.
+    // A design's gallery video is keyed by case type (device-agnostic). It sits
+    // at its chosen 1-based slot, clamped to however many images this variant
+    // has, so a video meant for slot 6 lands last when there are only 2 images.
     const gv = galleryVideos?.[caseType]
     if (gv?.video_url) {
-      return [
-        {
-          id: `gv-${caseType}`,
-          url: gv.poster_url ?? imageItems[0]?.url ?? gv.video_url,
-          video: gv.video_url,
-        },
-        ...imageItems,
-      ]
+      const videoItem: GalleryItem = {
+        id: `gv-${caseType}`,
+        // Empty poster → the gallery shows the clip's own first frame.
+        url: gv.poster_url ?? "",
+        video: gv.video_url,
+      }
+      const at = Math.min(
+        Math.max((gv.position ?? 1) - 1, 0),
+        imageItems.length
+      )
+      return [...imageItems.slice(0, at), videoItem, ...imageItems.slice(at)]
     }
     return imageItems
   }, [selected?.id, selected?.metadata, fallbackImages, galleryVideos, caseType])

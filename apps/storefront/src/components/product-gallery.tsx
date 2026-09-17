@@ -57,12 +57,23 @@ export default function ProductGallery({
                       : "border-line hover:border-line-strong"
                   }`}
                 >
-                  <ProductImage
-                    src={item.url}
-                    alt=""
-                    label={label}
-                    sizes="60px"
-                  />
+                  {item.video && !item.url ? (
+                    // No poster: show the clip's own first frame as the thumb.
+                    <video
+                      src={item.video}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ProductImage
+                      src={item.url}
+                      alt=""
+                      label={label}
+                      sizes="60px"
+                    />
+                  )}
                   {item.video ? (
                     <span className="absolute inset-0 grid place-items-center bg-ink/35 text-[10px] text-white">
                       ▶
@@ -80,12 +91,12 @@ export default function ProductGallery({
           <video
             key={active.id}
             src={active.video}
-            poster={active.url}
-            controls
+            poster={active.url || undefined}
             autoPlay
             muted
             loop
             playsInline
+            // No `controls`: the clip plays itself, silently.
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
         ) : (

@@ -25,6 +25,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const case_type = str(body.case_type)
   const video_url = str(body.video_url)
   const poster_url = str(body.poster_url) || null
+  const positionNum = Number(body.position)
+  const position =
+    Number.isFinite(positionNum) && positionNum >= 1
+      ? Math.floor(positionNum)
+      : 1
 
   if (!design_slug || !case_type || !video_url) {
     return res
@@ -38,6 +43,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       id: existing.id,
       video_url,
       poster_url,
+      position,
     })
   } else {
     await service.createGalleryVideos({
@@ -45,6 +51,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       case_type,
       video_url,
       poster_url,
+      position,
     })
   }
 

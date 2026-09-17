@@ -22,6 +22,7 @@ type GalleryVideo = {
   case_type: string
   video_url: string
   poster_url: string | null
+  position: number
 }
 
 type Design = {
@@ -51,11 +52,13 @@ const GalleryVideosPage = () => {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [scanning, setScanning] = useState(false)
-  const [picker, setPicker] = useState(false)
+  const [pickerFor, setPickerFor] = useState<"video" | "poster" | null>(null)
 
   const [designSlug, setDesignSlug] = useState("")
   const [caseType, setCaseType] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
+  const [posterUrl, setPosterUrl] = useState("")
+  const [position, setPosition] = useState("1")
   const [designQuery, setDesignQuery] = useState("")
   const [showAll, setShowAll] = useState(false)
 
@@ -135,10 +138,13 @@ const GalleryVideosPage = () => {
           design_slug: designSlug,
           case_type: caseType,
           video_url: videoUrl.trim(),
+          poster_url: posterUrl.trim(),
+          position: Number(position) || 1,
         }),
       })
       setVideos(res.videos ?? [])
       setVideoUrl("")
+      setPosterUrl("")
       toast.success("Saved.")
     } catch (e: any) {
       toast.error(e.message)
@@ -302,10 +308,45 @@ const GalleryVideosPage = () => {
                   size="small"
                   variant="secondary"
                   className="shrink-0"
-                  onClick={() => setPicker(true)}
+                  onClick={() => setPickerFor("video")}
                 >
                   Choose
                 </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-2">
+                <Label size="xsmall" weight="plus">
+                  Position in gallery
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  className="w-24"
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-2">
+                <Label size="xsmall" weight="plus">
+                  Thumbnail (optional — else the video&rsquo;s first frame)
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Thumbnail image URL"
+                    value={posterUrl}
+                    onChange={(e) => setPosterUrl(e.target.value)}
+                  />
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    className="shrink-0"
+                    onClick={() => setPickerFor("poster")}
+                  >
+                    Choose
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -337,14 +378,18 @@ const GalleryVideosPage = () => {
                 className="flex items-center gap-3 rounded-lg border border-ui-border-base p-2"
               >
                 <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-ui-bg-subtle">
-                  <video src={v.video_url} muted className="h-full w-full object-cover" />
+                  {v.poster_url ? (
+                    <img src={v.poster_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <video src={v.video_url} muted className="h-full w-full object-cover" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <Text size="small" weight="plus">
                     {designName(v.design_slug)}
                   </Text>
                   <Text size="xsmall" className="text-ui-fg-muted">
-                    {v.case_type} · {v.design_slug}
+                    {v.case_type} · {v.design_slug} · slot {v.position ?? 1}
                   </Text>
                 </div>
                 <IconButton
@@ -362,11 +407,15 @@ const GalleryVideosPage = () => {
       </div>
 
       <MediaPicker
-        open={picker}
-        onOpenChange={setPicker}
-        accept="video"
-        title="Choose a video"
-        onSelect={(url) => setVideoUrl(url)}
+        open={pickerFor !== null}
+        onOpenChange={(o) => {
+          if (!o) setPickerFor(null)
+        }}
+        accept={pickerFor === "poster" ? "image" : "video"}
+        title={pickerFor === "poster" ? "Choose a thumbnail" : "Choose a video"}
+        onSelect={(url) =>
+          pickerFor === "poster" ? setPosterUrl(url) : setVideoUrl(url)
+        }
       />
     </Container>
   )
