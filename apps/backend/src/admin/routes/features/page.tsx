@@ -13,6 +13,8 @@ import {
 } from "@medusajs/ui"
 import { useEffect, useState } from "react"
 
+import MediaPicker from "../../components/media-picker"
+
 type Block = {
   id: string
   title: string | null
@@ -54,6 +56,10 @@ const FeaturesPage = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [picker, setPicker] = useState<{
+    id: string
+    field: "image_url" | "video_url"
+  } | null>(null)
 
   function apply(list: Block[]) {
     setRows(list)
@@ -260,17 +266,45 @@ const FeaturesPage = () => {
                     value={d.description}
                     onChange={(e) => edit(row.id, "description", e.target.value)}
                   />
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Image URL"
-                      value={d.image_url}
-                      onChange={(e) => edit(row.id, "image_url", e.target.value)}
-                    />
-                    <Input
-                      placeholder="Video URL (autoplay, no controls)"
-                      value={d.video_url}
-                      onChange={(e) => edit(row.id, "video_url", e.target.value)}
-                    />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Image URL"
+                        value={d.image_url}
+                        onChange={(e) =>
+                          edit(row.id, "image_url", e.target.value)
+                        }
+                      />
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        className="shrink-0"
+                        onClick={() =>
+                          setPicker({ id: row.id, field: "image_url" })
+                        }
+                      >
+                        Choose
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Video URL (autoplay, no controls)"
+                        value={d.video_url}
+                        onChange={(e) =>
+                          edit(row.id, "video_url", e.target.value)
+                        }
+                      />
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        className="shrink-0"
+                        onClick={() =>
+                          setPicker({ id: row.id, field: "video_url" })
+                        }
+                      >
+                        Choose
+                      </Button>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center gap-2">
@@ -308,6 +342,20 @@ const FeaturesPage = () => {
           })
         )}
       </div>
+
+      <MediaPicker
+        open={!!picker}
+        onOpenChange={(o) => {
+          if (!o) setPicker(null)
+        }}
+        accept={picker?.field === "video_url" ? "video" : "image"}
+        title={
+          picker?.field === "video_url" ? "Choose a video" : "Choose an image"
+        }
+        onSelect={(url) => {
+          if (picker) edit(picker.id, picker.field, url)
+        }}
+      />
     </Container>
   )
 }

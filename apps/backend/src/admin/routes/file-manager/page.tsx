@@ -1,5 +1,5 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { ArrowPath, ArrowUpTray, Folder, Photo, Plus, Trash } from "@medusajs/icons"
+import { ArrowPath, ArrowUpTray, Folder, Photo, Plus, SquareTwoStack, Trash } from "@medusajs/icons"
 import { Badge, Button, Container, Heading, IconButton, Input, Text, toast } from "@medusajs/ui"
 import { type DragEvent, useEffect, useMemo, useRef, useState } from "react"
 
@@ -225,6 +225,15 @@ const FileManagerPage = () => {
     }
   }
 
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success("Link copied to clipboard.")
+    } catch {
+      toast.error("Could not copy the link.")
+    }
+  }
+
   async function removeFile(key: string, name: string) {
     if (!window.confirm(`Delete "${name}"?`)) return
     setBusy(true)
@@ -440,6 +449,14 @@ const FileManagerPage = () => {
                           {humanSize(file.size)}
                         </Text>
                       </div>
+                      <IconButton
+                        size="small"
+                        variant="transparent"
+                        onClick={() => copyLink(file.url)}
+                        title="Copy link"
+                      >
+                        <SquareTwoStack />
+                      </IconButton>
                       <IconButton
                         size="small"
                         variant="transparent"
