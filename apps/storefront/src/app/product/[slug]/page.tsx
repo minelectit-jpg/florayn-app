@@ -32,24 +32,34 @@ import { buildVariantMatrix } from "@/lib/variant-matrix"
 
 type Params = {
   params: Promise<{ slug: string }>
-  /** ?case=<case-type-slug> preselects that construction (set by shop cards). */
-  searchParams: Promise<{ case?: string }>
 }
 
 export const dynamicParams = true
-// The page reads ?case= (searchParams) to preselect a construction, which is a
-// dynamic API - so it must render dynamically. Pairing searchParams with a
-// static `revalidate` throws DYNAMIC_SERVER_USAGE in production, so we render
-// per request instead. (A cacheable path-based variant is a later optimisation.)
-export const dynamic = "force-dynamic"
+// ISR: pages are cached and served instantly (even the first ad visitor gets a
+// prebuilt page), then rebuilt in the background at most this often. `?case=` is
+// read on the client instead of via searchParams, so the route stays static and
+// does not fall back to per-request rendering.
+export const revalidate = 600
 
 /*
- * Prerender nothing by default; each product/device page renders on request.
- * See the note kept through the Structure B rewrite: the catalogue is too large
- * to prerender on this single-process host.
+ * Prerender the LIVE product base pages at build so ad traffic lands on an
+ * already-cached page. The full catalogue (every design x device) is too large
+ * to prerender on this single-process host, so device-specific and not-yet-live
+ * pages are generated on first hit and then cached (dynamicParams).
  */
 export async function generateStaticParams() {
-  return [] as { slug: string }[]
+  try {
+    const { products } = await listProducts({
+      fields: "handle",
+      limit: 1000,
+    })
+    return (products ?? [])
+      .map((p) => p.handle)
+      .filter(Boolean)
+      .map((slug) => ({ slug }))
+  } catch {
+    return [] as { slug: string }[]
+  }
 }
 
 /** Cheapest variant of a product, for a card's "From" price. */
@@ -96,9 +106,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   }
 }
 
-export default async function ProductPage({ params, searchParams }: Params) {
+export default async function ProductPage({ params }: Params) {
   const { slug } = await params
-  const { case: caseParam } = await searchParams
   const resolved = await resolveProductPage(slug)
   if (!resolved) notFound()
 
@@ -107,21 +116,27 @@ export default async function ProductPage({ params, searchParams }: Params) {
   const designSlug = product.metadata?.design_slug as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
 
-  const [families, deviceCatalog, stock, caseTypes, bundleConfig] =
-    await Promise.all([
-      getDeviceFamilyMap(),
-      getDeviceCatalog(),
-      getBlankStock(),
-      getCaseTypes(),
-      getBundleConfig(),
-    ])
+  // One parallel round for everything that only needs the product itself; the
+  // page used to await these one by one, which was most of its slow TTFB.
+  const [
+    families,
+    deviceCatalog,
+    stock,
+    caseTypes,
+    bundleConfig,
+    productSections,
+  ] = await Promise.all([
+    getDeviceFamilyMap(),
+    getDeviceCatalog(),
+    getBlankStock(),
+    getCaseTypes(),
+    getBundleConfig(),
+    getProductSections(),
+  ])
+  const { featureBlocks, featuredPicks } = productSections
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
-
-  // Admin-managed bands below the gallery (Features, We think you'll love),
-  // needed by both layouts.
-  const { featureBlocks, featuredPicks } = await getProductSections()
 
   // A regular product (no Case Type + Device options) - e.g. a manually-added
   // one-off - renders as a plain product page instead of the linked selectors.
@@ -176,18 +191,10 @@ export default async function ProductPage({ params, searchParams }: Params) {
   const initialDevice =
     device && matrix.devices.includes(device.name) ? device.name : defaultDevice
 
-  // Honour ?case=<slug> (set by a case-type-filtered shop card) so the PDP
-  // opens on the same construction the customer was browsing - but only if that
-  // case type is actually sold for this device; otherwise fall back to the
-  // device's first construction.
-  const requestedCase = caseParam
-    ? caseTypes.find((c) => c.slug === caseParam)?.name
-    : undefined
-  const fitsDevice =
-    requestedCase &&
-    (matrix.caseTypesByDevice[initialDevice] ?? []).includes(requestedCase)
+  // The device's first construction. A ?case=<slug> from a filtered shop card
+  // is honoured on the client (ProductView reads it after hydration), which
+  // keeps this page static/cacheable.
   const initialCaseType =
-    (fitsDevice ? requestedCase : undefined) ??
     (matrix.caseTypesByDevice[initialDevice] ?? matrix.caseTypes)[0] ??
     matrix.caseTypes[0]
 
@@ -205,14 +212,16 @@ export default async function ProductPage({ params, searchParams }: Params) {
       : null
   }
 
-  // Related products, drawn from this design's collection.
+  // Related products (this design's collection) and the design's gallery videos,
+  // fetched together.
   const collectionId = product.collection?.id
-  const { products: pool } = collectionId
-    ? await listProducts({ collection_id: [collectionId], limit: 100 })
-    : { products: [] as StoreProduct[] }
-
-  // Gallery videos for this design, keyed by case-type name (device-agnostic).
-  const galleryVideos = await getGalleryVideos(designSlug ?? "")
+  const [poolResult, galleryVideos] = await Promise.all([
+    collectionId
+      ? listProducts({ collection_id: [collectionId], limit: 100 })
+      : Promise.resolve({ products: [] as StoreProduct[] }),
+    getGalleryVideos(designSlug ?? ""),
+  ])
+  const { products: pool } = poolResult
 
   // MORE DESIGNS: other designs' phone cases in the same collection. Each one
   // carries renders keyed by "device|caseType" (and by device alone) so the

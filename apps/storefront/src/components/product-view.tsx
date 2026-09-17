@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
@@ -115,6 +115,15 @@ export default function ProductView({
     const cts = matrix.caseTypesByDevice[d] ?? []
     if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
   }
+
+  // Honour ?case=<slug> from a filtered shop card, on the client so the page
+  // itself stays static/cacheable. Runs once after hydration.
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("case")
+    if (!slug) return
+    const name = caseTypeRecords?.find((c) => c.slug === slug)?.name
+    if (name && matrix.caseTypes.includes(name)) selectCaseType(name)
+  }, [])
 
   const selectedId = matrix.variantIdByPair[pairKey(caseType, device)]
   const selected = (selectedId && variantById.get(selectedId)) || null
