@@ -58,7 +58,7 @@ const GalleryVideosPage = () => {
   const [caseType, setCaseType] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
   const [posterUrl, setPosterUrl] = useState("")
-  const [position, setPosition] = useState("1")
+  const [position, setPosition] = useState("2")
   const [designQuery, setDesignQuery] = useState("")
   const [showAll, setShowAll] = useState(false)
 
@@ -125,6 +125,26 @@ const GalleryVideosPage = () => {
     return list.slice(0, 80)
   }, [designs, designQuery, showAll])
 
+  function selectDesign(slug: string) {
+    setDesignSlug(slug)
+    setCaseType("")
+    setVideoUrl("")
+    setPosterUrl("")
+    setPosition("2")
+  }
+
+  // Picking a case type loads its existing video (if any) so the owner can see
+  // and edit what is already there, rather than facing an empty form.
+  function selectCaseType(ct: string) {
+    setCaseType(ct)
+    const existing = videos.find(
+      (v) => v.design_slug === designSlug && v.case_type === ct
+    )
+    setVideoUrl(existing?.video_url ?? "")
+    setPosterUrl(existing?.poster_url ?? "")
+    setPosition(String(existing?.position ?? 2))
+  }
+
   async function addVideo() {
     if (!designSlug || !caseType || !videoUrl.trim()) {
       toast.error("Pick a design, a case type and a video.")
@@ -143,8 +163,6 @@ const GalleryVideosPage = () => {
         }),
       })
       setVideos(res.videos ?? [])
-      setVideoUrl("")
-      setPosterUrl("")
       toast.success("Saved.")
     } catch (e: any) {
       toast.error(e.message)
@@ -238,10 +256,7 @@ const GalleryVideosPage = () => {
                 <button
                   key={d.slug}
                   type="button"
-                  onClick={() => {
-                    setDesignSlug(d.slug)
-                    setCaseType("")
-                  }}
+                  onClick={() => selectDesign(d.slug)}
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                     designSlug === d.slug
                       ? "bg-ui-bg-base-pressed font-medium"
@@ -274,7 +289,7 @@ const GalleryVideosPage = () => {
               </Label>
               <Select
                 value={caseType}
-                onValueChange={setCaseType}
+                onValueChange={selectCaseType}
                 disabled={!designSlug}
               >
                 <Select.Trigger>
@@ -322,7 +337,7 @@ const GalleryVideosPage = () => {
                 </Label>
                 <Input
                   type="number"
-                  min={1}
+                  min={2}
                   className="w-24"
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}

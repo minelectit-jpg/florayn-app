@@ -125,7 +125,9 @@ export default function ProductView({
     }))
     // A design's gallery video is keyed by case type (device-agnostic). It sits
     // at its chosen 1-based slot, clamped to however many images this variant
-    // has, so a video meant for slot 6 lands last when there are only 2 images.
+    // has (slot 6 lands last when there are only 2 images) and never at the very
+    // front — an image always leads, so the page opens on the render, not the
+    // clip.
     const gv = galleryVideos?.[caseType]
     if (gv?.video_url) {
       const videoItem: GalleryItem = {
@@ -135,7 +137,7 @@ export default function ProductView({
         video: gv.video_url,
       }
       const at = Math.min(
-        Math.max((gv.position ?? 1) - 1, 0),
+        Math.max((gv.position ?? 2) - 1, imageItems.length ? 1 : 0),
         imageItems.length
       )
       return [...imageItems.slice(0, at), videoItem, ...imageItems.slice(at)]
