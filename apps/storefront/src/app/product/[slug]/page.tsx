@@ -115,13 +115,17 @@ export default async function ProductPage({ params, searchParams }: Params) {
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
 
+  // Admin-managed bands below the gallery (Features), needed by both layouts.
+  const { featureBlocks } = await getProductSections()
+
   // A regular product (no Case Type + Device options) - e.g. a manually-added
   // one-off - renders as a plain product page instead of the linked selectors.
   if (!(matrix.caseTypes.length && matrix.devices.length)) {
     return (
-      <article className="mx-auto w-full max-w-[1260px] px-0 md:px-[30px]">
+      <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
         <RegularProductView
           product={product}
+          featureBlocks={featureBlocks}
           collection={
             product.collection
               ? {
@@ -201,9 +205,6 @@ export default async function ProductPage({ params, searchParams }: Params) {
   const { products: pool } = collectionId
     ? await listProducts({ collection_id: [collectionId], limit: 100 })
     : { products: [] as StoreProduct[] }
-
-  // Admin-managed bands below the gallery (Features, We think you'll love).
-  const { featureBlocks } = await getProductSections()
 
   // MORE DESIGNS: other designs' phone cases in the same collection. Each one
   // carries renders keyed by "device|caseType" (and by device alone) so the
@@ -473,6 +474,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
         pairs={<PairsWellWith items={pairsItems} />}
         belowGallery={<RecommendedForYou items={recommendedItems} />}
         featureBlocks={featureBlocks}
+        productForm={(product.metadata?.form as string) ?? null}
       />
     </article>
   )

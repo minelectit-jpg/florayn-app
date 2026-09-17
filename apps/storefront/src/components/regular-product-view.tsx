@@ -3,11 +3,14 @@
 import Link from "next/link"
 import { useMemo, useState, type ReactNode } from "react"
 
+import FeaturesSection from "@/components/features-section"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
+import type { FeatureBlock } from "@/lib/content"
 import type { StoreProduct, StoreVariant } from "@/lib/medusa"
 import { formatPrice } from "@/lib/money"
+import { productTypeLabel } from "@/lib/product-forms"
 
 type AddState = "idle" | "adding" | "added" | "error"
 
@@ -21,10 +24,13 @@ export default function RegularProductView({
   product,
   collection,
   tabs,
+  featureBlocks,
 }: {
   product: StoreProduct
   collection?: { title: string; handle: string } | null
   tabs?: ReactNode
+  /** Feature blocks; keyed by this product's form label (AirPods, Sticky Pad…). */
+  featureBlocks?: FeatureBlock[]
 }) {
   const { add } = useCart()
   const variants = product.variants ?? []
@@ -93,13 +99,17 @@ export default function RegularProductView({
     (o) => (o.values ?? []).length > 1 && o.title !== "Default option"
   )
 
+  const group = productTypeLabel(
+    (product.metadata?.form as string | undefined) ?? undefined
+  )
+
   return (
-    <div className="grid gap-[30px] lg:grid-cols-[600px_minmax(0,570px)]">
-      <div>
+    <div className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+      <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery key={selected?.id ?? "default"} items={images} label={product.title} />
       </div>
 
-      <div className="lg:sticky lg:top-[50px] lg:self-start">
+      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[50px] lg:self-start">
         {collection ? (
           <Link href={`/collection/${collection.handle}/`} className="eyebrow transition-colors hover:text-purple">
             {collection.title}
@@ -190,6 +200,12 @@ export default function RegularProductView({
 
         {tabs}
       </div>
+
+      {featureBlocks?.length ? (
+        <div className="lg:col-start-1 lg:row-start-2">
+          <FeaturesSection blocks={featureBlocks} group={group} />
+        </div>
+      ) : null}
     </div>
   )
 }

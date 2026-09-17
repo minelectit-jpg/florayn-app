@@ -8,23 +8,24 @@ import type { FeatureBlock } from "@/lib/content"
  * URL) or a still image. The media keeps its own aspect ratio — a 16:9 clip
  * stays 16:9 — rather than being cropped to a fixed box.
  *
- * Blocks are tagged with a case type. The band shows the blocks for the live
- * case type; a construction with none of its own falls back to the untagged
- * (default) blocks, so it follows the buy box like the gallery does.
+ * Blocks are tagged with a group — a case type for phones, a product-type label
+ * (AirPods, Sticky Pad…) for everything else. The band shows the blocks for the
+ * live group; a group with none of its own falls back to the untagged (default)
+ * blocks, so it follows the buy box like the gallery does.
  */
 export default function FeaturesSection({
   blocks,
-  caseType,
+  group,
 }: {
   blocks: FeatureBlock[]
-  /** The currently selected case type, e.g. "Signature". */
-  caseType?: string
+  /** The live group, e.g. "Signature" or "AirPods". */
+  group?: string
 }) {
-  const forType = caseType
-    ? blocks.filter((b) => b.case_type === caseType)
+  const forGroup = group
+    ? blocks.filter((b) => b.case_type === group)
     : []
-  const shown = forType.length
-    ? forType
+  const shown = forGroup.length
+    ? forGroup
     : blocks.filter((b) => !b.case_type)
 
   if (!shown.length) return null

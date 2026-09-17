@@ -38,6 +38,21 @@ type Draft = {
 /** The sentinel a Select uses for "no case type" (a Select can't hold ""). */
 const ALL = "__all__"
 
+/**
+ * Product-type groups for non-phone forms. These labels must match the
+ * storefront's product-type labels, so an "AirPods" block shows on AirPods
+ * pages. New types can be added on the fly with "Add type".
+ */
+const PRODUCT_TYPES = [
+  "AirPods",
+  "Sticky Pad",
+  "Card Holder",
+  "Ring Holder",
+  "Phone Charm",
+  "Watch Band",
+  "Wallet",
+]
+
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
     credentials: "include",
@@ -64,8 +79,10 @@ const FeaturesPage = () => {
   const [saving, setSaving] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [caseTypes, setCaseTypes] = useState<string[]>([])
-  // The case type currently being edited. "" is the Default (all case types) set.
+  // The group currently being edited. "" is the Default (all case types) set.
   const [selectedTab, setSelectedTab] = useState<string>("")
+  // Product-type groups the owner adds on the fly ("Add type").
+  const [customTypes, setCustomTypes] = useState<string[]>([])
   const [picker, setPicker] = useState<{
     id: string
     field: "image_url" | "video_url"
@@ -204,41 +221,81 @@ const FeaturesPage = () => {
 
   const visibleRows = rows.filter((r) => (r.case_type ?? "") === selectedTab)
 
+  // Every group that gets a tab: case types, product types, any the owner added,
+  // and any already used by a block (so nothing is orphaned).
+  const blockGroups = rows.map((r) => r.case_type).filter(Boolean) as string[]
+  const caseTypeGroups = [...caseTypes]
+  const productGroups = [
+    ...new Set([
+      ...PRODUCT_TYPES,
+      ...customTypes,
+      ...blockGroups.filter(
+        (g) => !caseTypes.includes(g) && !PRODUCT_TYPES.includes(g)
+      ),
+    ]),
+  ]
+  const allGroups = [...caseTypeGroups, ...productGroups]
+
+  function addType() {
+    const name = window.prompt("New product type name (e.g. Ring Holder)")?.trim()
+    if (!name) return
+    if (!allGroups.includes(name)) setCustomTypes((t) => [...t, name])
+    setSelectedTab(name)
+  }
+
   return (
     <Container className="divide-y p-0">
       <div className="px-6 py-4">
         <Heading level="h1">Product features</Heading>
         <Text size="small" className="text-ui-fg-subtle">
           The blocks in the &ldquo;Features&rdquo; band on the product page. Pick
-          a <b>case type</b> below to edit that construction&rsquo;s own set
-          (Signature has its own, Armor another). <b>Default</b> blocks show for
-          any case type that has none of its own. Give a block a <b>video URL</b>{" "}
-          to autoplay on loop with no controls, or an <b>image URL</b> for a
-          still. Reorder with the arrows; hide with the switch.
+          a group below to edit its own set: a <b>case type</b> drives phone
+          products (Signature its own, Armor another), a <b>product type</b>{" "}
+          drives AirPods, sticky pads and the rest — and <b>+ Add type</b> makes
+          a new one for a future product. <b>Default</b> shows where a group has
+          none of its own. Give a block a <b>video URL</b> to autoplay on loop
+          with no controls, or an <b>image URL</b> for a still.
         </Text>
       </div>
 
-      {/* Case-type tabs — each is its own content set. */}
-      <div className="flex flex-wrap items-center gap-2 px-6 py-3">
-        {[{ label: "Default (all)", value: "" }, ...caseTypes.map((n) => ({ label: n, value: n }))].map(
-          (tab) => {
+      {/* Group tabs — each is its own content set. Case types drive phone
+          products; product types drive AirPods, sticky pads and the rest. */}
+      <div className="flex flex-col gap-2 px-6 py-3">
+        {(() => {
+          const tabButton = (label: string, value: string) => {
             const count = rows.filter(
-              (r) => (r.case_type ?? "") === tab.value
+              (r) => (r.case_type ?? "") === value
             ).length
-            const active = selectedTab === tab.value
             return (
               <Button
-                key={tab.value || "__default__"}
+                key={value || "__default__"}
                 size="small"
-                variant={active ? "primary" : "secondary"}
-                onClick={() => setSelectedTab(tab.value)}
+                variant={selectedTab === value ? "primary" : "secondary"}
+                onClick={() => setSelectedTab(value)}
               >
-                {tab.label}
+                {label}
                 {count ? ` (${count})` : ""}
               </Button>
             )
           }
-        )}
+          return (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                {tabButton("Default (all)", "")}
+                {caseTypeGroups.map((g) => tabButton(g, g))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Text size="xsmall" className="self-center text-ui-fg-muted">
+                  Product types:
+                </Text>
+                {productGroups.map((g) => tabButton(g, g))}
+                <Button size="small" variant="transparent" onClick={addType}>
+                  + Add type
+                </Button>
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       <div className="flex flex-col gap-4 px-6 py-4">
@@ -323,7 +380,7 @@ const FeaturesPage = () => {
                 <div className="flex flex-1 flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <Text size="xsmall" className="shrink-0 text-ui-fg-muted">
-                      Case type
+                      Group
                     </Text>
                     <Select
                       value={d.case_type || ALL}
@@ -338,13 +395,12 @@ const FeaturesPage = () => {
                         <Select.Item value={ALL}>
                           All case types (default)
                         </Select.Item>
-                        {caseTypes.map((name) => (
+                        {allGroups.map((name) => (
                           <Select.Item key={name} value={name}>
                             {name}
                           </Select.Item>
                         ))}
-                        {d.case_type &&
-                        !caseTypes.includes(d.case_type) ? (
+                        {d.case_type && !allGroups.includes(d.case_type) ? (
                           <Select.Item value={d.case_type}>
                             {d.case_type}
                           </Select.Item>

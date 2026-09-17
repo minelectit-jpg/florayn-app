@@ -10,6 +10,7 @@ import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
 import type { FeatureBlock } from "@/lib/content"
+import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
@@ -44,6 +45,7 @@ export default function ProductView({
   pairs,
   belowGallery,
   featureBlocks,
+  productForm,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -82,8 +84,10 @@ export default function ProductView({
    * the buy box, in normal reading order.
    */
   belowGallery?: ReactNode
-  /** Feature blocks (all case types); the band picks the live case type's set. */
+  /** Feature blocks (all groups); the band picks the live group's set. */
   featureBlocks?: FeatureBlock[]
+  /** The product's form ("phone", "airpods"…); keys the Features band. */
+  productForm?: string | null
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -211,7 +215,7 @@ export default function ProductView({
           {belowGallery}
           <FeaturesSection
             blocks={featureBlocks ?? []}
-            caseType={caseType}
+            group={featuresGroup(productForm, caseType)}
           />
         </div>
       ) : null}
