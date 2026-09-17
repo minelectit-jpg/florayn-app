@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import ProductView from "@/components/product-view"
-import RecommendedForYou, {
+import {
   type RecommendedItem,
   type RecommendedVariant,
 } from "@/components/recommended-for-you"
@@ -535,7 +535,7 @@ export default async function ProductPage({ params }: Params) {
           />
         }
         pairs={<PairsWellWith items={pairsItems} />}
-        belowGallery={<RecommendedForYou items={recommendedItems} />}
+        recommendedItems={recommendedItems}
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}

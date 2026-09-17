@@ -1,12 +1,13 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
-import FeaturesSection from "@/components/features-section"
 import ProductBuyBox from "@/components/product-buy-box"
-import YouWillLove, { type YouWillLoveItem } from "@/components/you-will-love"
+import { type YouWillLoveItem } from "@/components/you-will-love"
+import { type RecommendedItem } from "@/components/recommended-for-you"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
@@ -15,6 +16,22 @@ import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreProduct, StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
+
+// The three bands under the gallery — Recommended, We-think-you'll-love and
+// Features — all sit below the fold. Loading them client-side only (ssr: false)
+// keeps them out of the initial HTML and the first JS chunk, so the gallery and
+// buy box (the only things a first-time visitor sees) paint and hydrate first;
+// the bands mount a moment later, well before they scroll into view.
+const RecommendedForYou = dynamic(
+  () => import("@/components/recommended-for-you"),
+  { ssr: false }
+)
+const YouWillLove = dynamic(() => import("@/components/you-will-love"), {
+  ssr: false,
+})
+const FeaturesSection = dynamic(() => import("@/components/features-section"), {
+  ssr: false,
+})
 
 /**
  * The two-column top of the product page.
@@ -44,7 +61,7 @@ export default function ProductView({
   shipping,
   tabs,
   pairs,
-  belowGallery,
+  recommendedItems,
   featureBlocks,
   productForm,
   galleryVideos,
@@ -82,11 +99,11 @@ export default function ProductView({
   tabs: ReactNode
   pairs: ReactNode
   /**
-   * Recommended / We think you'll love / Features. On desktop these sit under
-   * the gallery in the left column (not full width); on mobile they fall below
-   * the buy box, in normal reading order.
+   * Recommended-for-you accessories, shown under the gallery in the left column
+   * on desktop (below the buy box on mobile). Passed as data, not a rendered
+   * node, so the band can load client-side only.
    */
-  belowGallery?: ReactNode
+  recommendedItems?: RecommendedItem[]
   /** Feature blocks (all groups); the band picks the live group's set. */
   featureBlocks?: FeatureBlock[]
   /** The product's form ("phone", "airpods"…); keys the Features band. */
@@ -246,11 +263,11 @@ export default function ProductView({
         {pairs}
       </div>
 
-      {belowGallery ||
+      {recommendedItems?.length ||
       featureBlocks?.length ||
       youWillLoveItems?.length ? (
         <div className="lg:col-start-1 lg:row-start-2">
-          {belowGallery}
+          <RecommendedForYou items={recommendedItems ?? []} />
           <YouWillLove
             items={youWillLoveItems ?? []}
             device={device}
