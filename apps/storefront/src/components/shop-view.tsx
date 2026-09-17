@@ -3,97 +3,55 @@ import Link from "next/link"
 
 import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
-import { getCaseTypes, getDeviceCatalog } from "@/lib/catalog"
 import {
-  listProducts,
-  sdk,
-  type StoreProduct,
-  type StoreVariant,
-} from "@/lib/medusa"
+  getCaseTypes,
+  getDeviceCatalog,
+  getShopCatalog,
+  shopCardImage,
+  type CaseTypeRecord,
+  type DeviceRecord,
+  type ShopDesign,
+} from "@/lib/catalog"
+import { listProducts, type StoreProduct, type StoreVariant } from "@/lib/medusa"
+
+/** Designs per page. A full grid is 4 across, so this is 8 rows on desktop. */
+const PAGE_SIZE = 32
 
 /**
- * A shop card is scoped to one device (and often one case type), so it only
- * needs those variants — not all ~156 of a product. Trimming here is what keeps
- * the shop HTML from ballooning to megabytes: a device+case-type page carries
- * one variant per card, a device page a handful.
- */
-function trimForCard(
-  p: StoreProduct,
-  deviceName: string | null,
-  caseTypeName: string | null,
-  caseTypeNames: Set<string>
-): StoreProduct {
-  const vs = p.variants ?? []
-  const valsOf = (v: StoreVariant) => (v.options ?? []).map((o) => o.value)
-  let kept: StoreVariant[]
-  if (deviceName) {
-    kept = vs.filter((v) => {
-      const vals = valsOf(v)
-      return (
-        vals.includes(deviceName) &&
-        (!caseTypeName || vals.includes(caseTypeName))
-      )
-    })
-  } else {
-    // No device: the cheapest variant per case type keeps the "From" range and
-    // an image without carrying every device.
-    const byCase = new Map<string, StoreVariant>()
-    for (const v of vs) {
-      const ct = valsOf(v).find((x) => caseTypeNames.has(x))
-      if (!ct) continue
-      const cur = byCase.get(ct)
-      const price = v.calculated_price?.calculated_amount ?? Infinity
-      if (!cur || price < (cur.calculated_price?.calculated_amount ?? Infinity))
-        byCase.set(ct, v)
-    }
-    kept = [...byCase.values()]
-  }
-  return { ...p, variants: kept.length ? kept : vs.slice(0, 1) }
-}
-
-/**
- * The shop, rendered from clean path segments rather than query strings:
- *   /shop                       -> everything
- *   /shop/iphone-17-pro-max     -> one device
- *   /shop/iphone-17-pro-max/signature -> device + case type
- * Shared by app/shop/page.tsx (the bare landing, which also redirects the old
- * ?filter_device= links here) and app/shop/[...slug]/page.tsx.
+ * The shop, rendered from a light design catalogue rather than the full product
+ * list. Pulling every variant's calculated_price for ~180 designs took ~40s once
+ * the whole library went live; instead the grid pages through the catalogue
+ * (design + case types, no variants), prices each card from the fixed case-type
+ * price, builds its image URL from the wired R2 path, and fetches variant ids for
+ * only the current page (so Quick Add still works) - no per-variant price ever.
+ *
+ * Routes (path-based paging so each page is its own ISR entry):
+ *   /shop                                   -> everything (page 1)
+ *   /shop/iphone-17-pro-max                 -> one device
+ *   /shop/iphone-17-pro-max/signature       -> device + case type
+ *   /shop/iphone-17-pro-max/signature/2     -> page 2 of that
  */
 
-async function categoryFor(
-  slug?: string
-): Promise<{ id: string; name: string } | null> {
-  if (!slug) return null
-  try {
-    const { product_categories } = await sdk.store.category.list({
-      handle: slug,
-      limit: 1,
-    })
-    const c = product_categories?.[0]
-    return c ? { id: c.id, name: c.name } : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Which product FORM a device belongs to. A phone case product lists only
- * phones; AirPods / watch / wallet are their own products.
- */
 function formForFamily(family: string): string {
   return family === "iphone" || family === "samsung" ? "phone" : family
 }
 
-/** Whether a product is sold for a device (matched on the Device option). */
-function hasDevice(product: StoreProduct, deviceName: string): boolean {
-  return (product.variants ?? []).some((v) =>
-    (v.options ?? []).some((o) => o.value === deviceName)
-  )
+function pathFor(
+  deviceSlug?: string,
+  caseTypeSlug?: string,
+  page?: number
+): string {
+  const base = !deviceSlug
+    ? "/shop/"
+    : caseTypeSlug
+      ? `/shop/${deviceSlug}/${caseTypeSlug}/`
+      : `/shop/${deviceSlug}/`
+  return page && page > 1 ? `${base}${page}/` : base
 }
 
-function pathFor(deviceSlug?: string, caseTypeSlug?: string): string {
-  if (!deviceSlug) return "/shop/"
-  return caseTypeSlug ? `/shop/${deviceSlug}/${caseTypeSlug}/` : `/shop/${deviceSlug}/`
+/** The product handle for a design in a given form: the slug, or slug-<form>. */
+function handleFor(slug: string, form: string): string {
+  return form === "phone" ? slug : `${slug}-${form}`
 }
 
 export async function shopMetadata({
@@ -114,101 +72,137 @@ export async function shopMetadata({
 export default async function ShopView({
   deviceSlug,
   caseTypeSlug,
+  page = 1,
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
+  page?: number
 }) {
-  const [devices, caseTypes] = await Promise.all([
+  const [devices, caseTypes, catalog] = await Promise.all([
     getDeviceCatalog(),
     getCaseTypes(),
+    getShopCatalog(),
   ])
-  const device = devices.find((d) => d.slug === deviceSlug) ?? null
 
-  // Phones by default, or the family of the chosen device.
+  const device = devices.find((d) => d.slug === deviceSlug) ?? null
   const targetForm = device ? formForFamily(device.family) : "phone"
 
-  const category = await categoryFor(caseTypeSlug)
-  const { products, error } = await listProducts(
-    category ? { category_id: [category.id], limit: 200 } : { limit: 200 }
+  // The case type in view: the chosen one, else the first that the catalogue
+  // actually uses (so a bare /shop still shows real cards and prices).
+  const usedCaseSlugs = new Set<string>()
+  for (const d of catalog) for (const c of d.caseTypes) usedCaseSlugs.add(c)
+  const shownCaseTypes = caseTypes.filter((c) => usedCaseSlugs.has(c.slug))
+  const caseType: CaseTypeRecord | null =
+    (caseTypeSlug && caseTypes.find((c) => c.slug === caseTypeSlug)) ||
+    shownCaseTypes[0] ||
+    caseTypes[0] ||
+    null
+  const caseSlug = caseType?.slug ?? ""
+
+  // Designs that are sold in this form and (if one is chosen) this case type.
+  const matching = catalog.filter(
+    (d) => d.forms.includes(targetForm) && (!caseSlug || d.caseTypes.includes(caseSlug))
   )
 
-  const filtered: StoreProduct[] = products.filter(
-    (p) =>
-      (p.metadata?.form ?? "phone") === targetForm &&
-      (!device || hasDevice(p, device.name))
+  const totalPages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE))
+  const current = Math.min(Math.max(page, 1), totalPages)
+  const pageDesigns = matching.slice(
+    (current - 1) * PAGE_SIZE,
+    current * PAGE_SIZE
   )
 
-  // Which case types the current device is actually sold in - with a sample
-  // render for each - so the case-type picker only offers real options (a case
-  // type the model has no product for is hidden) and can show its image.
-  const caseTypeByName = new Map(caseTypes.map((c) => [c.name, c]))
+  // Sample render per case type for the case-type picker (built, not fetched).
   const caseTypeImages: Record<string, string> = {}
-  const availableSlugs = new Set<string>()
   if (device) {
-    for (const p of filtered) {
-      for (const v of p.variants ?? []) {
-        const values = (v.options ?? []).map((o) => o.value)
-        if (!values.includes(device.name)) continue
-        const ctName = values.find((x) => x && caseTypeByName.has(x))
-        if (!ctName) continue
-        const ct = caseTypeByName.get(ctName)!
-        availableSlugs.add(ct.slug)
-        if (!caseTypeImages[ct.slug]) {
-          const img = (v.metadata?.images as string[] | undefined)?.[0]
-          if (img) caseTypeImages[ct.slug] = img
-        }
-      }
+    for (const ct of shownCaseTypes) {
+      const sample = catalog.find(
+        (d) => d.forms.includes(targetForm) && d.caseTypes.includes(ct.slug)
+      )
+      if (sample)
+        caseTypeImages[ct.slug] = shopCardImage(sample.slug, ct.slug, device.slug)
     }
   }
-  const shownCaseTypes =
-    device && availableSlugs.size
-      ? caseTypes.filter((c) => availableSlugs.has(c.slug))
-      : caseTypes
+
+  // Variant id per card, so Quick Add keeps working - fetched for THIS page only
+  // (32 products), and without calculated_price. Falls back to no-add if the
+  // lookup is slow or missing; the card still links to the product page.
+  const variantByHandle = new Map<string, string>()
+  if (device && pageDesigns.length) {
+    const handles = pageDesigns.map((d) => handleFor(d.slug, targetForm))
+    const { products } = await listProducts({
+      handle: handles,
+      limit: PAGE_SIZE,
+      fields: "id,handle,variants.id,variants.options.value",
+    })
+    for (const p of products) {
+      const v = (p.variants ?? []).find((vv) => {
+        const vals = (vv.options ?? []).map((o) => o.value)
+        return vals.includes(device.name) && vals.includes(caseType?.name ?? "")
+      })
+      if (v?.id) variantByHandle.set(p.handle!, v.id)
+    }
+  }
+
+  // Build a light, ProductCard-shaped object per card: one variant carrying the
+  // constructed image and the fixed case-type price, so ProductCard renders it
+  // unchanged (it scopes to the device+case-type variant and reads that image
+  // and price).
+  const price = caseType?.price ?? 0
+  const products: StoreProduct[] = pageDesigns.map((d) => {
+    const handle = handleFor(d.slug, targetForm)
+    const image = device ? shopCardImage(d.slug, caseSlug, device.slug) : null
+    const variant = {
+      // Empty when the id lookup missed, so QuickAdd hides rather than trying to
+      // add a non-existent variant; the card still links to the product page.
+      id: variantByHandle.get(handle) ?? "",
+      title: caseType?.name ?? "",
+      options: [
+        { value: device?.name ?? "" },
+        { value: caseType?.name ?? "" },
+      ],
+      calculated_price: { calculated_amount: price },
+      metadata: { images: image ? [image] : [] },
+    } as unknown as StoreVariant
+    return {
+      id: `card-${d.slug}`,
+      title: d.name,
+      handle,
+      thumbnail: image,
+      metadata: { design_name: d.name, design_slug: d.slug, form: targetForm },
+      variants: [variant],
+    } as unknown as StoreProduct
+  })
 
   const heading = device
     ? `${device.name} Cases`
-    : category
-      ? `${category.name} Cases`
+    : caseType
+      ? `${caseType.name} Cases`
       : "Shop"
 
   return (
     <div className="space-y-8">
       <header>
-        {/* Kept for SEO / screen readers only - the selectors below show the
-            same context (device + case type), so the big title block is hidden. */}
         <h1 className="sr-only">{heading}</h1>
 
         <ShopSelectors
           deviceSlug={device?.slug}
-          caseTypeSlug={category ? caseTypeSlug : undefined}
+          caseTypeSlug={caseType ? caseSlug : undefined}
           devices={devices}
           caseTypes={shownCaseTypes}
           caseTypeImages={caseTypeImages}
         />
       </header>
 
-      {error ? (
-        <div className="rounded-[12px] border border-line bg-surface p-6">
-          <p className="text-sm font-semibold">The catalogue could not be loaded.</p>
-          <p className="mt-2 text-sm text-ink-muted">
-            This is a connection problem, not an empty shop. Please try again
-            shortly.
-          </p>
-        </div>
-      ) : filtered.length ? (
+      {matching.length ? (
         <ShopGrid
-          products={filtered.map((p) =>
-            trimForCard(
-              p,
-              device?.name ?? null,
-              category?.name ?? null,
-              new Set(caseTypes.map((c) => c.name))
-            )
-          )}
+          products={products}
           device={device?.name ?? null}
           deviceSlug={device?.slug ?? null}
-          caseType={category?.name ?? null}
-          caseTypeSlug={category ? (caseTypeSlug ?? null) : null}
+          caseType={caseType?.name ?? null}
+          caseTypeSlug={caseType ? caseSlug : null}
+          totalCount={matching.length}
+          currentPage={current}
+          totalPages={totalPages}
         />
       ) : (
         <div className="py-12">
@@ -228,3 +222,6 @@ export default async function ShopView({
     </div>
   )
 }
+
+// Kept exported for callers that import the record types from here.
+export type { DeviceRecord, ShopDesign }

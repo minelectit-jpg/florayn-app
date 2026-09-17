@@ -93,6 +93,44 @@ export async function getDeviceCatalog(): Promise<DeviceRecord[]> {
   return data?.devices ?? []
 }
 
+/** Public R2 bucket that holds every wired render, for building card image URLs. */
+const R2_BASE = (
+  process.env.NEXT_PUBLIC_R2_URL ??
+  "https://pub-1af88507922d437983ab3ffaf7336788.r2.dev"
+).replace(/\/+$/, "")
+
+/**
+ * The render for a design in a given construction and model. Every design is
+ * wired per-device (image_granularity === "device"), so this path always
+ * exists for a live pair; a missing one 404s and the card shows its fallback.
+ */
+export function shopCardImage(
+  designSlug: string,
+  caseTypeSlug: string,
+  deviceSlug: string
+): string {
+  return `${R2_BASE}/${designSlug}/${caseTypeSlug}/${deviceSlug}/1.webp`
+}
+
+export type ShopDesign = {
+  slug: string
+  name: string
+  /** Case-type slugs this design is published in (armor-black, signature, …). */
+  caseTypes: string[]
+  /** Forms it is sold in (phone, airpods, …). */
+  forms: string[]
+}
+
+/**
+ * The light design list the shop grid renders from - no variants, no prices.
+ * Cards get their price from the case type and their image from shopCardImage(),
+ * so a 180-design shop never triggers a per-variant price calculation.
+ */
+export async function getShopCatalog(): Promise<ShopDesign[]> {
+  const data = await storeFetch<{ designs: ShopDesign[] }>("/store/shop-catalog")
+  return data?.designs ?? []
+}
+
 export type CaseTypeRecord = {
   slug: string
   name: string

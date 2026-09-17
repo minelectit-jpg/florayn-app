@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 
 import ProductCard from "@/components/product-card"
@@ -19,32 +20,48 @@ function minPrice(p: StoreProduct): number {
   return priceRange(p.variants ?? [])?.min ?? Number.POSITIVE_INFINITY
 }
 
+/** The page numbers to show, with gaps collapsed to a single ellipsis. */
+function pageWindow(current: number, total: number): (number | "…")[] {
+  if (total <= 7)
+    return Array.from({ length: total }, (_, i) => i + 1)
+  const out: (number | "…")[] = [1]
+  const from = Math.max(2, current - 1)
+  const to = Math.min(total - 1, current + 1)
+  if (from > 2) out.push("…")
+  for (let i = from; i <= to; i++) out.push(i)
+  if (to < total - 1) out.push("…")
+  out.push(total)
+  return out
+}
+
 export default function ShopGrid({
   products,
   device,
   deviceSlug,
   caseType,
   caseTypeSlug,
+  totalCount,
+  currentPage = 1,
+  totalPages = 1,
 }: {
   products: StoreProduct[]
   device?: string | null
   deviceSlug?: string | null
   caseType?: string | null
   caseTypeSlug?: string | null
+  /** Total designs across all pages, for the "N designs" count. */
+  totalCount?: number
+  currentPage?: number
+  totalPages?: number
 }) {
   const [sort, setSort] = useState<SortKey>("featured")
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
 
+  // Sort acts on the current page; "Featured" keeps the catalogue order.
   const sorted = useMemo(() => {
     const list = [...products]
     switch (sort) {
-      case "newest":
-        return list.sort(
-          (a, b) =>
-            new Date(b.created_at ?? 0).getTime() -
-            new Date(a.created_at ?? 0).getTime()
-        )
       case "price-asc":
         return list.sort((a, b) => minPrice(a) - minPrice(b))
       case "price-desc":
@@ -55,12 +72,20 @@ export default function ShopGrid({
   }, [products, sort])
 
   const activeLabel = SORTS.find((s) => s.key === sort)?.label ?? "Featured"
+  const count = totalCount ?? products.length
+
+  const base = !deviceSlug
+    ? "/shop/"
+    : caseTypeSlug
+      ? `/shop/${deviceSlug}/${caseTypeSlug}/`
+      : `/shop/${deviceSlug}/`
+  const hrefFor = (p: number) => (p > 1 ? `${base}${p}/` : base)
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-ink-muted">
-          {products.length} {products.length === 1 ? "design" : "designs"}
+          {count} {count === 1 ? "design" : "designs"}
         </p>
 
         <div
@@ -136,12 +161,68 @@ export default function ShopGrid({
             deviceSlug={deviceSlug ?? null}
             caseType={caseType ?? null}
             caseTypeSlug={caseTypeSlug ?? null}
-            // The first two rows are above the fold; load their images eagerly
-            // so the grid fills in at once instead of after a lazy-load delay.
+            // The first two rows are above the fold; load their images eagerly.
             priority={i < 6}
           />
         ))}
       </div>
+
+      {totalPages > 1 ? (
+        <nav
+          aria-label="Pagination"
+          className="flex items-center justify-center gap-2 pt-4"
+        >
+          {currentPage > 1 ? (
+            <Link
+              href={hrefFor(currentPage - 1)}
+              aria-label="Previous page"
+              className="grid size-10 place-items-center rounded-full border border-line text-ink transition-colors hover:border-ink"
+              scroll
+            >
+              &#8249;
+            </Link>
+          ) : null}
+
+          {pageWindow(currentPage, totalPages).map((p, i) =>
+            p === "…" ? (
+              <span
+                key={`gap-${i}`}
+                className="grid size-10 place-items-center text-ink-faint"
+              >
+                &hellip;
+              </span>
+            ) : p === currentPage ? (
+              <span
+                key={p}
+                aria-current="page"
+                className="grid size-10 place-items-center rounded-full bg-ink text-sm font-semibold text-white"
+              >
+                {p}
+              </span>
+            ) : (
+              <Link
+                key={p}
+                href={hrefFor(p)}
+                className="grid size-10 place-items-center rounded-full border border-line text-sm text-ink transition-colors hover:border-ink"
+                scroll
+              >
+                {p}
+              </Link>
+            )
+          )}
+
+          {currentPage < totalPages ? (
+            <Link
+              href={hrefFor(currentPage + 1)}
+              aria-label="Next page"
+              className="grid size-10 place-items-center rounded-full border border-line text-ink transition-colors hover:border-ink"
+              scroll
+            >
+              &#8250;
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
     </div>
   )
 }
