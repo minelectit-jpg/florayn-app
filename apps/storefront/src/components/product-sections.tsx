@@ -1,5 +1,6 @@
 import Link from "next/link"
 
+import DragScroll from "@/components/drag-scroll"
 import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
 
@@ -36,7 +37,7 @@ export function MoreDesigns({
   return (
     <section className="mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
-      <ul className="flex gap-[12px] overflow-x-auto pb-2">
+      <DragScroll className="flex gap-[12px] overflow-x-auto pb-2">
         {items.map((item) => {
           const src =
             (device && caseType
@@ -63,7 +64,7 @@ export function MoreDesigns({
             </li>
           )
         })}
-      </ul>
+      </DragScroll>
     </section>
   )
 }
