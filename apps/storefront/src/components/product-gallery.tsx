@@ -74,11 +74,6 @@ export default function ProductGallery({
                       sizes="60px"
                     />
                   )}
-                  {item.video ? (
-                    <span className="absolute inset-0 grid place-items-center bg-ink/35 text-[10px] text-white">
-                      ▶
-                    </span>
-                  ) : null}
                 </button>
               </li>
             )

@@ -353,11 +353,16 @@ const GalleryVideosPage = () => {
             <Button
               variant="primary"
               isLoading={busy}
-              disabled={!designSlug || !caseType || !videoUrl.trim()}
+              disabled={busy}
               onClick={addVideo}
             >
               Save video
             </Button>
+            {!designSlug || !caseType || !videoUrl.trim() ? (
+              <Text size="xsmall" className="text-ui-fg-muted">
+                Pick a design, choose its case type and add a video, then Save.
+              </Text>
+            ) : null}
           </div>
         </div>
       </div>
