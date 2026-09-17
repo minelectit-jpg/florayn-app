@@ -24,7 +24,14 @@ type GalleryVideo = {
   poster_url: string | null
 }
 
-type Design = { slug: string; name: string; live?: boolean }
+type Design = {
+  slug: string
+  name: string
+  live?: boolean
+  /** Case-type slugs this design is offered in. */
+  caseTypes?: string[]
+}
+type CaseTypeRec = { slug: string; name: string }
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -40,7 +47,7 @@ async function api(path: string, init?: RequestInit) {
 const GalleryVideosPage = () => {
   const [videos, setVideos] = useState<GalleryVideo[]>([])
   const [designs, setDesigns] = useState<Design[]>([])
-  const [caseTypes, setCaseTypes] = useState<string[]>([])
+  const [caseTypeRecs, setCaseTypeRecs] = useState<CaseTypeRec[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [scanning, setScanning] = useState(false)
@@ -73,7 +80,12 @@ const GalleryVideosPage = () => {
         .catch(() => undefined),
       api("/admin/case-types")
         .then((d) =>
-          setCaseTypes((d.case_types ?? []).map((c: any) => c.name).filter(Boolean))
+          setCaseTypeRecs(
+            (d.case_types ?? []).map((c: any) => ({
+              slug: c.slug,
+              name: c.name,
+            }))
+          )
         )
         .catch(() => undefined),
     ]).finally(() => setLoading(false))
@@ -81,6 +93,17 @@ const GalleryVideosPage = () => {
 
   const designName = (slug: string) =>
     designs.find((d) => d.slug === slug)?.name ?? slug
+
+  // Only the case types the selected design is actually offered in.
+  const availableCaseTypes = useMemo(() => {
+    const design = designs.find((d) => d.slug === designSlug)
+    const allNames = caseTypeRecs.map((c) => c.name)
+    if (!design?.caseTypes?.length) return allNames
+    const nameBySlug = new Map(caseTypeRecs.map((c) => [c.slug, c.name]))
+    return design.caseTypes
+      .map((s) => nameBySlug.get(s))
+      .filter((n): n is string => Boolean(n))
+  }, [designs, designSlug, caseTypeRecs])
 
   const liveCount = useMemo(
     () => designs.filter((d) => d.live).length,
@@ -209,7 +232,10 @@ const GalleryVideosPage = () => {
                 <button
                   key={d.slug}
                   type="button"
-                  onClick={() => setDesignSlug(d.slug)}
+                  onClick={() => {
+                    setDesignSlug(d.slug)
+                    setCaseType("")
+                  }}
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                     designSlug === d.slug
                       ? "bg-ui-bg-base-pressed font-medium"
@@ -240,12 +266,20 @@ const GalleryVideosPage = () => {
               <Label size="xsmall" weight="plus">
                 2. Case type
               </Label>
-              <Select value={caseType} onValueChange={setCaseType}>
+              <Select
+                value={caseType}
+                onValueChange={setCaseType}
+                disabled={!designSlug}
+              >
                 <Select.Trigger>
-                  <Select.Value placeholder="Choose a case type" />
+                  <Select.Value
+                    placeholder={
+                      designSlug ? "Choose a case type" : "Pick a design first"
+                    }
+                  />
                 </Select.Trigger>
                 <Select.Content>
-                  {caseTypes.map((n) => (
+                  {availableCaseTypes.map((n) => (
                     <Select.Item key={n} value={n}>
                       {n}
                     </Select.Item>
