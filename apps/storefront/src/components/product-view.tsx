@@ -9,7 +9,7 @@ import ProductBuyBox from "@/components/product-buy-box"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
-import type { FeatureBlock } from "@/lib/content"
+import type { FeatureBlock, GalleryVideoMap } from "@/lib/content"
 import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
@@ -46,6 +46,7 @@ export default function ProductView({
   belowGallery,
   featureBlocks,
   productForm,
+  galleryVideos,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -88,6 +89,8 @@ export default function ProductView({
   featureBlocks?: FeatureBlock[]
   /** The product's form ("phone", "airpods"…); keys the Features band. */
   productForm?: string | null
+  /** Design gallery videos, keyed by case type; shown first when one matches. */
+  galleryVideos?: GalleryVideoMap
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -115,12 +118,27 @@ export default function ProductView({
   const items: GalleryItem[] = useMemo(() => {
     const imgs = (selected?.metadata?.images as string[] | undefined) ?? []
     const urls = imgs.length ? imgs : fallbackImages
-    return urls.map((url, i) => ({
+    const imageItems = urls.map((url, i) => ({
       id: `${selected?.id ?? "default"}-${i}`,
       url,
       video: null,
     }))
-  }, [selected?.id, selected?.metadata, fallbackImages])
+    // A design's gallery video is keyed by case type (device-agnostic). When
+    // one exists for the live case type it leads the rail, with the current
+    // render as its poster.
+    const gv = galleryVideos?.[caseType]
+    if (gv?.video_url) {
+      return [
+        {
+          id: `gv-${caseType}`,
+          url: gv.poster_url ?? imageItems[0]?.url ?? gv.video_url,
+          video: gv.video_url,
+        },
+        ...imageItems,
+      ]
+    }
+    return imageItems
+  }, [selected?.id, selected?.metadata, fallbackImages, galleryVideos, caseType])
 
   // The picture / price a case-type tile shows: that case type at the current
   // device when it fits, otherwise at the case type's own first device.

@@ -165,6 +165,16 @@ export async function getFeaturedPicks(service: any) {
   return picks ?? []
 }
 
+/**
+ * Gallery videos, optionally for one design. Keyed by design + case type and
+ * shared across devices.
+ */
+export async function getGalleryVideos(service: any, designSlug?: string) {
+  const where = designSlug ? { design_slug: designSlug } : {}
+  const videos = await service.listGalleryVideos(where)
+  return videos ?? []
+}
+
 /** SEO templates and their overrides, seeded on first read. */
 export async function getSeoConfig(service: any) {
   let [settings] = await service.listSeoSettings({}, { take: 1 })

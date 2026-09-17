@@ -3,6 +3,7 @@ import { MedusaService } from "@medusajs/framework/utils"
 import CollectionPage from "./models/collection-page"
 import FeatureBlock from "./models/feature-block"
 import FeaturedPick from "./models/featured-pick"
+import GalleryVideo from "./models/gallery-video"
 import HomeSection from "./models/home-section"
 import MenuItem from "./models/menu-item"
 import MenuSection from "./models/menu-section"
@@ -18,6 +19,7 @@ class ContentModuleService extends MedusaService({
   SeoOverride,
   FeatureBlock,
   FeaturedPick,
+  GalleryVideo,
 }) {}
 
 export default ContentModuleService

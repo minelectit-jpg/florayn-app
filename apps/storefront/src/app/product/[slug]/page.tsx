@@ -20,7 +20,7 @@ import {
   getDeviceCatalog,
   getDeviceFamilyMap,
 } from "@/lib/catalog"
-import { getProductSections } from "@/lib/content"
+import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
 import { listProducts, type StoreProduct } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
@@ -205,6 +205,9 @@ export default async function ProductPage({ params, searchParams }: Params) {
   const { products: pool } = collectionId
     ? await listProducts({ collection_id: [collectionId], limit: 100 })
     : { products: [] as StoreProduct[] }
+
+  // Gallery videos for this design, keyed by case-type name (device-agnostic).
+  const galleryVideos = await getGalleryVideos(designSlug ?? "")
 
   // MORE DESIGNS: other designs' phone cases in the same collection. Each one
   // carries renders keyed by "device|caseType" (and by device alone) so the
@@ -475,6 +478,7 @@ export default async function ProductPage({ params, searchParams }: Params) {
         belowGallery={<RecommendedForYou items={recommendedItems} />}
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
+        galleryVideos={galleryVideos}
       />
     </article>
   )

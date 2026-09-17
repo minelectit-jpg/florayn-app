@@ -140,6 +140,37 @@ export async function getProductSections(): Promise<ProductSections> {
   }
 }
 
+export type GalleryVideoMap = Record<
+  string,
+  { video_url: string; poster_url: string | null }
+>
+
+/**
+ * The gallery videos for one design, keyed by case-type name. The product page
+ * shows the entry for the live case type. Empty on any error.
+ */
+export async function getGalleryVideos(
+  designSlug: string
+): Promise<GalleryVideoMap> {
+  if (!designSlug) return {}
+  try {
+    const res = await fetch(
+      `${BACKEND}/store/content/gallery-videos?design=${encodeURIComponent(
+        designSlug
+      )}`,
+      {
+        headers: { "x-publishable-api-key": KEY },
+        next: { revalidate: 60 },
+      }
+    )
+    if (!res.ok) return {}
+    const json = (await res.json()) as { videos?: GalleryVideoMap }
+    return json.videos ?? {}
+  } catch {
+    return {}
+  }
+}
+
 export type CollectionPage = {
   collection_slug: string
   hero_image_url: string | null

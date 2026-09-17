@@ -82,6 +82,9 @@ export default function ProductGallery({
             src={active.video}
             poster={active.url}
             controls
+            autoPlay
+            muted
+            loop
             playsInline
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
