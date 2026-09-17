@@ -64,6 +64,8 @@ const FeaturesPage = () => {
   const [saving, setSaving] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [caseTypes, setCaseTypes] = useState<string[]>([])
+  // The case type currently being edited. "" is the Default (all case types) set.
+  const [selectedTab, setSelectedTab] = useState<string>("")
   const [picker, setPicker] = useState<{
     id: string
     field: "image_url" | "video_url"
@@ -117,7 +119,10 @@ const FeaturesPage = () => {
   async function addBlock() {
     setAdding(true)
     try {
-      const res = await api("/admin/content/feature-blocks", { method: "POST" })
+      const res = await api("/admin/content/feature-blocks", {
+        method: "POST",
+        body: JSON.stringify({ case_type: selectedTab }),
+      })
       apply(res.blocks ?? [])
       toast.success("Block added.")
     } catch (e: any) {
@@ -172,14 +177,19 @@ const FeaturesPage = () => {
     }
   }
 
-  async function move(index: number, delta: number) {
-    const next = index + delta
-    if (next < 0 || next >= rows.length) return
-    const order = rows.map((b) => b.id)
-    ;[order[index], order[next]] = [order[next], order[index]]
+  // Reorder within the current case-type group only. The two blocks swap, and
+  // the full id order (other groups untouched) is sent to the server.
+  async function move(visibleIndex: number, delta: number) {
+    const visible = rows.filter((b) => (b.case_type ?? "") === selectedTab)
+    const next = visibleIndex + delta
+    if (next < 0 || next >= visible.length) return
+    const visIds = visible.map((b) => b.id)
+    ;[visIds[visibleIndex], visIds[next]] = [visIds[next], visIds[visibleIndex]]
+    const visSet = new Set(visible.map((b) => b.id))
+    let vi = 0
+    const order = rows.map((b) => (visSet.has(b.id) ? visIds[vi++] : b.id))
     // Optimistic: reflect the new order immediately.
-    const reordered = order.map((id) => rows.find((b) => b.id === id)!)
-    setRows(reordered)
+    setRows(order.map((id) => rows.find((b) => b.id === id)!))
     try {
       const res = await api("/admin/content/feature-blocks/reorder", {
         method: "POST",
@@ -192,35 +202,66 @@ const FeaturesPage = () => {
     }
   }
 
+  const visibleRows = rows.filter((r) => (r.case_type ?? "") === selectedTab)
+
   return (
     <Container className="divide-y p-0">
-      <div className="flex items-start justify-between px-6 py-4">
-        <div>
-          <Heading level="h1">Product features</Heading>
-          <Text size="small" className="text-ui-fg-subtle">
-            The blocks in the &ldquo;Features&rdquo; band on the product page.
-            Tag a block with a <b>case type</b> and it shows only when that
-            construction is selected (Signature has its own set, Armor another);
-            leave it on <b>All case types</b> to show as the default. Give a block
-            a <b>video URL</b> to autoplay on loop with no controls, or an{" "}
-            <b>image URL</b> for a still. Reorder with the arrows; hide with the
-            switch.
-          </Text>
-        </div>
-        <Button variant="secondary" isLoading={adding} onClick={addBlock}>
-          Add block
-        </Button>
+      <div className="px-6 py-4">
+        <Heading level="h1">Product features</Heading>
+        <Text size="small" className="text-ui-fg-subtle">
+          The blocks in the &ldquo;Features&rdquo; band on the product page. Pick
+          a <b>case type</b> below to edit that construction&rsquo;s own set
+          (Signature has its own, Armor another). <b>Default</b> blocks show for
+          any case type that has none of its own. Give a block a <b>video URL</b>{" "}
+          to autoplay on loop with no controls, or an <b>image URL</b> for a
+          still. Reorder with the arrows; hide with the switch.
+        </Text>
+      </div>
+
+      {/* Case-type tabs — each is its own content set. */}
+      <div className="flex flex-wrap items-center gap-2 px-6 py-3">
+        {[{ label: "Default (all)", value: "" }, ...caseTypes.map((n) => ({ label: n, value: n }))].map(
+          (tab) => {
+            const count = rows.filter(
+              (r) => (r.case_type ?? "") === tab.value
+            ).length
+            const active = selectedTab === tab.value
+            return (
+              <Button
+                key={tab.value || "__default__"}
+                size="small"
+                variant={active ? "primary" : "secondary"}
+                onClick={() => setSelectedTab(tab.value)}
+              >
+                {tab.label}
+                {count ? ` (${count})` : ""}
+              </Button>
+            )
+          }
+        )}
       </div>
 
       <div className="flex flex-col gap-4 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <Text size="small" weight="plus">
+            {selectedTab
+              ? `“${selectedTab}” blocks`
+              : "Default blocks (shown for any case type without its own)"}
+          </Text>
+          <Button variant="secondary" isLoading={adding} onClick={addBlock}>
+            Add block{selectedTab ? ` to ${selectedTab}` : ""}
+          </Button>
+        </div>
+
         {loading ? (
           <Text size="small">Loading&hellip;</Text>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <Text size="small" className="text-ui-fg-muted">
-            No blocks yet. Add one to start the Features band.
+            No blocks for {selectedTab ? `“${selectedTab}”` : "the default set"}{" "}
+            yet. Click &ldquo;Add block&rdquo; to start.
           </Text>
         ) : (
-          rows.map((row, index) => {
+          visibleRows.map((row, index) => {
             const d = draft[row.id] ?? toDraft(row)
             const preview = d.video_url || d.image_url
             return (
@@ -244,7 +285,7 @@ const FeaturesPage = () => {
                   <IconButton
                     size="small"
                     variant="transparent"
-                    disabled={index === rows.length - 1}
+                    disabled={index === visibleRows.length - 1}
                     onClick={() => move(index, 1)}
                     aria-label="Move down"
                   >
