@@ -6,6 +6,7 @@ import {
   Heading,
   IconButton,
   Input,
+  Prompt,
   Switch,
   Text,
   Textarea,
@@ -81,6 +82,8 @@ const FeaturesPage = () => {
   const [customTypes, setCustomTypes] = useState<string[]>([])
   // Non-null while the inline "add type" input is open (its current text).
   const [newType, setNewType] = useState<string | null>(null)
+  // The block awaiting delete confirmation, or null.
+  const [confirmRemove, setConfirmRemove] = useState<Block | null>(null)
   const [picker, setPicker] = useState<{
     id: string
     field: "image_url" | "video_url"
@@ -176,8 +179,7 @@ const FeaturesPage = () => {
     }
   }
 
-  async function remove(row: Block) {
-    if (!confirm("Remove this feature block?")) return
+  async function doRemove(row: Block) {
     setSaving(row.id)
     try {
       const res = await api(`/admin/content/feature-blocks/${row.id}`, {
@@ -189,6 +191,7 @@ const FeaturesPage = () => {
       toast.error(e.message)
     } finally {
       setSaving(null)
+      setConfirmRemove(null)
     }
   }
 
@@ -480,7 +483,7 @@ const FeaturesPage = () => {
                         size="small"
                         variant="danger"
                         disabled={saving === row.id}
-                        onClick={() => remove(row)}
+                        onClick={() => setConfirmRemove(row)}
                       >
                         Remove
                       </Button>
@@ -501,6 +504,33 @@ const FeaturesPage = () => {
           })
         )}
       </div>
+
+      <Prompt
+        open={!!confirmRemove}
+        onOpenChange={(o) => {
+          if (!o) setConfirmRemove(null)
+        }}
+      >
+        <Prompt.Content>
+          <Prompt.Header>
+            <Prompt.Title>Remove this block?</Prompt.Title>
+            <Prompt.Description>
+              {confirmRemove?.title
+                ? `“${confirmRemove.title}” will be removed from the Features band.`
+                : "This block will be removed from the Features band."}{" "}
+              This can&rsquo;t be undone.
+            </Prompt.Description>
+          </Prompt.Header>
+          <Prompt.Footer>
+            <Prompt.Cancel>Cancel</Prompt.Cancel>
+            <Prompt.Action
+              onClick={() => confirmRemove && doRemove(confirmRemove)}
+            >
+              Remove
+            </Prompt.Action>
+          </Prompt.Footer>
+        </Prompt.Content>
+      </Prompt>
 
       <MediaPicker
         open={!!picker}
