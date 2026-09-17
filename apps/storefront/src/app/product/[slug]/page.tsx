@@ -270,8 +270,11 @@ export default async function ProductPage({ params }: Params) {
         thumbnail: p.thumbnail,
         label: (p.metadata?.design_name as string) ?? p.title,
         price: minPrice(p),
-        // imageByPair (device x case type) is dropped from the payload; the
-        // strip follows imageByDevice, which is ~4x less data in the HTML.
+        // imageByPair keeps the strip on the customer's exact choice - the same
+        // case type on the same device - so it never falls back to another
+        // finish (e.g. showing Armor tiles while Signature is selected).
+        // imageByDevice is the fallback when a design lacks that precise pair.
+        imageByPair: renders.pair,
         imageByDevice: renders.device,
       }
     })
