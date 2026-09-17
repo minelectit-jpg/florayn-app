@@ -9,7 +9,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const body = (req.body ?? {}) as Record<string, unknown>
   const patch: Record<string, unknown> = { id: req.params.id }
 
-  for (const key of ["title", "description", "image_url", "video_url"]) {
+  for (const key of ["case_type", "title", "description", "image_url", "video_url"]) {
     if (typeof body[key] === "string") {
       patch[key] = (body[key] as string).trim() || null
     }

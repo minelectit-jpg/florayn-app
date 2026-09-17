@@ -20,6 +20,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       .filter((b: any) => b.is_visible)
       .map((b: any) => ({
         id: b.id,
+        case_type: b.case_type ?? null,
         title: b.title,
         description: b.description,
         image_url: b.image_url,

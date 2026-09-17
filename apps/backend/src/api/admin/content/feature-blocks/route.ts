@@ -27,6 +27,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     typeof v === "string" && v.trim() ? v.trim() : null
 
   await service.createFeatureBlocks({
+    case_type: str(body.case_type),
     title: str(body.title),
     description: str(body.description),
     image_url: str(body.image_url),

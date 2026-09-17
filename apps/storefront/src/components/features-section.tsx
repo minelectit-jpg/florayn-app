@@ -1,68 +1,81 @@
-import ProductImage from "@/components/product-image"
+"use client"
+
 import type { FeatureBlock } from "@/lib/content"
 
 /**
- * The admin-managed "Features" band under the gallery. Each block is a looping,
- * controls-free video (when it has a video URL) or a still image, with an
- * optional heading and body. Blocks stack vertically — media on top, copy
- * below — so the band reads cleanly in the gallery column rather than spanning
- * the full page.
+ * The admin-managed "Features" band under the gallery. Each block is a centered
+ * heading and body over a looping, controls-free video (when it has a video
+ * URL) or a still image. The media keeps its own aspect ratio — a 16:9 clip
+ * stays 16:9 — rather than being cropped to a fixed box.
+ *
+ * Blocks are tagged with a case type. The band shows the blocks for the live
+ * case type; a construction with none of its own falls back to the untagged
+ * (default) blocks, so it follows the buy box like the gallery does.
  */
 export default function FeaturesSection({
   blocks,
+  caseType,
 }: {
   blocks: FeatureBlock[]
+  /** The currently selected case type, e.g. "Signature". */
+  caseType?: string
 }) {
-  if (!blocks.length) return null
+  const forType = caseType
+    ? blocks.filter((b) => b.case_type === caseType)
+    : []
+  const shown = forType.length
+    ? forType
+    : blocks.filter((b) => !b.case_type)
+
+  if (!shown.length) return null
 
   return (
     <section className="mt-12">
-      <h2 className="text-[1.125rem] font-semibold tracking-[-0.034em]">
-        Features
-      </h2>
+      <div className="flex items-center gap-4">
+        <span className="h-px flex-1 bg-line" />
+        <h2 className="text-center text-[1.05rem] font-semibold uppercase tracking-[0.04em]">
+          Features
+        </h2>
+        <span className="h-px flex-1 bg-line" />
+      </div>
 
-      <ul className="mt-4 flex flex-col gap-8">
-        {blocks.map((block) => (
+      <ul className="mt-6 flex flex-col gap-8">
+        {shown.map((block) => (
           <li key={block.id}>
-            <div className="overflow-hidden rounded-[14px] bg-surface">
-              {block.video_url ? (
-                <video
-                  src={block.video_url}
-                  poster={block.image_url ?? undefined}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  // No `controls`: the video plays itself, silently.
-                  className="aspect-[4/3] w-full object-cover"
-                />
-              ) : (
-                <div className="relative aspect-[4/3] w-full">
-                  <ProductImage
-                    src={block.image_url}
-                    alt={block.title ?? ""}
-                    label={block.title ?? "Feature"}
-                    sizes="(max-width: 1023px) 100vw, 600px"
-                    fillMode="absolute"
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                </div>
-              )}
-            </div>
-
             {block.title || block.description ? (
-              <div className="mt-3">
+              <div className="mb-4 text-center">
                 {block.title ? (
-                  <h3 className="text-[1.05rem] font-semibold leading-tight tracking-[-0.01em]">
+                  <h3 className="text-[1.35rem] font-semibold leading-tight tracking-[-0.02em]">
                     {block.title}
                   </h3>
                 ) : null}
                 {block.description ? (
-                  <p className="mt-1.5 text-[14px] leading-relaxed text-ink-muted">
+                  <p className="mx-auto mt-2 max-w-[46ch] text-[14px] leading-relaxed text-ink-muted">
                     {block.description}
                   </p>
                 ) : null}
               </div>
+            ) : null}
+
+            {block.video_url ? (
+              <video
+                src={block.video_url}
+                poster={block.image_url ?? undefined}
+                autoPlay
+                muted
+                loop
+                playsInline
+                // No `controls`: the video plays itself, silently. No fixed
+                // aspect box or object-cover, so the clip keeps its own ratio
+                // (a 16:9 video stays 16:9) instead of being cropped.
+                className="block w-full rounded-[14px] bg-surface"
+              />
+            ) : block.image_url ? (
+              <img
+                src={block.image_url}
+                alt={block.title ?? ""}
+                className="block w-full rounded-[14px] bg-surface"
+              />
             ) : null}
           </li>
         ))}

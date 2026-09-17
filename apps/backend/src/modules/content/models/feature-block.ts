@@ -11,6 +11,12 @@ import { model } from "@medusajs/framework/utils"
  */
 const FeatureBlock = model.define("feature_block", {
   id: model.id({ prefix: "featblk" }).primaryKey(),
+  /**
+   * The case type (construction) this block belongs to, e.g. "Signature" or
+   * "Armor Black" — the same value the storefront's case-type selector uses.
+   * Null means it shows for any case type that has no blocks of its own.
+   */
+  case_type: model.text().nullable(),
   title: model.text().nullable(),
   description: model.text().nullable(),
   /** Still image; used when there is no video, and as the video's poster. */

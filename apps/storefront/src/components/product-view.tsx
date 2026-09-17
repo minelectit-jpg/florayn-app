@@ -4,10 +4,12 @@ import { useMemo, useState, type ReactNode } from "react"
 
 import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
+import FeaturesSection from "@/components/features-section"
 import ProductBuyBox from "@/components/product-buy-box"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
+import type { FeatureBlock } from "@/lib/content"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
@@ -41,6 +43,7 @@ export default function ProductView({
   tabs,
   pairs,
   belowGallery,
+  featureBlocks,
 }: {
   matrix: VariantMatrix
   variants: StoreVariant[]
@@ -79,6 +82,8 @@ export default function ProductView({
    * the buy box, in normal reading order.
    */
   belowGallery?: ReactNode
+  /** Feature blocks (all case types); the band picks the live case type's set. */
+  featureBlocks?: FeatureBlock[]
 }) {
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
@@ -201,8 +206,14 @@ export default function ProductView({
         {pairs}
       </div>
 
-      {belowGallery ? (
-        <div className="lg:col-start-1 lg:row-start-2">{belowGallery}</div>
+      {belowGallery || featureBlocks?.length ? (
+        <div className="lg:col-start-1 lg:row-start-2">
+          {belowGallery}
+          <FeaturesSection
+            blocks={featureBlocks ?? []}
+            caseType={caseType}
+          />
+        </div>
       ) : null}
     </div>
   )

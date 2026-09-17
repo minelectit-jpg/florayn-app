@@ -6,6 +6,7 @@ import {
   Heading,
   IconButton,
   Input,
+  Select,
   Switch,
   Text,
   Textarea,
@@ -17,6 +18,7 @@ import MediaPicker from "../../components/media-picker"
 
 type Block = {
   id: string
+  case_type: string | null
   title: string | null
   description: string | null
   image_url: string | null
@@ -26,11 +28,15 @@ type Block = {
 }
 
 type Draft = {
+  case_type: string
   title: string
   description: string
   image_url: string
   video_url: string
 }
+
+/** The sentinel a Select uses for "no case type" (a Select can't hold ""). */
+const ALL = "__all__"
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -44,6 +50,7 @@ async function api(path: string, init?: RequestInit) {
 }
 
 const toDraft = (b: Block): Draft => ({
+  case_type: b.case_type ?? "",
   title: b.title ?? "",
   description: b.description ?? "",
   image_url: b.image_url ?? "",
@@ -56,10 +63,25 @@ const FeaturesPage = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [caseTypes, setCaseTypes] = useState<string[]>([])
   const [picker, setPicker] = useState<{
     id: string
     field: "image_url" | "video_url"
   } | null>(null)
+
+  // The case-type names, used to tag each block. These are the same values the
+  // storefront's case-type selector uses, so a tagged block shows only for that
+  // construction.
+  useEffect(() => {
+    api("/admin/case-types")
+      .then((d) => {
+        const names = (d.case_types ?? [])
+          .map((c: any) => c.name)
+          .filter(Boolean)
+        setCaseTypes(names)
+      })
+      .catch(() => undefined)
+  }, [])
 
   function apply(list: Block[]) {
     setRows(list)
@@ -84,6 +106,7 @@ const FeaturesPage = () => {
     const d = draft[row.id]
     if (!d) return false
     return (
+      d.case_type !== (row.case_type ?? "") ||
       d.title !== (row.title ?? "") ||
       d.description !== (row.description ?? "") ||
       d.image_url !== (row.image_url ?? "") ||
@@ -175,11 +198,13 @@ const FeaturesPage = () => {
         <div>
           <Heading level="h1">Product features</Heading>
           <Text size="small" className="text-ui-fg-subtle">
-            The blocks in the &ldquo;Features&rdquo; band on every product page,
-            below the recommendations. Give a block a <b>video URL</b> to have it
-            autoplay on loop with no controls, or an <b>image URL</b> for a still.
-            Title and description are optional. Reorder with the arrows; hide a
-            block with its switch.
+            The blocks in the &ldquo;Features&rdquo; band on the product page.
+            Tag a block with a <b>case type</b> and it shows only when that
+            construction is selected (Signature has its own set, Armor another);
+            leave it on <b>All case types</b> to show as the default. Give a block
+            a <b>video URL</b> to autoplay on loop with no controls, or an{" "}
+            <b>image URL</b> for a still. Reorder with the arrows; hide with the
+            switch.
           </Text>
         </div>
         <Button variant="secondary" isLoading={adding} onClick={addBlock}>
@@ -255,6 +280,37 @@ const FeaturesPage = () => {
                 </div>
 
                 <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Text size="xsmall" className="shrink-0 text-ui-fg-muted">
+                      Case type
+                    </Text>
+                    <Select
+                      value={d.case_type || ALL}
+                      onValueChange={(v) =>
+                        edit(row.id, "case_type", v === ALL ? "" : v)
+                      }
+                    >
+                      <Select.Trigger className="w-56">
+                        <Select.Value placeholder="All case types" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value={ALL}>
+                          All case types (default)
+                        </Select.Item>
+                        {caseTypes.map((name) => (
+                          <Select.Item key={name} value={name}>
+                            {name}
+                          </Select.Item>
+                        ))}
+                        {d.case_type &&
+                        !caseTypes.includes(d.case_type) ? (
+                          <Select.Item value={d.case_type}>
+                            {d.case_type}
+                          </Select.Item>
+                        ) : null}
+                      </Select.Content>
+                    </Select>
+                  </div>
                   <Input
                     placeholder="Title (optional)"
                     value={d.title}

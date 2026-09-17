@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import FeaturesSection from "@/components/features-section"
 import ProductView from "@/components/product-view"
 import RecommendedForYou, {
   type RecommendedItem,
@@ -472,12 +471,8 @@ export default async function ProductPage({ params, searchParams }: Params) {
           />
         }
         pairs={<PairsWellWith items={pairsItems} />}
-        belowGallery={
-          <>
-            <RecommendedForYou items={recommendedItems} />
-            <FeaturesSection blocks={featureBlocks} />
-          </>
-        }
+        belowGallery={<RecommendedForYou items={recommendedItems} />}
+        featureBlocks={featureBlocks}
       />
     </article>
   )

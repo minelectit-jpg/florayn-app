@@ -103,6 +103,8 @@ export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
 
 export type FeatureBlock = {
   id: string
+  /** The case type this block is for; null shows for any (default). */
+  case_type: string | null
   title: string | null
   description: string | null
   image_url: string | null
