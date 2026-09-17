@@ -6,7 +6,6 @@ import {
   Heading,
   IconButton,
   Input,
-  Select,
   Switch,
   Text,
   Textarea,
@@ -34,9 +33,6 @@ type Draft = {
   image_url: string
   video_url: string
 }
-
-/** The sentinel a Select uses for "no case type" (a Select can't hold ""). */
-const ALL = "__all__"
 
 /**
  * Product-type groups for non-phone forms. These labels must match the
@@ -418,36 +414,6 @@ const FeaturesPage = () => {
                 </div>
 
                 <div className="flex flex-1 flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Text size="xsmall" className="shrink-0 text-ui-fg-muted">
-                      Group
-                    </Text>
-                    <Select
-                      value={d.case_type || ALL}
-                      onValueChange={(v) =>
-                        edit(row.id, "case_type", v === ALL ? "" : v)
-                      }
-                    >
-                      <Select.Trigger className="w-56">
-                        <Select.Value placeholder="All case types" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Item value={ALL}>
-                          All case types (default)
-                        </Select.Item>
-                        {allGroups.map((name) => (
-                          <Select.Item key={name} value={name}>
-                            {name}
-                          </Select.Item>
-                        ))}
-                        {d.case_type && !allGroups.includes(d.case_type) ? (
-                          <Select.Item value={d.case_type}>
-                            {d.case_type}
-                          </Select.Item>
-                        ) : null}
-                      </Select.Content>
-                    </Select>
-                  </div>
                   <Input
                     placeholder="Title (optional)"
                     value={d.title}
