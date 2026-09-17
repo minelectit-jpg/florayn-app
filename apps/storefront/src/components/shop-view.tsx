@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import ProductCard from "@/components/product-card"
+import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
 import { getCaseTypes, getDeviceCatalog } from "@/lib/catalog"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
@@ -151,18 +151,13 @@ export default async function ShopView({
           </p>
         </div>
       ) : filtered.length ? (
-        <div className="fl-grid">
-          {filtered.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              device={device?.name ?? null}
-              deviceSlug={device?.slug ?? null}
-              caseType={category?.name ?? null}
-              caseTypeSlug={category ? (caseTypeSlug ?? null) : null}
-            />
-          ))}
-        </div>
+        <ShopGrid
+          products={filtered}
+          device={device?.name ?? null}
+          deviceSlug={device?.slug ?? null}
+          caseType={category?.name ?? null}
+          caseTypeSlug={category ? (caseTypeSlug ?? null) : null}
+        />
       ) : (
         <div className="py-12">
           <p className="text-sm text-ink-muted">

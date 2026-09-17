@@ -38,7 +38,7 @@ export default function ProductGallery({
     <div className="flex flex-col gap-[10px] lg:flex-row">
       {items.length > 1 ? (
         <ul
-          className="order-2 flex shrink-0 gap-[10px] overflow-x-auto lg:order-1 lg:w-[50px] lg:flex-col lg:overflow-visible"
+          className="order-2 flex shrink-0 gap-[10px] overflow-x-auto lg:order-1 lg:w-[60px] lg:flex-col lg:overflow-visible"
           aria-label="Product images"
         >
           {items.map((item) => {
@@ -48,9 +48,10 @@ export default function ProductGallery({
                 <button
                   type="button"
                   onClick={() => setActiveId(item.id)}
+                  onMouseEnter={() => setActiveId(item.id)}
                   aria-current={isActive}
                   aria-label={item.video ? "Play video" : "Show image"}
-                  className={`relative block size-[50px] overflow-hidden rounded-[6px] border transition-colors ${
+                  className={`relative block size-[60px] overflow-hidden rounded-[8px] border transition-colors ${
                     isActive
                       ? "border-purple"
                       : "border-line hover:border-line-strong"
@@ -60,7 +61,7 @@ export default function ProductGallery({
                     src={item.url}
                     alt=""
                     label={label}
-                    sizes="50px"
+                    sizes="60px"
                   />
                   {item.video ? (
                     <span className="absolute inset-0 grid place-items-center bg-ink/35 text-[10px] text-white">

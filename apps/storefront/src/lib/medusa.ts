@@ -17,7 +17,7 @@ export const sdk = new Medusa({
  * product card and the product page must agree on what is loaded.
  */
 export const PRODUCT_FIELDS =
-  "id,title,handle,subtitle,description,thumbnail,metadata," +
+  "id,title,handle,subtitle,description,thumbnail,metadata,created_at," +
   "*images,*options,*options.values,*variants,*variants.options," +
   "*variants.metadata," +
   "*variants.calculated_price,*collection,*categories"
@@ -40,6 +40,7 @@ export type StoreProduct = {
   subtitle?: string | null
   description?: string | null
   thumbnail?: string | null
+  created_at?: string | null
   metadata?: Record<string, unknown> | null
   images?: { id: string; url: string }[]
   options?: { id: string; title: string; values?: { id: string; value: string }[] }[]

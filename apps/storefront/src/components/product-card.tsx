@@ -51,10 +51,12 @@ export default function ProductCard({
   const priced = scoped[0] ?? variants[0]
   const range = priceRange(scoped.length ? scoped : variants)
 
-  const deviceImage = device
-    ? ((priced?.metadata?.images as string[] | undefined) ?? [])[0]
-    : undefined
-  const image = deviceImage ?? product.thumbnail ?? product.images?.[0]?.url
+  const deviceImages = device
+    ? ((priced?.metadata?.images as string[] | undefined) ?? [])
+    : []
+  const image = deviceImages[0] ?? product.thumbnail ?? product.images?.[0]?.url
+  // The second render (back-view) shown on hover, if the design has one.
+  const hoverImage = deviceImages[1] ?? product.images?.[1]?.url
 
   // Meta line: "iPhone 17 Pro Max Case • Signature" when both are chosen; the
   // form label (e.g. "AirPods Case") when neither is.
@@ -82,7 +84,7 @@ export default function ProductCard({
         className="flex flex-1 flex-col"
         aria-label={`${designName}${meta ? `, ${meta}` : ""}`}
       >
-        <div className="fl-card__media">
+        <div className="fl-card__media group">
           {resolvedBadges.length ? (
             <div className="fl-card__badges">
               {resolvedBadges.map((badge) => (
@@ -101,9 +103,21 @@ export default function ProductCard({
             alt={product.title}
             label={designName}
             sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
-            className="fl-card__img"
+            className={`fl-card__img transition-opacity duration-300 ${
+              hoverImage ? "group-hover:opacity-0" : ""
+            }`}
             fillMode="absolute"
           />
+          {hoverImage ? (
+            <ProductImage
+              src={hoverImage}
+              alt=""
+              label={designName}
+              sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+              className="fl-card__img opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              fillMode="absolute"
+            />
+          ) : null}
         </div>
 
         <div className="fl-card__summary">
