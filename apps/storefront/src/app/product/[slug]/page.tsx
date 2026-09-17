@@ -43,24 +43,14 @@ export const dynamicParams = true
 export const revalidate = 600
 
 /*
- * Prerender the LIVE product base pages at build so ad traffic lands on an
- * already-cached page. The full catalogue (every design x device) is too large
- * to prerender on this single-process host, so device-specific and not-yet-live
- * pages are generated on first hit and then cached (dynamicParams).
+ * No build-time prerender. With the full catalogue live (~180 designs x devices),
+ * prerendering every product page at build meant hundreds of heavy renders and
+ * hammered the backend until the build failed. Product pages are generated on
+ * first hit and then cached (dynamicParams + revalidate); the on-demand render is
+ * kept light (see the sibling-designs fetch below), so the first visit is quick.
  */
 export async function generateStaticParams() {
-  try {
-    const { products } = await listProducts({
-      fields: "handle",
-      limit: 1000,
-    })
-    return (products ?? [])
-      .map((p) => p.handle)
-      .filter(Boolean)
-      .map((slug) => ({ slug }))
-  } catch {
-    return [] as { slug: string }[]
-  }
+  return [] as { slug: string }[]
 }
 
 /** Cheapest variant of a product, for a card's "From" price. */
