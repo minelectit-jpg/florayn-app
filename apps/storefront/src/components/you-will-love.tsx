@@ -70,42 +70,44 @@ export default function YouWillLove({
               className="w-[190px] shrink-0 snap-start sm:w-[210px]"
             >
               <article className="fl-card">
-                <Link
-                  href={`/product/${item.handle}/`}
-                  className="flex flex-1 flex-col"
-                  aria-label={item.name}
-                >
-                  <div className="fl-card__media">
-                    <ProductImage
-                      src={image}
-                      alt={item.name}
-                      label={item.name}
-                      sizes="(max-width: 767px) 60vw, 210px"
-                      className="fl-card__img"
-                      fillMode="absolute"
+                <div className="fl-card__media">
+                  <ProductImage
+                    src={image}
+                    alt={item.name}
+                    label={item.name}
+                    sizes="(max-width: 767px) 60vw, 210px"
+                    className="fl-card__img"
+                    fillMode="absolute"
+                  />
+                </div>
+
+                <div className="fl-card__summary">
+                  <div className="fl-card__titles">
+                    <h3 className="fl-card__title">{item.name}</h3>
+                    {meta ? <p className="fl-card__meta">{meta}</p> : null}
+                  </div>
+
+                  <div className="fl-card__price-row">
+                    <span className="fl-card__price">
+                      {price != null ? <Price amount={price} /> : "-"}
+                    </span>
+                    <QuickAdd
+                      variantId={variant?.id ?? null}
+                      productTitle={item.name}
+                      variantTitle={caseType ?? ""}
+                      unitPrice={price ?? 0}
+                      thumbnail={image ?? null}
                     />
                   </div>
+                </div>
 
-                  <div className="fl-card__summary">
-                    <div className="fl-card__titles">
-                      <h3 className="fl-card__title">{item.name}</h3>
-                      {meta ? <p className="fl-card__meta">{meta}</p> : null}
-                    </div>
-
-                    <div className="fl-card__price-row">
-                      <span className="fl-card__price">
-                        {price != null ? <Price amount={price} /> : "-"}
-                      </span>
-                      <QuickAdd
-                        variantId={variant?.id ?? null}
-                        productTitle={item.name}
-                        variantTitle={caseType ?? ""}
-                        unitPrice={price ?? 0}
-                        thumbnail={image ?? null}
-                      />
-                    </div>
-                  </div>
-                </Link>
+                {/* Stretched-link overlay: keeps the card clickable without
+                    nesting the QuickAdd button inside an <a>. */}
+                <Link
+                  href={`/product/${item.handle}/`}
+                  aria-label={item.name}
+                  className="absolute inset-0 z-[1]"
+                />
               </article>
             </li>
           )

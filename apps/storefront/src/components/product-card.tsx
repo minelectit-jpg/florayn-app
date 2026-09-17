@@ -78,78 +78,84 @@ export default function ProductCard({
     badges ?? (soldOut ? [{ label: "Sold out", tone: "soldout" }] : [])
 
   return (
-    <article className="fl-card">
-      <Link
-        href={href}
-        className="flex flex-1 flex-col"
-        aria-label={`${designName}${meta ? `, ${meta}` : ""}`}
-      >
-        <div className="fl-card__media group">
-          {resolvedBadges.length ? (
-            <div className="fl-card__badges">
-              {resolvedBadges.map((badge) => (
-                <span
-                  key={badge.label}
-                  className={`fl-badge fl-badge--${badge.tone}`}
-                >
-                  {badge.label}
-                </span>
-              ))}
-            </div>
-          ) : null}
+    // `group` is on the card (not the media) so the hover image swap fires when
+    // the pointer is over the stretched link overlay too. The link is a sibling
+    // of QuickAdd - not its ancestor - so the button is never nested in an <a>
+    // (invalid HTML that the browser rewrites, breaking hydration).
+    <article className="fl-card group">
+      <div className="fl-card__media">
+        {resolvedBadges.length ? (
+          <div className="fl-card__badges">
+            {resolvedBadges.map((badge) => (
+              <span
+                key={badge.label}
+                className={`fl-badge fl-badge--${badge.tone}`}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
 
+        <ProductImage
+          src={image}
+          alt={product.title}
+          label={designName}
+          sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+          className={`fl-card__img transition-opacity duration-300 ${
+            hoverImage ? "group-hover:opacity-0" : ""
+          }`}
+          fillMode="absolute"
+        />
+        {hoverImage ? (
           <ProductImage
-            src={image}
-            alt={product.title}
+            src={hoverImage}
+            alt=""
             label={designName}
             sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
-            className={`fl-card__img transition-opacity duration-300 ${
-              hoverImage ? "group-hover:opacity-0" : ""
-            }`}
+            className="fl-card__img opacity-0 transition-opacity duration-300 group-hover:opacity-100"
             fillMode="absolute"
           />
-          {hoverImage ? (
-            <ProductImage
-              src={hoverImage}
-              alt=""
-              label={designName}
-              sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
-              className="fl-card__img opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-              fillMode="absolute"
-            />
-          ) : null}
+        ) : null}
+      </div>
+
+      <div className="fl-card__summary">
+        <div className="fl-card__titles">
+          <h3 className="fl-card__title">{designName}</h3>
+          {meta ? <p className="fl-card__meta">{meta}</p> : null}
         </div>
 
-        <div className="fl-card__summary">
-          <div className="fl-card__titles">
-            <h3 className="fl-card__title">{designName}</h3>
-            {meta ? <p className="fl-card__meta">{meta}</p> : null}
-          </div>
-
-          <div className="fl-card__price-row">
-            <span className="fl-card__price">
-              {range ? (
-                range.min === range.max ? (
-                  <Price amount={range.min} />
-                ) : (
-                  <>From <Price amount={range.min} /></>
-                )
+        <div className="fl-card__price-row">
+          <span className="fl-card__price">
+            {range ? (
+              range.min === range.max ? (
+                <Price amount={range.min} />
               ) : (
-                "-"
-              )}
-            </span>
+                <>From <Price amount={range.min} /></>
+              )
+            ) : (
+              "-"
+            )}
+          </span>
 
-            <QuickAdd
-              variantId={priced?.id ?? null}
-              productTitle={product.title}
-              variantTitle={priced?.title ?? ""}
-              unitPrice={priced?.calculated_price?.calculated_amount ?? 0}
-              thumbnail={image ?? null}
-              disabled={soldOut}
-            />
-          </div>
+          <QuickAdd
+            variantId={priced?.id ?? null}
+            productTitle={product.title}
+            variantTitle={priced?.title ?? ""}
+            unitPrice={priced?.calculated_price?.calculated_amount ?? 0}
+            thumbnail={image ?? null}
+            disabled={soldOut}
+          />
         </div>
-      </Link>
+      </div>
+
+      {/* Stretched-link overlay: keeps the whole card clickable without wrapping
+          the interactive QuickAdd button in an <a>. */}
+      <Link
+        href={href}
+        aria-label={`${designName}${meta ? `, ${meta}` : ""}`}
+        className="absolute inset-0 z-[1]"
+      />
     </article>
   )
 }

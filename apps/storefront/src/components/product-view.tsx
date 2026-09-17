@@ -1,13 +1,15 @@
 "use client"
 
-import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
+import FeaturesSection from "@/components/features-section"
 import ProductBuyBox from "@/components/product-buy-box"
-import { type YouWillLoveItem } from "@/components/you-will-love"
-import { type RecommendedItem } from "@/components/recommended-for-you"
+import YouWillLove, { type YouWillLoveItem } from "@/components/you-will-love"
+import RecommendedForYou, {
+  type RecommendedItem,
+} from "@/components/recommended-for-you"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
@@ -16,22 +18,6 @@ import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreProduct, StoreVariant } from "@/lib/medusa"
 import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
-
-// The three bands under the gallery — Recommended, We-think-you'll-love and
-// Features — all sit below the fold. Loading them client-side only (ssr: false)
-// keeps them out of the initial HTML and the first JS chunk, so the gallery and
-// buy box (the only things a first-time visitor sees) paint and hydrate first;
-// the bands mount a moment later, well before they scroll into view.
-const RecommendedForYou = dynamic(
-  () => import("@/components/recommended-for-you"),
-  { ssr: false }
-)
-const YouWillLove = dynamic(() => import("@/components/you-will-love"), {
-  ssr: false,
-})
-const FeaturesSection = dynamic(() => import("@/components/features-section"), {
-  ssr: false,
-})
 
 /**
  * The two-column top of the product page.

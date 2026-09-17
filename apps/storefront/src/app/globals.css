@@ -401,6 +401,10 @@
     display: flex;
     justify-content: flex-end;
     line-height: 0;
+    /* Sits above the card's stretched-link overlay so the button is clickable
+       while the rest of the card navigates. */
+    position: relative;
+    z-index: 2;
   }
 
   /* ---- Bag icon button -------------------------------------------------- */
