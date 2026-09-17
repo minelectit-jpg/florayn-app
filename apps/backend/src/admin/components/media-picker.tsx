@@ -192,12 +192,22 @@ export default function MediaPicker({
                 size="small"
                 variant="secondary"
                 disabled={busy}
+                isLoading={busy}
                 onClick={() => fileRef.current?.click()}
               >
                 <ArrowUpTray /> Upload
               </Button>
             </div>
           </div>
+
+          {busy ? (
+            <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle px-4 py-3">
+              <Text size="small" weight="plus">
+                Uploading&hellip; a large video can take a minute — keep this
+                open.
+              </Text>
+            </div>
+          ) : null}
 
           {loading ? (
             <Text size="small">Loading&hellip;</Text>
