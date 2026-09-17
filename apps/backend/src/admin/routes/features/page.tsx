@@ -83,6 +83,8 @@ const FeaturesPage = () => {
   const [selectedTab, setSelectedTab] = useState<string>("")
   // Product-type groups the owner adds on the fly ("Add type").
   const [customTypes, setCustomTypes] = useState<string[]>([])
+  // Non-null while the inline "add type" input is open (its current text).
+  const [newType, setNewType] = useState<string | null>(null)
   const [picker, setPicker] = useState<{
     id: string
     field: "image_url" | "video_url"
@@ -236,11 +238,15 @@ const FeaturesPage = () => {
   ]
   const allGroups = [...caseTypeGroups, ...productGroups]
 
-  function addType() {
-    const name = window.prompt("New product type name (e.g. Ring Holder)")?.trim()
-    if (!name) return
+  function confirmAddType() {
+    const name = (newType ?? "").trim()
+    if (!name) {
+      setNewType(null)
+      return
+    }
     if (!allGroups.includes(name)) setCustomTypes((t) => [...t, name])
     setSelectedTab(name)
+    setNewType(null)
   }
 
   return (
@@ -251,10 +257,14 @@ const FeaturesPage = () => {
           The blocks in the &ldquo;Features&rdquo; band on the product page. Pick
           a group below to edit its own set: a <b>case type</b> drives phone
           products (Signature its own, Armor another), a <b>product type</b>{" "}
-          drives AirPods, sticky pads and the rest — and <b>+ Add type</b> makes
-          a new one for a future product. <b>Default</b> shows where a group has
-          none of its own. Give a block a <b>video URL</b> to autoplay on loop
-          with no controls, or an <b>image URL</b> for a still.
+          drives AirPods, sticky pads and the rest. <b>Default</b> shows where a
+          group has none of its own. Give a block a <b>video URL</b> to autoplay
+          on loop with no controls, or an <b>image URL</b> for a still.
+        </Text>
+        <Text size="xsmall" className="mt-1 text-ui-fg-muted">
+          <b>+ Add type</b> only creates a content group here for a future
+          product type — it does not create the product itself. Add the actual
+          product in Products; its page then picks up this group.
         </Text>
       </div>
 
@@ -289,9 +299,39 @@ const FeaturesPage = () => {
                   Product types:
                 </Text>
                 {productGroups.map((g) => tabButton(g, g))}
-                <Button size="small" variant="transparent" onClick={addType}>
-                  + Add type
-                </Button>
+                {newType === null ? (
+                  <Button
+                    size="small"
+                    variant="transparent"
+                    onClick={() => setNewType("")}
+                  >
+                    + Add type
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      autoFocus
+                      placeholder="e.g. Ring Holder"
+                      value={newType}
+                      className="w-40"
+                      onChange={(e) => setNewType(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmAddType()
+                        if (e.key === "Escape") setNewType(null)
+                      }}
+                    />
+                    <Button size="small" variant="secondary" onClick={confirmAddType}>
+                      Add
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="transparent"
+                      onClick={() => setNewType(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )
