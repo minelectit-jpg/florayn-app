@@ -45,7 +45,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={instrumentSans.variable}>
       <body className="min-h-screen bg-paper text-ink">
-        <BuildWatcher />
+        <BuildWatcher buildId={process.env.NEXT_PUBLIC_BUILD_ID} />
         <CartProvider>
           <SiteHeader menu={content.primary} caseTypes={caseTypes} />
 

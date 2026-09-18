@@ -16,12 +16,16 @@ import { useEffect, useRef } from "react"
  *
  * It is deliberately silent and defensive: any network hiccup is ignored, and it
  * never reloads more than once.
+ *
+ * `buildId` is passed from the server layout (which reads it at runtime) rather
+ * than read from process.env here: next.config `env` does not reliably inline a
+ * var into App-Router client bundles, so the value has to arrive as a prop.
  */
-export default function BuildWatcher() {
+export default function BuildWatcher({ buildId }: { buildId?: string }) {
   const reloadingRef = useRef(false)
 
   useEffect(() => {
-    const mine = process.env.NEXT_PUBLIC_BUILD_ID
+    const mine = buildId
     // No id baked in (dev, or the env was not set) - nothing to compare against.
     if (!mine) return
 
@@ -69,7 +73,7 @@ export default function BuildWatcher() {
       window.removeEventListener("pageshow", onPageShow)
       window.clearInterval(timer)
     }
-  }, [])
+  }, [buildId])
 
   return null
 }
