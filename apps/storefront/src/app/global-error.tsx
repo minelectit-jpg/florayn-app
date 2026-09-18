@@ -15,7 +15,9 @@ function isChunkError(error: unknown): boolean {
   const msg = String(e?.message ?? "")
   return (
     name === "ChunkLoadError" ||
-    /ChunkLoadError|Loading chunk|Loading CSS chunk|dynamically imported module|Failed to fetch dynamically imported|import\(\) failed/i.test(
+    // Chromium/Firefox and Safari word this differently; cover both, plus the
+    // generic Safari "Load failed" that a dead asset/chunk surfaces as.
+    /ChunkLoadError|Loading chunk|Loading CSS chunk|dynamically imported module|Failed to fetch dynamically imported|import\(\) failed|Importing a module script failed|error loading dynamically imported module|Unable to (load|fetch)|Load failed/i.test(
       msg
     )
   )

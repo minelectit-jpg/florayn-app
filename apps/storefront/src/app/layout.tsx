@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Instrument_Sans } from "next/font/google"
 
+import BuildWatcher from "@/components/build-watcher"
 import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
 import SiteFooter from "@/components/site-footer"
@@ -44,6 +45,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={instrumentSans.variable}>
       <body className="min-h-screen bg-paper text-ink">
+        <BuildWatcher />
         <CartProvider>
           <SiteHeader menu={content.primary} caseTypes={caseTypes} />
 

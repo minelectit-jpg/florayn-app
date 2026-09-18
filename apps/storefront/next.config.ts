@@ -1,9 +1,26 @@
 import type { NextConfig } from "next"
 
+/*
+ * A unique id per production build. Evaluated once when `next build` runs, so it
+ * changes on every deploy. It is inlined (via env below) into both the client
+ * bundle and the /api/build-id route, so a tab left open across a deploy can see
+ * that the server is now on a newer build and refresh itself before the user
+ * hits a stale chunk or a stale server-action id. Prefer a commit sha if the
+ * build host provides one, else a timestamp.
+ */
+const BUILD_ID =
+  process.env.SOURCE_COMMIT ||
+  process.env.COOLIFY_GIT_COMMIT_SHA ||
+  String(Date.now())
+
 const nextConfig: NextConfig = {
   // Product and collection URLs must end in a slash:
   //   /product/<slug>/   /collection/<slug>/
   trailingSlash: true,
+
+  // Exposed to the browser so BuildWatcher can compare the tab's build against
+  // the live server's (see components/build-watcher.tsx).
+  env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
 
   /*
    * This app is deployed on its own, with Root Directory apps/storefront and
