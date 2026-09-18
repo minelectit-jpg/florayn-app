@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { NextConfig } from "next"
 
 /*
@@ -21,6 +23,19 @@ const nextConfig: NextConfig = {
   // Exposed to the browser so BuildWatcher can compare the tab's build against
   // the live server's (see components/build-watcher.tsx).
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
+
+  /*
+   * Persist the incremental cache (ISR HTML/RSC + fetch/data cache) in Redis so it
+   * survives the container replacement on every deploy. cache-handler.js namespaces
+   * route HTML by .next/BUILD_ID (a fresh random id per build - we deliberately do
+   * NOT pin generateBuildId, so even a same-commit rebuild gets a new namespace and
+   * can never serve an old build's HTML -> no ChunkLoadError) while keeping the
+   * fetch/data cache build-independent so product data stays warm across deploys.
+   * If STOREFRONT_REDIS_URL is unset or Redis is slow/down, the handler no-ops with
+   * hard timeouts + a circuit breaker, so the app behaves exactly as with the
+   * default filesystem cache and never renders slower than today.
+   */
+  cacheHandler: path.join(import.meta.dirname, "cache-handler.js"),
 
   /*
    * This app is deployed on its own, with Root Directory apps/storefront and

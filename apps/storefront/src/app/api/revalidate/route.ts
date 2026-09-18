@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import { NextResponse, type NextRequest } from "next/server"
 
 // This route runs on demand (never cached) so it can flush the ISR cache the
@@ -37,9 +37,21 @@ export async function POST(req: NextRequest) {
     revalidatePath("/", "layout")
   }
 
+  // Also bust the cached Medusa product DATA (lib/medusa.ts wraps listProducts in
+  // unstable_cache with these tags). Without this, a route revalidation would
+  // re-render but still read stale product JSON from the persistent data cache for
+  // up to CACHE_TTL_SECONDS. An optional ?handle= busts just one product's data.
+  const handle = req.nextUrl.searchParams.get("handle")
+  if (handle) {
+    revalidateTag(`product:${handle}`)
+  } else {
+    revalidateTag("products")
+  }
+
   return NextResponse.json({
     ok: true,
     revalidated: path ?? "all",
+    tags: handle ? `product:${handle}` : "products",
     now: Date.now(),
   })
 }

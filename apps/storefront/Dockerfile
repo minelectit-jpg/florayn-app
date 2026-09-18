@@ -33,6 +33,9 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/next.config.ts ./next.config.ts
+# The custom Redis incremental-cache handler referenced by next.config.ts.
+# next start resolves it at /app/cache-handler.js (import.meta.dirname).
+COPY --from=build /app/cache-handler.js ./cache-handler.js
 
 EXPOSE 3000
 CMD ["npm", "run", "start"]

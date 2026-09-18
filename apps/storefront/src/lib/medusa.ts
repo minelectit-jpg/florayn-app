@@ -1,3 +1,5 @@
+import { unstable_cache } from "next/cache"
+
 import Medusa from "@medusajs/js-sdk"
 
 export const MEDUSA_BACKEND_URL =
@@ -125,18 +127,70 @@ export type ProductListResult = {
  *
  * It still does not throw. A blip should degrade the page, not 500 the site.
  */
+/*
+ * @medusajs/js-sdk does NOT forward next/cache into fetch, so under Next 15 every
+ * SDK product call is no-store and re-hits Medusa on every render - the measured
+ * cause of 2-7s cold pages and the DB-pool jam under prefetch storms. We wrap the
+ * result in unstable_cache so the product JSON lands in Next's FETCH/data cache,
+ * which our Redis cacheHandler stores UN-namespaced -> it survives every deploy, so
+ * a cold post-deploy render reads product data from Redis instead of stampeding
+ * Medusa. Entries are tagged so an admin edit (see /api/revalidate) can bust them.
+ */
+const DATA_VERSION = "v1" // bump when PRODUCT_FIELDS / StoreProduct shape changes
+const CACHE_TTL_SECONDS = 3600 // data freshness; admin edits bust it via revalidateTag
+const MAX_CACHEABLE_LIMIT = 200 // don't cache huge listings (sitemap pulls 600)
+
+/** Stable cache-key part from the query params (order-independent). */
+function stableKey(params: Record<string, unknown>): string {
+  const sorted = Object.keys(params)
+    .sort()
+    .reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = params[k]
+      return acc
+    }, {})
+  return JSON.stringify(sorted)
+}
+
+/**
+ * The raw SDK call. THROWS on failure so a transient backend error is never
+ * written to the cache (mirrors getRegionId's "never memoize a failure").
+ */
+async function listProductsUncached(
+  params: Record<string, unknown>
+): Promise<ProductListResult> {
+  const region_id = await getRegionId()
+  const result = await sdk.store.product.list({
+    fields: PRODUCT_FIELDS,
+    region_id,
+    limit: 24,
+    ...params,
+  })
+  return result as unknown as ProductListResult
+}
+
 export async function listProducts(
   params: Record<string, unknown> = {}
 ): Promise<ProductListResult> {
+  const limit = typeof params.limit === "number" ? params.limit : 24
+  const handle =
+    typeof params.handle === "string"
+      ? params.handle
+      : Array.isArray(params.handle) && params.handle.length === 1
+        ? String(params.handle[0])
+        : undefined
   try {
-    const region_id = await getRegionId()
-    const result = await sdk.store.product.list({
-      fields: PRODUCT_FIELDS,
-      region_id,
-      limit: 24,
-      ...params,
-    })
-    return result as unknown as ProductListResult
+    // Very large listings bypass the cache (keeps multi-MB values out of Redis).
+    if (limit > MAX_CACHEABLE_LIMIT) {
+      return await listProductsUncached(params)
+    }
+    const tags = ["products"]
+    if (handle) tags.push(`product:${handle}`)
+    const cached = unstable_cache(
+      () => listProductsUncached(params),
+      ["products", DATA_VERSION, stableKey(params)],
+      { revalidate: CACHE_TTL_SECONDS, tags }
+    )
+    return await cached()
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error(`[medusa] product list failed against ${MEDUSA_BACKEND_URL}: ${detail}`)
