@@ -19,26 +19,41 @@ export async function generateSitemaps() {
 }
 
 async function allUrls(): Promise<string[]> {
-  const [{ products }, devices] = await Promise.all([
-    listProducts({ limit: 600 }),
-    getDeviceCatalog(),
-  ])
-  const slugByName = new Map(devices.map((d) => [d.name, d.slug]))
+  const staticUrls: string[] = ["/", "/shop/", "/contact/"]
+  try {
+    const [{ products }, devices] = await Promise.all([
+      // Only what buildVariantMatrix needs: options + variant options. NEVER the
+      // default fields here - pulling calculated_price for 600 products x ~100
+      // variants took >120s and failed the whole production build (and jammed the
+      // backend's DB pool). This query must stay light.
+      listProducts({
+        limit: 600,
+        fields: "handle,*options,*options.values,*variants.options",
+      }),
+      getDeviceCatalog(),
+    ])
+    const slugByName = new Map(devices.map((d) => [d.name, d.slug]))
 
-  const urls: string[] = ["/", "/shop/", "/contact/"]
-  // Clean per-device landing pages (/shop/<device>/) - the entry points search
-  // engines should index over the old ?filter_device= query URLs.
-  for (const device of devices) urls.push(`/shop/${device.slug}/`)
-  for (const product of products) {
-    urls.push(`/product/${product.handle}/`)
-    // One device page per device the product is sold for. Devices come from the
-    // (Case Type x Device) matrix, deduped, since case types share devices.
-    for (const deviceName of buildVariantMatrix(product).devices) {
-      const slug = slugByName.get(deviceName)
-      if (slug) urls.push(`/product/${product.handle}-${slug}/`)
+    const urls = [...staticUrls]
+    // Clean per-device landing pages (/shop/<device>/) - the entry points search
+    // engines should index over the old ?filter_device= query URLs.
+    for (const device of devices) urls.push(`/shop/${device.slug}/`)
+    for (const product of products) {
+      urls.push(`/product/${product.handle}/`)
+      // One device page per device the product is sold for. Devices come from the
+      // (Case Type x Device) matrix, deduped, since case types share devices.
+      for (const deviceName of buildVariantMatrix(product).devices) {
+        const slug = slugByName.get(deviceName)
+        if (slug) urls.push(`/product/${product.handle}-${slug}/`)
+      }
     }
+    return urls
+  } catch (error) {
+    // A slow/unreachable backend during a build must NOT fail the build over the
+    // sitemap - emit the static entry points and move on.
+    console.error("[sitemap] product fetch failed, emitting static URLs only:", error)
+    return staticUrls
   }
-  return urls
 }
 
 async function countUrls() {
