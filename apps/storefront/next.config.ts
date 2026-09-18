@@ -49,11 +49,22 @@ const nextConfig: NextConfig = {
 
   images: {
     /*
-     * Product artwork is served from R2. Both hosts are allowed up front so
-     * swapping r2.dev for img.florayn.com needs no change here - the image
-     * host is named in exactly one place, IMAGE_BASE_URL in the backend .env,
-     * which scripts/wire-images.ts writes into the product rows.
+     * Serve the R2 artwork as-is instead of through Next's on-demand optimizer.
+     *
+     * The optimizer's cache (.next/cache/images) is per-container and ephemeral,
+     * so every deploy - and every not-yet-seen device / case type / new design -
+     * meant a shop grid of ~32 images all being fetched from R2 and re-encoded on
+     * the Singapore origin at once = 3-4s of blank cards. That does not scale to
+     * "we deploy constantly and add products". The R2 sources are already small
+     * webp (~20-35KB) with immutable/1-year cache, so Cloudflare edge-caches them
+     * at the Dhaka PoP and they never need re-optimizing. Trade-off: a card gets
+     * the 1200px source (~28KB) rather than a 6KB 384px variant, but they lazy-
+     * load, so only the few above the fold load first, and there is no cold-start
+     * storm on any device or after any deploy. (If per-card bytes ever matter,
+     * pre-generate small thumbnails in R2 and point the cards at those - still
+     * unoptimized, still no origin work.)
      */
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "**.r2.dev" },
       { protocol: "https", hostname: "img.florayn.com" },
