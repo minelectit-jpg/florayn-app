@@ -27,6 +27,7 @@ import {
   applyCaseTypePrices,
   getProductByHandle,
   listProducts,
+  PRODUCT_FIELDS_NOPRICE,
   type StoreProduct,
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
@@ -211,15 +212,26 @@ export default async function ProductPage({ params }: Params) {
   }
 
   // Related products (this design's collection) and the design's gallery videos,
-  // fetched together.
+  // fetched together. The pool is fetched WITHOUT calculated_price - pricing all
+  // ~24 collection products' variants was ~1.7s of the cold render - and priced
+  // from the fixed case-type price instead (same trick as the main product), so
+  // the below-the-fold strips still show a price without the engine running.
   const collectionId = product.collection?.id
   const [poolResult, galleryVideos] = await Promise.all([
     collectionId
-      ? listProducts({ collection_id: [collectionId], limit: 100 })
+      ? listProducts({
+          collection_id: [collectionId],
+          limit: 100,
+          fields: PRODUCT_FIELDS_NOPRICE,
+        })
       : Promise.resolve({ products: [] as StoreProduct[] }),
     getGalleryVideos(designSlug ?? ""),
   ])
   const { products: pool } = poolResult
+  // Alcantara is per-device priced, so its variants keep no price here and fall
+  // out of the strips' "from" price and the add paths below (guarded), rather
+  // than showing ৳0 - an accepted trade for the handful of Alcantara designs.
+  for (const p of pool) applyCaseTypePrices(p, priceByCaseType)
 
   // MORE DESIGNS: other designs' phone cases in the same collection. Each one
   // carries renders keyed by "device|caseType" (and by device alone) so the
@@ -341,12 +353,15 @@ export default async function ProductPage({ params }: Params) {
       const ct = caseOptId
         ? v.options?.find((o) => o.option_id === caseOptId)?.value
         : undefined
-      if (!dev || !ct) continue
+      const price = v.calculated_price?.calculated_amount
+      // Skip variants with no resolved price (Alcantara, priced per device and
+      // not fetched here) so the pack can never offer or add one at ৳0.
+      if (!dev || !ct || !(typeof price === "number" && price > 0)) continue
       const key = `${dev}|${ct}`
       if (variants[key]) continue
       variants[key] = {
         variantId: v.id,
-        price: v.calculated_price?.calculated_amount ?? 0,
+        price,
         image:
           (v.metadata?.images as string[] | undefined)?.[0] ??
           p.thumbnail ??
@@ -385,8 +400,9 @@ export default async function ProductPage({ params }: Params) {
       const dev = deviceOptId
         ? v.options?.find((o) => o.option_id === deviceOptId)?.value
         : undefined
-      if (!dev) continue
-      const price = v.calculated_price?.calculated_amount ?? 0
+      const price = v.calculated_price?.calculated_amount
+      // Skip unpriced (Alcantara) so the bundle never offers/adds at ৳0.
+      if (!dev || !(typeof price === "number" && price > 0)) continue
       // Keep the cheapest variant per AirPods model (its base construction).
       if (variants[dev] && variants[dev].price <= price) continue
       variants[dev] = {
