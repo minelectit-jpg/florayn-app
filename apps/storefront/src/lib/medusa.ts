@@ -22,6 +22,18 @@ export const PRODUCT_FIELDS =
   "*variants.metadata," +
   "*variants.calculated_price,*collection,*categories"
 
+/**
+ * The product page's fields WITHOUT calculated_price. Computing a price for all
+ * ~109 variants of one product costs ~3s on this host; the page prices the buy
+ * box from the fixed case-type price instead (applyCaseTypePrices), so it never
+ * needs the engine. Everything else the page reads (options, variant images,
+ * collection) stays.
+ */
+export const PRODUCT_FIELDS_NOPRICE =
+  "id,title,handle,subtitle,description,thumbnail,metadata,created_at," +
+  "*images,*options,*options.values,*variants,*variants.options," +
+  "*variants.metadata,*collection,*categories"
+
 /*
  * Everything a product CARD renders, and nothing it does not. The card shows a
  * thumbnail, a price range and a device-aware meta line, so it needs variant
@@ -150,7 +162,39 @@ export async function listProducts(
   }
 }
 
+/**
+ * Set each variant's calculated_price from the fixed case-type price, keyed by
+ * the case-type option value (a variant's option that is a case-type NAME, e.g.
+ * "Signature"). Lets a product fetched without calculated_price feed the buy box
+ * and case-type tiles unchanged. (Alcantara is priced per-device in the store;
+ * here it takes the base case-type price - fine for the handful of Alcantara
+ * designs, revisit if per-device Alcantara pricing must show exactly.)
+ */
+export function applyCaseTypePrices(
+  product: StoreProduct | null | undefined,
+  priceByCaseTypeName: Map<string, number>
+): void {
+  for (const v of product?.variants ?? []) {
+    const ctVal = (v.options ?? [])
+      .map((o) => o.value)
+      .find((x) => priceByCaseTypeName.has(x))
+    const price = ctVal != null ? priceByCaseTypeName.get(ctVal) : undefined
+    if (typeof price === "number") {
+      ;(v as unknown as { calculated_price?: unknown }).calculated_price = {
+        calculated_amount: price,
+      }
+    }
+  }
+}
+
 export async function getProductByHandle(handle: string) {
-  const { products } = await listProducts({ handle, limit: 1 })
+  // No calculated_price: the product page and the WTYL cards apply the fixed
+  // case-type price after fetch, so this stays a light one-product query (~0.5s)
+  // instead of pricing all ~109 variants (~3s).
+  const { products } = await listProducts({
+    handle,
+    limit: 1,
+    fields: PRODUCT_FIELDS_NOPRICE,
+  })
   return products?.[0]
 }

@@ -24,6 +24,7 @@ import {
 import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
 import {
+  applyCaseTypePrices,
   getProductByHandle,
   listProducts,
   type StoreProduct,
@@ -125,6 +126,12 @@ export default async function ProductPage({ params }: Params) {
     getProductSections(),
   ])
   const { featureBlocks, featuredPicks } = productSections
+
+  // The product was fetched without calculated_price (fast); price its variants
+  // from the fixed case-type price so the buy box and case-type tiles show the
+  // right amount without the engine ever running for ~109 variants.
+  const priceByCaseType = new Map(caseTypes.map((c) => [c.name, c.price]))
+  applyCaseTypePrices(product, priceByCaseType)
 
   // The (Case Type x Device) matrix drives both selectors and the gallery.
   const matrix = buildVariantMatrix(product)
@@ -278,6 +285,8 @@ export default async function ProductPage({ params }: Params) {
         await Promise.all(featuredPicks.map((h) => getProductByHandle(h)))
       ).filter((p): p is StoreProduct => Boolean(p))
     : []
+  // Picks are fetched without calculated_price too - price them from case types.
+  for (const p of pickedProducts) applyCaseTypePrices(p, priceByCaseType)
   const youWillLoveItems: YouWillLoveItem[] = pickedProducts.map((p) => {
     const renders = rendersFor(p)
     const optId = (t: string) =>
