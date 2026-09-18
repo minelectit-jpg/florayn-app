@@ -151,21 +151,42 @@ function stableKey(params: Record<string, unknown>): string {
   return JSON.stringify(sorted)
 }
 
+// Hard ceiling on any single product query. Normal queries are 0.3-1.7s (the
+// 600-item sitemap query ~3-5s), but the build prerenders home/shop/collections/
+// sitemap on the SAME 2-vCPU box as Medusa, so a prerender burst can transiently
+// slow the backend; without a cap one hung query hits Next's 120s page timeout and
+// FAILS THE WHOLE BUILD (repeatedly seen on /sitemap). Capping here turns a hang
+// into a fast throw -> graceful empty result -> the page/sitemap builds with a
+// fallback and regenerates at runtime (where the backend is fast). Also caps
+// runtime cache-misses so a jammed backend degrades instead of hanging.
+const QUERY_TIMEOUT_MS = 15_000
+
 /**
- * The raw SDK call. THROWS on failure so a transient backend error is never
- * written to the cache (mirrors getRegionId's "never memoize a failure").
+ * The raw SDK call. THROWS on failure (or timeout) so a transient backend error
+ * is never written to the cache (mirrors getRegionId's "never memoize a failure").
  */
 async function listProductsUncached(
   params: Record<string, unknown>
 ): Promise<ProductListResult> {
-  const region_id = await getRegionId()
-  const result = await sdk.store.product.list({
-    fields: PRODUCT_FIELDS,
-    region_id,
-    limit: 24,
-    ...params,
-  })
-  return result as unknown as ProductListResult
+  const call = (async () => {
+    const region_id = await getRegionId()
+    const result = await sdk.store.product.list({
+      fields: PRODUCT_FIELDS,
+      region_id,
+      limit: 24,
+      ...params,
+    })
+    return result as unknown as ProductListResult
+  })()
+  return (await Promise.race([
+    call,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`medusa product list timed out after ${QUERY_TIMEOUT_MS}ms`)),
+        QUERY_TIMEOUT_MS
+      )
+    ),
+  ])) as ProductListResult
 }
 
 export async function listProducts(
