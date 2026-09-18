@@ -25,7 +25,6 @@ import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
 import {
   applyCaseTypePrices,
-  getProductByHandle,
   listProducts,
   PRODUCT_FIELDS_NOPRICE,
   type StoreProduct,
@@ -292,10 +291,21 @@ export default async function ProductPage({ params }: Params) {
   // compact, device+case-type-aware shape (renders and a variant per pair) so
   // the card follows the live selection without embedding four whole products
   // (~600KB) in the page.
-  const pickedProducts = featuredPicks?.length
-    ? (
-        await Promise.all(featuredPicks.map((h) => getProductByHandle(h)))
-      ).filter((p): p is StoreProduct => Boolean(p))
+  // One query for all picks, not one round-trip per pick (an N+1 that put N full
+  // ~230KB product fetches on the backend per cold render). Reorder to the
+  // admin's chosen order since the API does not guarantee it.
+  const pickedProducts: StoreProduct[] = featuredPicks?.length
+    ? await (async () => {
+        const { products } = await listProducts({
+          handle: featuredPicks,
+          limit: featuredPicks.length,
+          fields: PRODUCT_FIELDS_NOPRICE,
+        })
+        const byHandle = new Map(products.map((p) => [p.handle, p]))
+        return featuredPicks
+          .map((h) => byHandle.get(h))
+          .filter((p): p is StoreProduct => Boolean(p))
+      })()
     : []
   // Picks are fetched without calculated_price too - price them from case types.
   for (const p of pickedProducts) applyCaseTypePrices(p, priceByCaseType)
