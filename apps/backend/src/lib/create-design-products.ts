@@ -12,6 +12,7 @@ import { devicesFor } from "../modules/catalog/data/design-devices"
 import { DESIGNS } from "../modules/catalog/data/designs"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
 import { placeholderImage } from "../modules/catalog/data/placeholder-image"
+import { rebuildCards } from "./rebuild-cards"
 import { wireImagesDevice } from "./wire-images-device"
 
 const CURRENCY = "bdt"
@@ -329,6 +330,10 @@ export async function createDesignProducts({
     container,
     productIds: created.map((p: any) => p.id),
   })
+
+  // Precompute the card read-model for the new product(s) so the storefront
+  // strips/listings can render them without hydrating variants.
+  await rebuildCards(container, { productIds: created.map((p: any) => p.id) })
 
   return {
     design: design.slug,
