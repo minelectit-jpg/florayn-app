@@ -16,8 +16,14 @@ import { Modules } from "@medusajs/framework/utils"
  * keys on — so only the full-page HTML variant is warmed (RSC nav is untouched).
  */
 const STOREFRONT = process.env.STOREFRONT_URL || "https://new.florayn.com"
-// The two devices the shop grid + menu link to (the real document landings).
-const DEVICES = ["iphone-17-pro-max", "iphone-16-pro-max"]
+// The devices real visitors land on per product form (shop grid + menu links +
+// the newest AirPods models). Phone AND AirPods products both need warming —
+// AirPods pages were being missed, so they rendered cold (~2-7s) for the first
+// visitor. Device switching is a client-side RSC nav and does not need warming.
+const DEVICES_BY_FORM: Record<string, string[]> = {
+  phone: ["iphone-17-pro-max", "iphone-16-pro-max"],
+  airpods: ["airpods-pro-3", "airpods-4", "airpods-pro-2", "airpods-3", "airpods-pro"],
+}
 const CONCURRENCY = 3
 const HEADERS = {
   "Sec-Fetch-Dest": "document",
@@ -31,21 +37,27 @@ export default async function warmStorefront(container: MedusaContainer) {
   const logger = container.resolve("logger")
   const productModule = container.resolve(Modules.PRODUCT)
 
-  // Every live phone design (its slug), from product metadata.
+  // Every live product (handle + form), from product metadata.
   const products = await productModule.listProducts(
     {},
-    { select: ["metadata"], take: 10000 }
+    { select: ["handle", "metadata"], take: 10000 }
   )
-  const slugs = new Set<string>()
+
+  // Home + the shop landings the menu links to.
+  const urls = [
+    "/",
+    "/shop/iphone-17-pro-max/signature/",
+    "/shop/iphone-16-pro-max/signature/",
+    "/shop/airpods-pro-3/signature/",
+  ]
+  // Warm each product on the devices its form actually sells to visitors. The
+  // handle already carries the form suffix (e.g. `<design>-airpods`), so the URL
+  // is `/product/<handle>-<device>/`.
   for (const p of products) {
     const meta = (p.metadata ?? {}) as Record<string, any>
-    if (meta.form === "phone" && meta.design_slug) slugs.add(meta.design_slug)
-  }
-
-  const urls = ["/"]
-  for (const dv of DEVICES) {
-    urls.push(`/shop/${dv}/signature/`)
-    for (const slug of slugs) urls.push(`/product/${slug}-${dv}/?case=signature`)
+    const devs = DEVICES_BY_FORM[String(meta.form ?? "")]
+    if (!devs || !p.handle) continue
+    for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=signature`)
   }
 
   let i = 0
