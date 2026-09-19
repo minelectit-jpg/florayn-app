@@ -6,6 +6,7 @@ import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
 import SiteFooter from "@/components/site-footer"
 import SiteHeader from "@/components/site-header"
+import { getBuildId } from "@/lib/build-id"
 import { getCaseTypes, getSiteContent } from "@/lib/content"
 
 import "./globals.css"
@@ -45,7 +46,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={instrumentSans.variable}>
       <body className="min-h-screen bg-paper text-ink">
-        <BuildWatcher buildId={process.env.NEXT_PUBLIC_BUILD_ID} />
+        <BuildWatcher buildId={getBuildId()} />
         <CartProvider>
           <SiteHeader menu={content.primary} caseTypes={caseTypes} />
 

@@ -42,6 +42,26 @@ export default function BuildWatcher({ buildId }: { buildId?: string }) {
         const data = (await res.json()) as { id?: string }
         const live = data?.id
         if (live && live !== mine) {
+          // Reload AT MOST once per live server build. Persist the id we
+          // reloaded for in sessionStorage: if the page we get back is still the
+          // old build (e.g. an edge-cached HTML the CDN has not refreshed yet, or
+          // the server id changed on a restart), a second mount sees the same
+          // `live` we already handled and does NOT reload again — without this a
+          // persistent old-vs-new mismatch is an infinite reload loop.
+          const KEY = "fl-buildwatch-reloaded-for"
+          let alreadyFor: string | null = null
+          try {
+            alreadyFor = window.sessionStorage.getItem(KEY)
+          } catch {
+            // sessionStorage blocked (private mode): fall back to the per-mount
+            // ref only. Worst case one reload per navigation, never a tight loop.
+          }
+          if (alreadyFor === live) return
+          try {
+            window.sessionStorage.setItem(KEY, live)
+          } catch {
+            /* ignore */
+          }
           reloadingRef.current = true
           window.location.reload()
         }
