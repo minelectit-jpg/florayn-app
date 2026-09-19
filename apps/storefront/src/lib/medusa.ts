@@ -38,17 +38,16 @@ export const PRODUCT_FIELDS_NOPRICE =
 
 /**
  * The related-products POOL fields for the product page's below-the-fold strips
- * (More Designs / You'll Love / Pack / Matching Set / Recommended). Trimmed hard
- * vs PRODUCT_FIELDS_NOPRICE: those strips only ever read a product's thumbnail,
- * metadata, and per-variant device/case-type + variant image (v.metadata.images)
- * — they never touch *images (the full gallery: ~6000 rows across a collection,
- * ~1s and ~1MB of the cold render), *options.values, description or categories.
- * Measured: collection pool 2.4s/3.1MB -> 1.1-1.5s/2.2MB. (Durable fix later:
- * precompute the pair maps into metadata and drop *variants entirely.)
+ * (More Designs / You'll Love / Pack / Matching Set / Recommended). NO *variants:
+ * each pool product carries a precomputed metadata.card (device|caseType ->
+ * {variantId, price, image}) written by /admin/rebuild-cards, and the page
+ * rebuilds the tiny variant shape the strips iterate from that card
+ * (hydratePoolVariantsFromCard) instead of hydrating ~102 real variants per
+ * product. *options stays (the strips read the Case Type / Device option ids).
+ * Measured: collection pool 2.4s/3.1MB (all variants) -> ~0.42s/360KB (card).
  */
 export const POOL_FIELDS =
-  "id,title,handle,subtitle,thumbnail,metadata," +
-  "*options,*variants,*variants.options,*variants.metadata,*collection"
+  "id,title,handle,subtitle,thumbnail,metadata,*options"
 
 /*
  * Everything a product CARD renders, and nothing it does not. The card shows a

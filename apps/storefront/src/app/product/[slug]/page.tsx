@@ -62,6 +62,44 @@ function minPrice(product: StoreProduct): number | null {
   return amounts.length ? Math.min(...amounts) : null
 }
 
+type CardPair = { variantId: string; price?: number | null; image?: string | null }
+type ProductCardMeta = { pairs?: Record<string, CardPair> }
+
+/**
+ * Rebuild the minimal variant shape the below-the-fold strips iterate, from a
+ * pool product's precomputed metadata.card, so the pool query never hydrates the
+ * ~102 real variants (POOL_FIELDS drops *variants). Each synthesized variant
+ * carries exactly what the strip builders read: id, the Case Type + Device
+ * options (so applyCaseTypePrices can price it and the builders can key by
+ * "device|caseType"), a title, and the variant image. Price is left to
+ * applyCaseTypePrices (the fixed case-type map), identical to the old path.
+ */
+function hydratePoolVariantsFromCard(p: StoreProduct): void {
+  const card = (p.metadata as Record<string, unknown> | null | undefined)
+    ?.card as ProductCardMeta | undefined
+  if (!card?.pairs) {
+    if (!p.variants) p.variants = []
+    return
+  }
+  const optId = (title: string) =>
+    p.options?.find((o) => o.title.toLowerCase() === title)?.id
+  const deviceOptId = optId("device")
+  const caseOptId = optId("case type")
+  const variants = Object.entries(card.pairs).map(([key, v]) => {
+    const [dev, ct] = key.split("|")
+    return {
+      id: v.variantId,
+      title: `${ct} / ${dev}`,
+      options: [
+        ...(deviceOptId ? [{ option_id: deviceOptId, value: dev }] : []),
+        ...(caseOptId ? [{ option_id: caseOptId, value: ct }] : []),
+      ],
+      metadata: { images: v.image ? [v.image] : [] },
+    }
+  })
+  ;(p as unknown as { variants: unknown }).variants = variants
+}
+
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params
   const resolved = await resolveProductPage(slug)
@@ -227,6 +265,10 @@ export default async function ProductPage({ params }: Params) {
     getGalleryVideos(designSlug ?? ""),
   ])
   const { products: pool } = poolResult
+  // Rebuild each pool product's variants from its precomputed metadata.card
+  // (POOL_FIELDS no longer hydrates real variants). Then price them exactly as
+  // before from the fixed case-type map.
+  for (const p of pool) hydratePoolVariantsFromCard(p)
   // Alcantara is per-device priced, so its variants keep no price here and fall
   // out of the strips' "from" price and the add paths below (guarded), rather
   // than showing ৳0 - an accepted trade for the handful of Alcantara designs.
@@ -307,7 +349,9 @@ export default async function ProductPage({ params }: Params) {
           .filter((p): p is StoreProduct => Boolean(p))
       })()
     : []
-  // Picks are fetched without calculated_price too - price them from case types.
+  // Picks also carry a precomputed card - rebuild their variants from it, then
+  // price them from case types (fetched without calculated_price).
+  for (const p of pickedProducts) hydratePoolVariantsFromCard(p)
   for (const p of pickedProducts) applyCaseTypePrices(p, priceByCaseType)
   const youWillLoveItems: YouWillLoveItem[] = pickedProducts.map((p) => {
     const renders = rendersFor(p)
