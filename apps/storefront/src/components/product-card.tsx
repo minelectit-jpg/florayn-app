@@ -154,11 +154,15 @@ export default function ProductCard({
       </div>
 
       {/* Stretched-link overlay: keeps the whole card clickable without wrapping
-          the interactive QuickAdd button in an <a>. */}
+          the interactive QuickAdd button in an <a>. prefetch={false}: a grid of
+          ~32 cards would otherwise prefetch every product's RSC on view, firing
+          ~32 concurrent cold renders that stampede the 2-vCPU Medusa backend and
+          jam it (10s+ clicks). Without prefetch, a click is a single render. */}
       <Link
         href={href}
         aria-label={`${designName}${meta ? `, ${meta}` : ""}`}
         className="absolute inset-0 z-[1]"
+        prefetch={false}
       />
     </article>
   )

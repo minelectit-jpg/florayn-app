@@ -85,6 +85,7 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
         href={`/product/${item.handle}/`}
         className="block"
         aria-label={`${item.name}, ${item.formLabel}`}
+        prefetch={false}
       >
         <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-surface">
           <ProductImage
@@ -98,7 +99,7 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
       </Link>
 
       <div className="mt-3 flex flex-1 flex-col text-center">
-        <Link href={`/product/${item.handle}/`} className="block">
+        <Link href={`/product/${item.handle}/`} className="block" prefetch={false}>
           <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
             {item.name}
           </h3>

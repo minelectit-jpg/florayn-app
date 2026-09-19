@@ -51,6 +51,7 @@ export function MoreDesigns({
                 href={`/product/${item.handle}/`}
                 title={item.label}
                 className="block size-[108px] overflow-hidden rounded-[10px] border border-[#ececec] transition-colors hover:border-purple"
+                prefetch={false}
               >
                 <span className="relative block size-full">
                   <ProductImage
@@ -123,6 +124,7 @@ export function CaseTypeTiles({
                 <Link
                   href={`/product/${item.handle}/`}
                   className="flex h-[205px] w-[135px] flex-col overflow-hidden rounded-[10px] border border-[#e2e2e2] bg-surface transition-colors hover:border-purple"
+                  prefetch={false}
                 >
                   {tile}
                 </Link>
@@ -180,6 +182,7 @@ export function PairsWellWith({ items }: { items: RelatedProduct[] }) {
             <Link
               href={`/product/${item.handle}/`}
               className="flex items-center gap-4 rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-purple"
+              prefetch={false}
             >
               <span className="relative block size-[64px] shrink-0 overflow-hidden rounded-[8px]">
                 <ProductImage

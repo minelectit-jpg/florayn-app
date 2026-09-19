@@ -107,6 +107,7 @@ export default function YouWillLove({
                   href={`/product/${item.handle}/`}
                   aria-label={item.name}
                   className="absolute inset-0 z-[1]"
+                  prefetch={false}
                 />
               </article>
             </li>
