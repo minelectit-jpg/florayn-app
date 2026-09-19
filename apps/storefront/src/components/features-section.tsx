@@ -66,6 +66,10 @@ export default function FeaturesSection({
                 muted
                 loop
                 playsInline
+                // Don't pull the clip's bytes on load — this whole band is
+                // lazy-mounted below the fold, and preload="none" keeps a mobile
+                // visitor from ever downloading a feature video they don't reach.
+                preload="none"
                 // No `controls`: the video plays itself, silently. No fixed
                 // aspect box or object-cover, so the clip keeps its own ratio
                 // (a 16:9 video stays 16:9) instead of being cropped.
@@ -75,6 +79,8 @@ export default function FeaturesSection({
               <img
                 src={block.image_url}
                 alt={block.title ?? ""}
+                loading="lazy"
+                decoding="async"
                 className="block w-full rounded-[14px] bg-surface"
               />
             ) : null}

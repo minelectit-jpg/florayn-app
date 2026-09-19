@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
+import LazyReveal from "@/components/lazy-reveal"
 import ProductBuyBox from "@/components/product-buy-box"
 import YouWillLove, { type YouWillLoveItem } from "@/components/you-will-love"
 import RecommendedForYou, {
@@ -253,16 +254,20 @@ export default function ProductView({
       featureBlocks?.length ||
       youWillLoveItems?.length ? (
         <div className="lg:col-start-1 lg:row-start-2">
-          <RecommendedForYou items={recommendedItems ?? []} />
-          <YouWillLove
-            items={youWillLoveItems ?? []}
-            device={device}
-            caseType={caseType}
-          />
-          <FeaturesSection
-            blocks={featureBlocks ?? []}
-            group={featuresGroup(productForm, caseType)}
-          />
+          {/* Below the fold: mount only when the viewport nears it, so the
+              buy box + gallery hydrate first on a low-end phone. */}
+          <LazyReveal minHeight={360}>
+            <RecommendedForYou items={recommendedItems ?? []} />
+            <YouWillLove
+              items={youWillLoveItems ?? []}
+              device={device}
+              caseType={caseType}
+            />
+            <FeaturesSection
+              blocks={featureBlocks ?? []}
+              group={featuresGroup(productForm, caseType)}
+            />
+          </LazyReveal>
         </div>
       ) : null}
     </div>
