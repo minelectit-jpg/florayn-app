@@ -64,22 +64,18 @@ const nextConfig: NextConfig = {
 
   images: {
     /*
-     * Serve the R2 artwork as-is instead of through Next's on-demand optimizer.
-     *
-     * The optimizer's cache (.next/cache/images) is per-container and ephemeral,
-     * so every deploy - and every not-yet-seen device / case type / new design -
-     * meant a shop grid of ~32 images all being fetched from R2 and re-encoded on
-     * the Singapore origin at once = 3-4s of blank cards. That does not scale to
-     * "we deploy constantly and add products". The R2 sources are already small
-     * webp (~20-35KB) with immutable/1-year cache, so Cloudflare edge-caches them
-     * at the Dhaka PoP and they never need re-optimizing. Trade-off: a card gets
-     * the 1200px source (~28KB) rather than a 6KB 384px variant, but they lazy-
-     * load, so only the few above the fold load first, and there is no cold-start
-     * storm on any device or after any deploy. (If per-card bytes ever matter,
-     * pre-generate small thumbnails in R2 and point the cards at those - still
-     * unoptimized, still no origin work.)
+     * Next's on-demand image optimizer IS used (it turns the 1200px ~37KB R2
+     * source into ~6-15KB responsive variants). The full-size unoptimized source
+     * was making a shop page download ~2.4MB of images = 5-7s on a Bangladesh
+     * connection - the dominant real-world slowness. The optimizer's "blank cards"
+     * cold-start that we saw earlier was caused by CF cache PURGES wiping the edge
+     * copies; we no longer purge, so the optimized `/_next/image` outputs stay
+     * cached at the Dhaka PoP across deploys and are served small + fast. New/
+     * un-warmed images optimize once at origin then edge-cache; warm the active
+     * shops after enabling this so the common views are already at the edge.
+     * minimumCacheTTL keeps the origin optimizer copy long-lived too.
      */
-    unoptimized: true,
+    minimumCacheTTL: 2678400, // 31 days
     remotePatterns: [
       { protocol: "https", hostname: "**.r2.dev" },
       { protocol: "https", hostname: "img.florayn.com" },
