@@ -26,7 +26,7 @@ import { resolveProductPage } from "@/lib/device-page"
 import {
   applyCaseTypePrices,
   listProducts,
-  PRODUCT_FIELDS_NOPRICE,
+  POOL_FIELDS,
   type StoreProduct,
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
@@ -221,7 +221,7 @@ export default async function ProductPage({ params }: Params) {
       ? listProducts({
           collection_id: [collectionId],
           limit: 100,
-          fields: PRODUCT_FIELDS_NOPRICE,
+          fields: POOL_FIELDS,
         })
       : Promise.resolve({ products: [] as StoreProduct[] }),
     getGalleryVideos(designSlug ?? ""),
@@ -299,7 +299,7 @@ export default async function ProductPage({ params }: Params) {
         const { products } = await listProducts({
           handle: featuredPicks,
           limit: featuredPicks.length,
-          fields: PRODUCT_FIELDS_NOPRICE,
+          fields: POOL_FIELDS,
         })
         const byHandle = new Map(products.map((p) => [p.handle, p]))
         return featuredPicks
