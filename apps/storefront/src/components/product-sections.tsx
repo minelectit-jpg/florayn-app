@@ -4,6 +4,11 @@ import DragScroll from "@/components/drag-scroll"
 import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
 
+/** Device/case-type NAME -> its URL slug ("iPhone 17 Pro Max" -> "iphone-17-pro-max").
+ *  Verified to match every live device + case-type slug exactly. */
+const slugify = (s?: string) =>
+  s ? s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : ""
+
 export type RelatedProduct = {
   id: string
   title: string
@@ -45,10 +50,20 @@ export function MoreDesigns({
               : null) ??
             (device ? item.imageByDevice?.[device] : null) ??
             item.thumbnail
+          // Carry the customer's current model + finish onto the link, so the
+          // design opens on what they were viewing instead of the default
+          // (iPhone 17 Pro Max / Signature). Only append the device when this
+          // design actually sells it; the ?case is honoured client-side if the
+          // design offers it, else the page snaps to a valid pair.
+          const dev = device && item.imageByDevice?.[device] ? slugify(device) : ""
+          const ct = slugify(caseType)
+          const href = dev
+            ? `/product/${item.handle}-${dev}/${ct ? `?case=${ct}` : ""}`
+            : `/product/${item.handle}/`
           return (
             <li key={item.id} className="shrink-0">
               <Link
-                href={`/product/${item.handle}/`}
+                href={href}
                 title={item.label}
                 className="block size-[108px] overflow-hidden rounded-[10px] border border-[#ececec] transition-colors hover:border-purple"
                 prefetch={false}
