@@ -120,7 +120,9 @@ export function shippingCost(district: string): number {
 export const PHONE_PATTERN = /^01[3-9]\d{8}$/
 
 export function normalizePhone(value: string): string {
-  let digits = value.replace(/[^\d]/g, "")
+  let digits = value.replace(/[০-৯]/g, (digit) =>
+    String(digit.charCodeAt(0) - "০".charCodeAt(0))
+  ).replace(/[^\d]/g, "")
   // Accept +8801XXXXXXXXX and 8801XXXXXXXXX as well.
   if (digits.startsWith("880")) {
     digits = digits.slice(3)

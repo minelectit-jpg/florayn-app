@@ -5,6 +5,69 @@ on:
     branches: [main, "codex/**"]
 
 jobs:
+  checkout-integration:
+    name: Checkout with isolated Medusa and PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: florayn_checkout_test_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d florayn_checkout_test_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      CHECKOUT_ISOLATED_TEST: "1"
+      DATABASE_URL: postgres://test:test@127.0.0.1:5432/florayn_checkout_test_ci?sslmode=disable
+      REDIS_URL: redis://127.0.0.1:6379/0
+      NODE_ENV: test
+      MEDUSA_DISABLE_TELEMETRY: "true"
+      JWT_SECRET: checkout-ci-only-not-for-deployment
+      COOKIE_SECRET: checkout-ci-only-not-for-deployment
+      STORE_CORS: http://localhost:8000
+      ADMIN_CORS: http://localhost:9000
+      AUTH_CORS: http://localhost:9000
+      # An empty URL would activate the warmer's deployed-site fallback.
+      STOREFRONT_URL: http://127.0.0.1:1
+      REVALIDATE_SECRET: ""
+      R2_ACCESS_KEY_ID: ""
+      R2_SECRET_ACCESS_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Migrate the disposable database without catalog seeding
+        working-directory: apps/backend
+        run: npx medusa db:migrate --skip-scripts
+      - name: Verify quotes, changed totals and exactly one COD order
+        working-directory: apps/backend
+        run: npx medusa exec ./src/scripts/verify-checkout-isolated.ts
+      - name: Verify the scoped checkout migration preflight and idempotence
+        working-directory: apps/backend
+        run: |
+          npx medusa exec ./src/scripts/migrate-checkout-settings.ts
+          npx medusa exec ./src/scripts/migrate-checkout-settings.ts apply Migration20260920194733
+
   regression:
     runs-on: ubuntu-latest
     services:

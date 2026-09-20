@@ -16,7 +16,7 @@ export default function SiteFooter({
   social: { label: string; href: string }[]
 }) {
   return (
-    <footer className="mt-24 border-t border-line bg-surface">
+    <footer data-site-footer className="mt-24 border-t border-line bg-surface">
       <div className="mx-auto w-full max-w-[1470px] px-[15px] py-14 md:px-[30px]">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {columns.map((column) => (

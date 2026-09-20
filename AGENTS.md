@@ -93,6 +93,10 @@ Read `PERFORMANCE.md` before changing storefront data/cache behavior. The
 selectors/prices/cart IDs, real Redis invalidation and actual Next.js caching.
 Run `npm run perf:check` for scoped sequential response benchmarks after deployment.
 
+Read `CHECKOUT.md` before changing checkout, cart, payment or checkout-admin
+settings. Preserve authoritative quotes, safe order retries and the isolated
+Medusa integration checks.
+
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
 ```bash

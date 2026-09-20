@@ -6,15 +6,15 @@ import { revalidatePath } from "next/cache"
 import { cartDiscount, getBundleConfig, type BundleLine } from "./bundles"
 import {
   placeOrder,
+  fetchCheckoutQuote,
   type CheckoutInput,
-  type PlacedOrder,
 } from "./checkout"
 import { getRegionId, sdk } from "./medusa"
 
 const CART_COOKIE = "florayn_cart_id"
 
 const CART_FIELDS =
-  "id,currency_code,subtotal,shipping_total,tax_total,total,item_total," +
+  "id,completed_at,currency_code,subtotal,item_subtotal,shipping_total,tax_total,total,item_total," +
   "*items,*items.variant,*items.variant.product,items.variant.product.metadata"
 
 export type CartItem = {
@@ -28,6 +28,7 @@ export type CartItem = {
     id: string
     title: string
     sku?: string | null
+    metadata?: Record<string, unknown> | null
     product?: {
       title: string
       handle: string
@@ -130,7 +131,10 @@ export async function getCart(): Promise<Cart | null> {
     const { cart } = await sdk.store.cart.retrieve(cartId, {
       fields: CART_FIELDS,
     })
+    if (cart.completed_at) return null
     const typed = cart as unknown as Cart
+    // Medusa subtotal includes shipping once checkout has attached a method.
+    typed.subtotal = Number((cart as unknown as { item_subtotal?: number }).item_subtotal ?? typed.subtotal)
     typed.bundleDiscount = await computeBundleDiscount(typed)
     return typed
   } catch {
@@ -148,8 +152,8 @@ async function getOrCreateCartId(): Promise<string> {
   const existing = await readCartId()
   if (existing) {
     try {
-      await sdk.store.cart.retrieve(existing, { fields: "id" })
-      return existing
+      const { cart } = await sdk.store.cart.retrieve(existing, { fields: "id,completed_at" })
+      if (!cart.completed_at) return existing
     } catch {
       // Fall through and create a new one.
     }
@@ -256,15 +260,13 @@ export async function removeLineItem(lineId: string): Promise<CartSummary> {
  * Places the order for the cart in the cookie.
  *
  * The cart id is httpOnly, so the checkout form never sees it and cannot post
- * an order for someone else's cart. On success the cookie is cleared, so
- * returning to the shop starts a fresh cart rather than re-showing items that
- * have already been ordered.
+ * an order for someone else's cart. Retain the completed capability so a lost
+ * Server Action response can recover the order. Reads hide completed carts;
+ * the next add creates a fresh cart and replaces this cookie.
  */
 export async function submitOrder(
   input: Omit<CheckoutInput, "cart_id">
-): Promise<
-  { ok: true; order: PlacedOrder } | { ok: false; errors: Record<string, string> }
-> {
+): ReturnType<typeof placeOrder> {
   const cartId = await readCartId()
   if (!cartId) {
     return { ok: false, errors: { form: "Your cart is empty." } }
@@ -273,10 +275,15 @@ export async function submitOrder(
   const result = await placeOrder({ ...input, cart_id: cartId })
 
   if (result.ok) {
-    const store = await cookies()
-    store.delete(CART_COOKIE)
     revalidatePath("/cart")
   }
 
   return result
+}
+
+/** The cart capability stays in its httpOnly cookie, including quote requests. */
+export async function quoteCheckout(district: string) {
+  const cartId = await readCartId()
+  if (!cartId) return { ok: false as const, errors: { form: "Your cart is empty. Please return to your bag." } }
+  return fetchCheckoutQuote(cartId, district)
 }

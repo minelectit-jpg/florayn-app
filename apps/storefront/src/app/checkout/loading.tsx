@@ -1,8 +1,9 @@
 import Skeleton from "@/components/skeleton"
+import "./checkout.css"
 
 export default function LoadingCheckout() {
   return (
-    <div className="space-y-8">
+    <div data-checkout className="space-y-8">
       <Skeleton className="h-10 w-48" />
       <div className="grid gap-10 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-5">

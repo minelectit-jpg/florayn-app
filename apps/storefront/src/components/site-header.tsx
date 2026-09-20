@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ArrowLeft, LockKeyhole } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
@@ -54,6 +55,16 @@ export default function SiteHeader({
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
   }, [])
+
+  if (pathname === "/checkout" || pathname === "/checkout/") {
+    return <header className="border-b border-line bg-paper">
+      <div className="mx-auto grid max-w-[1240px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-[15px] py-5 md:px-[30px] md:py-6">
+        <Link href="/cart/" className="flex items-center gap-2 text-xs text-ink-muted"><ArrowLeft size={16} aria-hidden="true" /><span className="hidden sm:inline">Back to bag</span><span className="sm:hidden">Bag</span></Link>
+        <Link href="/" className="display text-[1.5rem] tracking-[0.12em]">FLORAYN</Link>
+        <span className="flex items-center justify-end gap-1.5 text-[11px] text-ink-muted"><LockKeyhole size={14} aria-hidden="true" /><span className="hidden sm:inline">Checkout</span></span>
+      </div>
+    </header>
+  }
 
   return (
     <>

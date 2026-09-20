@@ -1,71 +1,40 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { Check, LockKeyhole } from "lucide-react"
 
 import CheckoutForm from "@/components/checkout-form"
 import { getCart } from "@/lib/cart"
-import { getDistricts } from "@/lib/checkout"
+import { getCheckoutSettings, getDistricts } from "@/lib/checkout"
+import { checkoutLines } from "@/lib/checkout-form-data"
+import "./checkout.css"
 
-export const metadata = { title: "Checkout" }
+export const metadata = { title: "Checkout", robots: { index: false, follow: false } }
 export const dynamic = "force-dynamic"
 
 export default async function CheckoutPage() {
-  const [cart, districts] = await Promise.all([getCart(), getDistricts()])
+  const [cart, districts, settings] = await Promise.all([getCart(), getDistricts(), getCheckoutSettings()])
   const items = cart?.items ?? []
+  if (!items.length) redirect("/cart/")
 
-  if (!items.length) {
-    redirect("/cart/")
-  }
-
-  if (!districts) {
-    return (
-      <div className="space-y-4">
-        <h1 className="display text-4xl">Checkout</h1>
-        <p className="text-sm text-danger">
-          Could not load delivery districts. The backend may be down - please
-          try again in a moment.
-        </p>
-        <Link href="/cart/" className="text-sm text-ink-muted underline underline-offset-4 hover:text-ink">
-          Back to cart
-        </Link>
-      </div>
-    )
-  }
+  if (!districts) return (
+    <div data-checkout className="checkout-unavailable">
+      <h1 className="display text-3xl">Let’s get you checked out</h1>
+      <p>Delivery options could not load. Your bag is still saved.</p>
+      <a href="/checkout/" className="checkout-retry">Try again</a>
+      <Link href="/cart/" className="underline underline-offset-4">Return to bag</Link>
+    </div>
+  )
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">Checkout</h1>
-        <Link
-          href="/cart/"
-          className="eyebrow transition-colors hover:text-ink"
-        >
-          Back to cart
-        </Link>
+    <div data-checkout className="checkout-page">
+      <div className="checkout-intro">
+        <nav aria-label="Checkout progress"><Link href="/cart/"><Check size={13} aria-hidden="true" /> Bag</Link><span aria-hidden="true">/</span><span aria-current="step">Checkout</span><span aria-hidden="true">/</span><span>Confirmation</span></nav>
+        <h1>{settings.heading}</h1>
+        <p>{settings.description}</p>
+        <span className="checkout-guest"><LockKeyhole size={14} aria-hidden="true" /> Guest checkout · No account needed</span>
       </div>
-
-      <ul className="divide-y divide-line border-y border-line text-sm">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-3 py-3">
-            <span className="min-w-0 flex-1">
-              {item.variant?.product?.title ?? item.title}
-              <span className="text-ink-muted">
-                {" "}
-                - {item.variant?.title}
-              </span>
-            </span>
-            <span className="eyebrow">
-              &times; {item.quantity}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <CheckoutForm
-        districts={districts}
-        subtotal={cart?.subtotal ?? 0}
-        bundleDiscount={cart?.bundleDiscount ?? 0}
-        currencyCode={cart?.currency_code ?? "bdt"}
-      />
+      <CheckoutForm districts={districts} items={checkoutLines(items)} subtotal={cart?.subtotal ?? 0}
+        bundleDiscount={cart?.bundleDiscount ?? 0} currencyCode={cart?.currency_code ?? "bdt"} settings={settings} />
     </div>
   )
 }

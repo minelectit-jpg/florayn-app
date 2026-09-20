@@ -14,8 +14,9 @@ import { useEffect, useRef } from "react"
  * visible or focused, and once a minute, and reloads once if they differ - so a
  * stale tab quietly updates itself before the user hits either failure.
  *
- * It is deliberately silent and defensive: any network hiccup is ignored, and it
- * never reloads more than once.
+ * Checkout delegates a mismatch to its form instead of silently discarding
+ * delivery details or interrupting an order. Other routes still reload at most
+ * once for a live build. Network hiccups are ignored.
  *
  * `buildId` is passed from the server layout (which reads it at runtime) rather
  * than read from process.env here: next.config `env` does not reliably inline a
@@ -40,8 +41,15 @@ export default function BuildWatcher({ buildId }: { buildId?: string }) {
         const res = await fetch("/api/build-id/", { cache: "no-store" })
         if (!res.ok) return
         const data = (await res.json()) as { id?: string }
+        if (cancelled || reloadingRef.current) return
         const live = data?.id
         if (live && live !== mine) {
+          if (window.location.pathname === "/checkout" || window.location.pathname === "/checkout/") {
+            // Do not consume the reload marker: the form preserves its draft
+            // and asks the customer to reload explicitly when no order is busy.
+            window.dispatchEvent(new CustomEvent("florayn:checkout-update"))
+            return
+          }
           // Reload AT MOST once per live server build. Persist the id we
           // reloaded for in sessionStorage: if the page we get back is still the
           // old build (e.g. an edge-cached HTML the CDN has not refreshed yet, or

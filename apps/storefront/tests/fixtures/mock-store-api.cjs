@@ -1,4 +1,5 @@
 const http = require("node:http")
+const { createHash } = require("node:crypto")
 
 // Local, disposable fixtures only. No request is forwarded to a real service.
 const image = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="540"><rect width="540" height="540" fill="#eee6fa"/><rect x="165" y="60" width="210" height="420" rx="36" fill="#8d66b1"/><text x="270" y="285" text-anchor="middle" fill="white" font-size="26">Test case</text></svg>')
@@ -43,6 +44,54 @@ const content = {
 const bundle = { settings: { heading: "Choose a pack", single_label: "Single", free_shipping_threshold: 3000, scope: "cases", is_active: true, matching_set_enabled: true, matching_set_discount: 250, matching_set_default_airpods: "AirPods Pro 3" }, tiers: [{ id: "tier_two", quantity: 2, badge: null, discount_amount: 200, min_pct: 0, max_pct: 0 }] }
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
 const carts = new Map()
+const orders = new Map()
+const districts = ["Chattogram", "Dhaka", "Gazipur", "Narayanganj", "Rajshahi", "Sylhet"]
+const checkoutSettings = {
+  heading: "Checkout", description: "Enter your delivery details to place your order.",
+  delivery_note: "", support_phone: "+8801310007055", support_label: "Need help?", show_order_note: true,
+}
+const checkoutControl = { price_delta: 0, fail_quote_once: false, fail_complete_once: false, lose_complete_response_once: false }
+
+function recalculateCart(cart) {
+  for (const item of cart.items) item.unit_price = item.fixture_base_price + checkoutControl.price_delta
+  cart.item_subtotal = cart.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
+  cart.subtotal = cart.item_subtotal + (cart.shipping_subtotal || 0)
+  cart.total = cart.item_subtotal + (cart.shipping_total || 0)
+}
+
+// Disposable arithmetic is intentionally limited to this fixture's one tier.
+// The backend regression suite verifies the real Medusa promotion workflows.
+function quoteCart(cart, district) {
+  recalculateCart(cart)
+  const phoneItems = cart.items.filter((item) => item.variant.product.metadata.form === "phone")
+  const phoneQuantity = phoneItems.reduce((count, item) => count + item.quantity, 0)
+  let discount = Math.floor(phoneQuantity / 2) * 200
+  for (const slug of new Set(cart.items.map((item) => item.variant.product.metadata.design_slug))) {
+    const byForm = (form) => cart.items.filter((item) => item.variant.product.metadata.design_slug === slug && item.variant.product.metadata.form === form)
+      .reduce((sum, item) => sum + item.quantity, 0)
+    discount += Math.min(byForm("phone"), byForm("airpods")) * 250
+  }
+  discount = Math.min(discount, cart.item_subtotal)
+  cart.shipping_subtotal = district === "Dhaka" ? 60 : 100
+  cart.shipping_total = cart.item_subtotal - discount >= bundle.settings.free_shipping_threshold ? 0 : cart.shipping_subtotal
+  cart.subtotal = cart.item_subtotal + cart.shipping_subtotal
+  cart.total = cart.item_subtotal - discount + cart.shipping_total
+  let allocated = 0
+  const items = cart.items.map((item, index) => {
+    const subtotal = item.quantity * item.unit_price
+    const saving = index === cart.items.length - 1 ? discount - allocated : Math.round(discount * subtotal / cart.item_subtotal * 100) / 100
+    allocated += saving
+    return { id: item.id, title: item.title, variant_title: item.variant.title, quantity: item.quantity,
+      unit_price: item.unit_price, subtotal, total: Math.round((subtotal - saving) * 100) / 100, thumbnail: item.thumbnail }
+  })
+  const quote = { currency_code: "bdt", subtotal: cart.item_subtotal, discount_total: discount,
+    bundle_discount: discount, shipping_total: cart.shipping_total, shipping_subtotal: cart.shipping_subtotal,
+    tax_total: 0, total: cart.total, free_shipping: cart.shipping_total === 0,
+    shipping_option_id: district === "Dhaka" ? "ship_inside_test" : "ship_outside_test",
+    shipping_label: district === "Dhaka" ? "Inside Dhaka" : "Outside Dhaka", district,
+    item_count: items.reduce((sum, item) => sum + item.quantity, 0), payment_method: "cash_on_delivery", items }
+  return { version: createHash("sha256").update(JSON.stringify({ cart_id: cart.id, ...quote })).digest("hex"), ...quote }
+}
 const metrics = []
 let revision = 0
 let stockRevision = 0
@@ -57,7 +106,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/__audit/health") return send(res, { fixture: true })
   if (url.pathname === "/__audit/metrics") return send(res, metrics)
   if (url.pathname === "/__test/status") return send(res, {
-    revision, stockRevision,
+    revision, stockRevision, orderCount: orders.size,
     requests: metrics.reduce((counts, item) => {
       counts[item.path] = (counts[item.path] ?? 0) + 1
       return counts
@@ -67,6 +116,60 @@ const server = http.createServer(async (req, res) => {
   let body = ""
   for await (const chunk of req) body += chunk
   const data = body ? JSON.parse(body) : {}
+  if (url.pathname === "/__test/checkout" && req.method === "POST") {
+    if (!data || typeof data !== "object" || Array.isArray(data) ||
+        Object.keys(data).some((key) => !Object.hasOwn(checkoutControl, key)) ||
+        Object.entries(data).some(([key, value]) => key === "price_delta" ? !Number.isFinite(value) || value < 0 || value > 1000 : typeof value !== "boolean")) {
+      return send(res, { message: "Invalid local checkout control" }, 400)
+    }
+    Object.assign(checkoutControl, data)
+    return send(res, { fixture: true, ...checkoutControl })
+  }
+  if (["/store/checkout/quote", "/store/checkout"].includes(url.pathname) && req.method === "POST") {
+    const complete = url.pathname === "/store/checkout"
+    const failureKey = complete ? "fail_complete_once" : "fail_quote_once"
+    if (checkoutControl[failureKey]) {
+      checkoutControl[failureKey] = false
+      return send(res, { errors: { form: "Local test connection failure. Please try again." } }, 503)
+    }
+    const cart = carts.get(data.cart_id)
+    if (!cart) return send(res, { errors: { form: "Your cart could not be found. Please return to your bag." } }, 404)
+    if (complete && cart.fixture_order_id) return send(res, { order: orders.get(cart.fixture_order_id) })
+    if (cart.completed_at || !cart.items.length) return send(res, { errors: { form: "Your cart is empty. Please return to your bag." } }, 400)
+    if (!districts.includes(data.district)) return send(res, { errors: { district: "Select your delivery district." } }, 400)
+    if (complete) {
+      const errors = {}
+      for (const key of ["full_name", "phone", "address", "area"]) {
+        if (typeof data[key] !== "string" || !data[key].trim()) errors[key] = `Enter ${key.replaceAll("_", " ")}.`
+      }
+      if (Object.keys(errors).length) return send(res, { errors }, 400)
+    }
+    const quote = quoteCart(cart, data.district)
+    if (!complete) return send(res, { quote })
+    if (data.quote_version !== quote.version) {
+      return send(res, { errors: { form: "Your order total has changed. Please review the updated total and place your order again." }, quote }, 409)
+    }
+    const order = { id: `order_test_${orders.size + 1}`, display_id: 1001 + orders.size,
+      created_at: new Date().toISOString(), currency_code: "bdt", subtotal: quote.subtotal,
+      shipping_total: quote.shipping_total, total: quote.total, payment_method: "Cash on delivery",
+      free_shipping: quote.free_shipping, shipping_method: quote.shipping_label,
+      items: quote.items.map((item) => ({ ...item, sku: null })),
+      delivery: { name: data.full_name, address: data.address, area: data.area, district: data.district, phone: data.phone } }
+    orders.set(order.id, order)
+    cart.fixture_order_id = order.id
+    cart.completed_at = order.created_at
+    if (checkoutControl.lose_complete_response_once) {
+      checkoutControl.lose_complete_response_once = false
+      req.socket.destroy()
+      return
+    }
+    return send(res, { order })
+  }
+  const orderMatch = url.pathname.match(/^\/store\/checkout\/(order_test_\d+)$/)
+  if (orderMatch && req.method === "GET") {
+    const order = orders.get(orderMatch[1])
+    return send(res, order ? { order } : { message: "No test order" }, order ? 200 : 404)
+  }
   if (url.pathname === "/__test/revision" && req.method === "POST") {
     if (!Number.isInteger(data.revision) || data.revision < 0 ||
         (data.stockRevision !== undefined && (!Number.isInteger(data.stockRevision) || data.stockRevision < 0))) {
@@ -83,6 +186,8 @@ const server = http.createServer(async (req, res) => {
     case "/store/stock": return send(res, { stock: Object.fromEntries(Object.entries(stock).map(([key, quantity]) => [key, quantity + stockRevision])) })
     case "/store/content": return send(res, { ...content, footerNote: `Local verification revision ${revision}` })
     case "/store/bundles": return send(res, bundle)
+    case "/store/districts": return send(res, { districts, count: districts.length, inside_dhaka: ["Dhaka"], shipping: { inside_dhaka: 60, outside_dhaka: 100 } })
+    case "/store/checkout-settings": return send(res, { settings: checkoutSettings })
     case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"] })
     case "/store/content/gallery-videos": return send(res, { videos: {} })
     case "/store/seo": return send(res, { templates: { title: "{design} {device} Case", description: "{design} test case for {device}", heading: "{design} {device} Case", fit_copy_enabled: true }, overrides: [] })
@@ -136,23 +241,37 @@ const server = http.createServer(async (req, res) => {
       return send(res, { variants, count: variants.length, offset: 0, limit: Number(url.searchParams.get('limit') || 100) })
     }
     case "/store/carts": {
-      const cart = { id: `cart_test_${carts.size}`, currency_code: "bdt", items: [], subtotal: 0, total: 0 }
+      const cart = { id: `cart_test_${carts.size}`, currency_code: "bdt", items: [], subtotal: 0, item_subtotal: 0, total: 0 }
       carts.set(cart.id, cart)
       return send(res, { cart })
     }
   }
   if (url.pathname.startsWith("/store/collection-pages/")) return send(res, { page: null })
-  const cartMatch = url.pathname.match(/^\/store\/carts\/([^/]+)(\/line-items)?$/)
+  const cartMatch = url.pathname.match(/^\/store\/carts\/([^/]+)(\/line-items)?(?:\/([^/]+))?$/)
   if (cartMatch) {
     const cart = carts.get(cartMatch[1])
     if (!cart) return send(res, { message: "No test cart" }, 404)
+    if (cartMatch[2] && cart.completed_at) return send(res, { message: "Test cart completed" }, 409)
+    if (cartMatch[3]) {
+      const item = cart.items.find((line) => line.id === cartMatch[3])
+      if (!item) return send(res, { message: "No test cart item" }, 404)
+      if (req.method === "DELETE") cart.items = cart.items.filter((line) => line.id !== item.id)
+      else if (req.method === "POST" && Number.isInteger(data.quantity) && data.quantity > 0) item.quantity = data.quantity
+      else return send(res, { message: "Invalid item quantity" }, 400)
+      recalculateCart(cart)
+      return send(res, req.method === "DELETE" ? { id: item.id, object: "line-item", deleted: true, parent: cart } : { cart })
+    }
     if (cartMatch[2] && req.method === "POST") {
       const product = products.find((p) => p.variants.some((v) => v.id === data.variant_id))
       const variant = product?.variants.find((v) => v.id === data.variant_id)
       if (!variant) return send(res, { message: "Unknown test variant" }, 400)
-      cart.items.push({ id: `item_${cart.items.length}`, title: product.title, quantity: data.quantity, unit_price: variant.calculated_price.calculated_amount, thumbnail: product.thumbnail, variant: { ...variant, product } })
-      cart.subtotal = cart.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
-      cart.total = cart.subtotal
+      if (!Number.isInteger(data.quantity) || data.quantity < 1) return send(res, { message: "Invalid item quantity" }, 400)
+      const existing = cart.items.find((item) => item.variant.id === variant.id)
+      if (existing) existing.quantity += data.quantity
+      else cart.items.push({ id: `item_${cart.id}_${metrics.length}`, title: product.title, quantity: data.quantity,
+        unit_price: variant.calculated_price.calculated_amount, fixture_base_price: variant.calculated_price.calculated_amount,
+        thumbnail: product.thumbnail, variant: { ...variant, product } })
+      recalculateCart(cart)
     }
     return send(res, { cart })
   }

@@ -1,13 +1,16 @@
 import {
   createPromotionsWorkflow,
+  createPromotionRulesWorkflow,
+  updatePromotionsWorkflow,
   updateCartPromotionsWorkflow,
 } from "@medusajs/medusa/core-flows"
-import { PromotionActions } from "@medusajs/framework/utils"
+import { Modules, PromotionActions, RuleType } from "@medusajs/framework/utils"
 
 import { BUNDLES_MODULE } from "."
 import { getBundleConfig, withMatchingSetDefaults } from "./config"
 import { cartBundleDiscount, matchingSetDiscount } from "./pricing"
 import { DEVICES } from "../catalog/data/devices"
+import { checkoutCartSnapshot } from "../../lib/checkout-cart-snapshot"
 
 /*
  * Device name -> whether it is a phone case. A line's variant title is the
@@ -37,13 +40,9 @@ export async function applyBundleDiscount({
   query: any
   cartId: string
   logger: { error: (m: string) => void; info: (m: string) => void }
-}): Promise<{ discount: number; freeShipping: boolean }> {
+}): Promise<{ discount: number; freeShipping: boolean; cartSnapshot: string }> {
   const service: any = scope.resolve(BUNDLES_MODULE)
   const { settings, tiers } = await getBundleConfig(service)
-
-  if (!settings.is_active) {
-    return { discount: 0, freeShipping: false }
-  }
 
   const enabled = tiers
     .filter((tier: any) => tier.is_enabled)
@@ -60,6 +59,7 @@ export async function applyBundleDiscount({
       "id",
       "currency_code",
       "subtotal",
+      "item_subtotal",
       "items.id",
       "items.quantity",
       "items.unit_price",
@@ -68,12 +68,13 @@ export async function applyBundleDiscount({
       "items.variant_title",
       // Product form + design, used to match a phone + AirPods set.
       "items.product.metadata",
+      "promotions.code",
     ],
     filters: { id: cartId },
   })
   const cart = carts?.[0]
   if (!cart) {
-    return { discount: 0, freeShipping: false }
+    return { discount: 0, freeShipping: false, cartSnapshot: "[]" }
   }
 
   const lines = (cart.items ?? []).map((item: any) => ({
@@ -81,32 +82,34 @@ export async function applyBundleDiscount({
     quantity: Number(item.quantity ?? 0),
     // Unknown titles are treated as NOT a case, so scope "cases" never
     // discounts something it cannot confirm is a phone case.
-    is_case: CASE_BY_DEVICE_NAME.get(item.variant_title) === true,
+    is_case: item.product?.metadata?.form === "phone" ||
+      String(item.variant_title ?? "").split(/\s*\/\s*/).some((name) => CASE_BY_DEVICE_NAME.get(name) === true),
     form: (item.product?.metadata?.form as string) ?? undefined,
     design: (item.product?.metadata?.design_slug as string) ?? undefined,
   }))
 
   let discount = 0
-  if (enabled.length) {
+  if (settings.is_active && enabled.length) {
     discount += cartBundleDiscount(lines, enabled, { scope: settings.scope })
   }
 
   const ms = withMatchingSetDefaults(settings)
   discount += matchingSetDiscount(lines, {
-    enabled: !!ms.matching_set_enabled,
+    enabled: !!settings.is_active && !!ms.matching_set_enabled,
     discount: Number(ms.matching_set_discount ?? 0),
   })
 
-  const subtotal = Number(cart.subtotal ?? 0)
+  const subtotal = Number(cart.item_subtotal ?? lines.reduce((sum: number, line: any) => sum + line.unit_price * line.quantity, 0))
   const threshold = Number(settings.free_shipping_threshold ?? 0)
   // The threshold is judged on what the customer actually pays for the goods.
-  const freeShipping = threshold > 0 && subtotal - discount >= threshold
+  discount = Math.min(Math.max(0, subtotal), discount)
+  const freeShipping = !!settings.is_active && threshold > 0 && subtotal - discount >= threshold
 
   const codes: string[] = []
 
   if (discount > 0) {
     const code = `BUNDLE-${cartId}`
-    await ensurePromotion(scope, logger, {
+    await ensurePromotion(scope, {
       code,
       application_method: {
         type: "fixed",
@@ -114,13 +117,14 @@ export async function applyBundleDiscount({
         value: discount,
         currency_code: cart.currency_code,
       },
+      rules: [{ attribute: "id", operator: "eq", values: [cartId] }],
     })
     codes.push(code)
   }
 
   if (freeShipping) {
     const code = `FREESHIP-${cartId}`
-    await ensurePromotion(scope, logger, {
+    await ensurePromotion(scope, {
       code,
       application_method: {
         type: "percentage",
@@ -130,33 +134,45 @@ export async function applyBundleDiscount({
         max_quantity: 1,
         currency_code: cart.currency_code,
       },
+      rules: [{ attribute: "id", operator: "eq", values: [cartId] }],
     })
     codes.push(code)
   }
 
-  if (codes.length) {
-    await updateCartPromotionsWorkflow(scope).run({
-      input: { cart_id: cartId, promo_codes: codes, action: PromotionActions.ADD },
-    })
-    logger.info(
-      `Checkout: applied ${codes.join(", ")} to ${cartId} (discount ${discount})`
-    )
-  }
+  // Replace only our cart-specific offers; preserve any genuine Medusa coupon.
+  // ADD alone leaves stale savings/free shipping on a reduced or edited cart.
+  const otherCodes = (cart.promotions ?? []).map((p: any) => p.code)
+    .filter((code: string) => code !== `BUNDLE-${cartId}` && code !== `FREESHIP-${cartId}`)
+  await updateCartPromotionsWorkflow(scope).run({
+    input: { cart_id: cartId, promo_codes: [...otherCodes, ...codes], action: PromotionActions.REPLACE },
+  })
 
-  return { discount, freeShipping }
+  return { discount, freeShipping, cartSnapshot: checkoutCartSnapshot(cart) }
 }
 
 /**
- * Create the promotion, tolerating one that is already there. A shopper who
- * submits checkout twice - a double click, a retried request - must not be
- * blocked by a code left behind from the first attempt.
+ * Keep a cart's existing promotion synchronized after changes and retries.
+ * The caller holds the checkout lock while creating or updating these codes.
  */
 async function ensurePromotion(
   scope: any,
-  logger: { error: (m: string) => void },
   promotion: Record<string, unknown>
 ) {
-  try {
+  const service = scope.resolve(Modules.PROMOTION)
+  const [existing] = await service.listPromotions({ code: promotion.code }, { take: 1, relations: ["rules", "rules.values"] })
+  if (existing) {
+    const { rules, ...update } = promotion
+    await updatePromotionsWorkflow(scope).run({
+      input: { promotionsData: [{ id: existing.id, ...update } as any] },
+    })
+    // Older codes had no cart restriction. Rules have a dedicated workflow;
+    // they are not nested updates accepted by updatePromotionsWorkflow.
+    if (!existing.rules?.some((rule: any) => rule.attribute === "id")) {
+      await createPromotionRulesWorkflow(scope).run({ input: {
+        rule_type: RuleType.RULES, data: { id: existing.id, rules: rules as any },
+      } })
+    }
+  } else {
     await createPromotionsWorkflow(scope).run({
       input: {
         promotionsData: [
@@ -164,12 +180,5 @@ async function ensurePromotion(
         ],
       },
     })
-  } catch (error: any) {
-    const message = String(error?.message ?? error)
-    // Anything other than "it already exists" is a real problem.
-    if (!/already exists|duplicate|unique/i.test(message)) {
-      throw error
-    }
-    logger.error(`Bundle promotion already present, reusing: ${message}`)
   }
 }
