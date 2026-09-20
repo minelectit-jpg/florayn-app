@@ -56,6 +56,8 @@ export default function ProductView({
   featureBlocks,
   productForm,
   galleryVideos,
+  simple = false,
+  optionLabel,
 }: {
   pagePath: string
   matrix: ProductVariantMatrix
@@ -99,6 +101,14 @@ export default function ProductView({
   productForm?: string | null
   /** Design gallery videos, keyed by case type; shown first when one matches. */
   galleryVideos?: GalleryVideoMap
+  /**
+   * Simple mode: a non-case product (e.g. a StickPad) rendered through this same
+   * page. Its single option's values are the tiles (colours) and there is no
+   * device selector or multi-buy widget, so the store keeps ONE product page.
+   */
+  simple?: boolean
+  /** The option label for the simple-mode tiles (e.g. "Color"). */
+  optionLabel?: string
 }) {
   const [hydratedPath, setHydratedPath] = useState<string | null>(null)
   useEffect(() => { setHydratedPath(pagePath) }, [pagePath])
@@ -250,6 +260,8 @@ export default function ProductView({
               ) : null
             }
             shipping={shipping}
+            simple={simple}
+            optionLabel={optionLabel}
           />
         </div>
 

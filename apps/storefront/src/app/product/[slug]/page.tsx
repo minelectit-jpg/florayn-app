@@ -6,7 +6,6 @@ import {
   type RecommendedItem,
   type RecommendedVariant,
 } from "@/components/recommended-for-you"
-import RegularProductView from "@/components/regular-product-view"
 import {
   PairsWellWith,
   ShippingNote,
@@ -30,7 +29,7 @@ import {
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
-import { productViewDesigns, productViewMatrix, productViewVariants } from "@/lib/product-view-data"
+import { buildSimpleMatrix, productViewDesigns, productViewMatrix, productViewVariants } from "@/lib/product-view-data"
 
 type Params = {
   params: Promise<{ slug: string }>
@@ -199,23 +198,61 @@ export default async function ProductPage({ params }: Params) {
   const priceByCaseType = new Map(caseTypes.map((c) => [c.name, c.price]))
   applyCaseTypePrices(product, priceByCaseType)
 
-  // A regular product (no Case Type + Device options) - e.g. a manually-added
-  // one-off - renders as a plain product page instead of the linked selectors.
+  // A non-case product (a StickPad, a one-off accessory) renders through the
+  // SAME ProductView, so the store has ONE product-page type. Its single option's
+  // values become the tiles (e.g. colours) - no device selector, no multi-buy
+  // packs - and the Features band still keys off the form ("Sticky Pad").
   if (!(matrix.caseTypes.length && matrix.devices.length)) {
+    const simple = buildSimpleMatrix(product)
+    const simpleFacts = [
+      ...(product.collection
+        ? [{ label: "Collection", value: product.collection.title }]
+        : []),
+      { label: "Product", value: designName },
+      ...(simple.optionTitle && simple.values.length > 1
+        ? [{ label: simple.optionTitle, value: simple.values.join(", ") }]
+        : []),
+    ]
     return (
       <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
-        <RegularProductView
+        <ProductView
           pagePath={`/product/${slug}/`}
-          product={product}
-          featureBlocks={featureBlocks}
+          matrix={simple.matrix}
+          variants={productViewVariants(product.variants ?? [])}
+          families={families}
+          stock={stock}
+          fallbackImages={(product.images ?? []).map((i) => i.url)}
+          designName={designName}
+          productHandle={product.handle}
+          productTitle={product.title}
           collection={
             product.collection
-              ? {
-                  title: product.collection.title,
-                  handle: product.collection.handle,
-                }
+              ? { title: product.collection.title, handle: product.collection.handle }
               : null
           }
+          deviceName={null}
+          initialCaseType={simple.values[0] ?? ""}
+          initialDevice=""
+          designData={productViewDesigns([], [])}
+          bundleConfig={null}
+          caseTypeRecords={[]}
+          bundleAirpods={null}
+          shipping={<ShippingNote />}
+          tabs={
+            <ProductTabs
+              description={product.description}
+              caseTypeName={null}
+              caseTypeDescription={product.description}
+              facts={simpleFacts}
+              designName={designName}
+            />
+          }
+          pairs={null}
+          recommendedItems={[]}
+          featureBlocks={featureBlocks}
+          productForm={(product.metadata?.form as string) ?? null}
+          simple
+          optionLabel={simple.optionTitle ?? undefined}
         />
       </article>
     )

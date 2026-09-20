@@ -74,6 +74,8 @@ export default function ProductBuyBox({
   priceForCaseType,
   moreDesigns,
   shipping,
+  simple = false,
+  optionLabel,
 }: {
   matrix: ProductVariantMatrix
   /** The variant for the current (caseType, device) pair, or null. */
@@ -104,6 +106,15 @@ export default function ProductBuyBox({
   priceForCaseType: (caseType: string) => number | null
   moreDesigns?: ReactNode
   shipping?: ReactNode
+  /**
+   * Simple mode: a non-case product (e.g. a StickPad with a Color option). The
+   * device drawer and the multi-buy pack widget are hidden, and the option's
+   * values are shown as the tiles under `optionLabel` (e.g. "COLOR"). The same
+   * gallery, tiles, price and add-to-cart serve it, so there is one page type.
+   */
+  simple?: boolean
+  /** The tile heading in simple mode (the option's title, e.g. "Color"). */
+  optionLabel?: string
 }) {
   const router = useRouter()
   const { add } = useCart()
@@ -168,7 +179,7 @@ export default function ProductBuyBox({
     try {
       await add(selected.id, qty, {
         productTitle,
-        variantTitle: `${caseType} / ${device}`,
+        variantTitle: simple ? caseType : `${caseType} / ${device}`,
         unitPrice: price?.calculated_amount ?? 0,
         thumbnail,
       })
@@ -191,7 +202,7 @@ export default function ProductBuyBox({
         qty,
         {
           productTitle,
-          variantTitle: `${caseType} / ${device}`,
+          variantTitle: simple ? caseType : `${caseType} / ${device}`,
           unitPrice: price?.calculated_amount ?? 0,
           thumbnail,
         },
@@ -221,7 +232,9 @@ export default function ProductBuyBox({
       </p>
 
       {/* Pack selector (Single / 2-pack / 3-pack), florayn's "get more save
-          more" widget - sits under the price, above the option pickers. */}
+          more" widget - sits under the price, above the option pickers. A
+          simple accessory (StickPad) has no multi-buy tiers, so it is hidden. */}
+      {!simple ? (
       <PackSelector
         config={bundleConfig}
         unitPrice={price?.calculated_amount ?? 0}
@@ -237,10 +250,13 @@ export default function ProductBuyBox({
         device={device}
         caseType={caseType}
       />
+      ) : null}
 
       {/* DEVICE - opens the same florayn SELECT MODEL drawer as the shop, but
           picks the device in place (no navigation). Order matches florayn:
-          Device, then More designs, then Case type. */}
+          Device, then More designs, then Case type. Hidden for a simple
+          accessory (StickPad), which has no device. */}
+      {!simple ? (
       <div className="mt-6">
         <p className="fl-pdp-label">DEVICE</p>
         <button
@@ -279,16 +295,18 @@ export default function ProductBuyBox({
           }}
         />
       </div>
+      ) : null}
 
       {moreDesigns}
 
-      {/* CASE TYPE - in-page tiles, below Device + More designs to match
-          florayn. A case type not sold for the selected device is disabled
-          rather than hidden, so the range stays visible. */}
+      {/* CASE TYPE tiles (image + name + price). In simple mode these are the
+          product's own option values (e.g. StickPad colours) under the option
+          label, and they wrap so eight swatches flow onto two rows. A case type
+          not sold for the selected device is disabled rather than hidden. */}
       {matrix.caseTypes.length > 1 ? (
         <section className="mt-6">
-          <p className="fl-pdp-label">CASE TYPE</p>
-          <ul className="flex gap-[8px] md:gap-[10px]">
+          <p className="fl-pdp-label">{simple ? (optionLabel ?? "Options").toUpperCase() : "CASE TYPE"}</p>
+          <ul className={simple ? "flex flex-wrap gap-[8px] md:gap-[10px]" : "flex gap-[8px] md:gap-[10px]"}>
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -296,7 +314,7 @@ export default function ProductBuyBox({
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
-                <li key={ct} className="min-w-0 flex-1">
+                <li key={ct} className={simple ? "min-w-[84px] flex-[1_1_84px]" : "min-w-0 flex-1"}>
                   <button
                     type="button"
                     onClick={() => onSelectCaseType(ct)}

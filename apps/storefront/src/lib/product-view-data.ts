@@ -2,7 +2,7 @@ import type { PackDesign } from "@/components/choose-design-modal"
 import type { RelatedProduct } from "@/components/product-sections"
 import type { YouWillLoveItem } from "@/components/you-will-love"
 import type { StoreProduct, StoreVariant } from "@/lib/medusa"
-import type { VariantMatrix } from "@/lib/variant-matrix"
+import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 
 export type ProductVariantMatrix = Omit<VariantMatrix, "pairs">
 
@@ -14,6 +14,51 @@ export function productViewMatrix(matrix: VariantMatrix): ProductVariantMatrix {
     variantIdByPair: matrix.variantIdByPair,
     devicesByCaseType: matrix.devicesByCaseType,
     caseTypesByDevice: matrix.caseTypesByDevice,
+  }
+}
+
+/**
+ * A single-option product (e.g. a StickPad's Color, a plain accessory) rendered
+ * through the SAME case ProductView, so the store has one product-page type. The
+ * option's values play the Case Type tile role (image + name + price) over one
+ * hidden device (""), which ProductView already collapses out of the title. A
+ * product with no options collapses to one nameless value (no tiles, just the
+ * price + add-to-cart). Returns the matrix plus the option label and its values.
+ */
+export function buildSimpleMatrix(
+  product: StoreProduct
+): { matrix: ProductVariantMatrix; optionTitle: string | null; values: string[] } {
+  const opt = product.options?.[0]
+  const optId = opt?.id
+  const DEVICE = ""
+  const variants = product.variants ?? []
+  const variantIdByPair: Record<string, string> = {}
+  const values: string[] = []
+  const seen = new Set<string>()
+  for (const v of variants) {
+    const value =
+      (optId ? v.options?.find((o) => o.option_id === optId)?.value : null) ??
+      v.title ??
+      "Default"
+    if (!seen.has(value)) {
+      seen.add(value)
+      values.push(value)
+    }
+    // First variant wins a value (values are unique per simple product anyway).
+    if (!variantIdByPair[pairKey(value, DEVICE)]) {
+      variantIdByPair[pairKey(value, DEVICE)] = v.id
+    }
+  }
+  return {
+    matrix: {
+      caseTypes: values,
+      devices: [DEVICE],
+      variantIdByPair,
+      devicesByCaseType: Object.fromEntries(values.map((v) => [v, [DEVICE]])),
+      caseTypesByDevice: { [DEVICE]: values },
+    },
+    optionTitle: opt?.title ?? null,
+    values,
   }
 }
 

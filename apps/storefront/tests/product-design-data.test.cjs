@@ -13,7 +13,15 @@ const compiled = ts.transpileModule(fs.readFileSync(
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText
 const loaded = { exports: {} }
-vm.runInNewContext(compiled, { module: loaded, exports: loaded.exports })
+vm.runInNewContext(compiled, {
+  module: loaded,
+  exports: loaded.exports,
+  require(name) {
+    // product-view-data now imports pairKey; SEP is a space (see variant-matrix).
+    if (name === "@/lib/variant-matrix") return { pairKey: (a, b) => `${a} ${b}` }
+    throw new Error(`Unexpected dependency: ${name}`)
+  },
+})
 const { productViewDesigns, expandProductViewDesigns } = loaded.exports
 const plain = (value) => JSON.parse(JSON.stringify(value))
 

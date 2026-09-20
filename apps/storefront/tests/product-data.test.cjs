@@ -33,9 +33,10 @@ function loadSource(relativePath, dependencies = {}, globals = {}) {
 }
 
 const plain = (value) => JSON.parse(JSON.stringify(value))
-const productViewData = loadSource("lib/product-view-data.ts")
+const variantMatrix = loadSource("lib/variant-matrix.ts")
+const productViewData = loadSource("lib/product-view-data.ts", { "@/lib/variant-matrix": variantMatrix })
 const { productViewMatrix, productViewVariants } = productViewData
-const { buildVariantMatrix, pairKey } = loadSource("lib/variant-matrix.ts")
+const { buildVariantMatrix, pairKey } = variantMatrix
 
 function fixture() {
   return {
