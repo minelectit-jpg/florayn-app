@@ -20,7 +20,7 @@ export default async function HomePage() {
     const { products: pool } = await listProducts({
       limit: 48,
       fields: "id,handle,metadata",
-    })
+    }, { pricing: false })
     // One card per design, so a row of five is five artworks rather than the
     // same artwork in five constructions.
     const seen = new Set<string>()

@@ -24,17 +24,13 @@ export const PRODUCT_FIELDS =
   "*variants.metadata," +
   "*variants.calculated_price,*collection,*categories"
 
-/**
- * The product page's fields WITHOUT calculated_price. Computing a price for all
- * ~109 variants of one product costs ~3s on this host; the page prices the buy
- * box from the fixed case-type price instead (applyCaseTypePrices), so it never
- * needs the engine. Everything else the page reads (options, variant images,
- * collection) stays.
- */
-export const PRODUCT_FIELDS_NOPRICE =
+/** Product-page selectors and galleries, including actual regional prices. */
+export const PRODUCT_PAGE_FIELDS =
   "id,title,handle,subtitle,description,thumbnail,metadata,created_at," +
-  "*images,*options,*options.values,*variants,*variants.options," +
-  "*variants.metadata,*collection,*categories"
+  "images.id,images.url,options.id,options.title,options.values.id,options.values.value," +
+  "variants.id,variants.title,variants.metadata,variants.options.option_id,variants.options.value," +
+  "variants.calculated_price.calculated_amount,variants.calculated_price.currency_code," +
+  "collection.id,collection.title,collection.handle,categories.id,categories.name,categories.handle"
 
 /**
  * The related-products POOL fields for the product page's below-the-fold strips
@@ -47,7 +43,7 @@ export const PRODUCT_FIELDS_NOPRICE =
  * Measured: collection pool 2.4s/3.1MB (all variants) -> ~0.42s/360KB (card).
  */
 export const POOL_FIELDS =
-  "id,title,handle,subtitle,thumbnail,metadata,*options"
+  "id,title,handle,subtitle,thumbnail,metadata,options.id,options.title"
 
 /*
  * Everything a product CARD renders, and nothing it does not. The card shows a
@@ -58,7 +54,8 @@ export const POOL_FIELDS =
  */
 export const CARD_FIELDS =
   "id,title,handle,thumbnail,metadata," +
-  "*variants,*variants.calculated_price"
+  "variants.id,variants.title," +
+  "variants.calculated_price.calculated_amount,variants.calculated_price.currency_code"
 
 export type StoreProduct = {
   id: string
@@ -129,6 +126,11 @@ export type ProductListResult = {
   error?: string
 }
 
+export type ProductListOptions = {
+  /** Medusa adds all variant prices when region_id is present, even if omitted from fields. */
+  pricing?: boolean
+}
+
 /**
  * Why a failure is reported rather than swallowed.
  *
@@ -179,32 +181,46 @@ const QUERY_TIMEOUT_MS = 15_000
  * is never written to the cache (mirrors getRegionId's "never memoize a failure").
  */
 async function listProductsUncached(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  pricing: boolean
 ): Promise<ProductListResult> {
   const call = (async () => {
-    const region_id = await getRegionId()
+    const { region_id: requestedRegion, ...query } = params
+    const requestedFields = typeof query.fields === "string" ? query.fields : PRODUCT_FIELDS
+    // Omitting only calculated_price fields is insufficient: Medusa 2.19 adds
+    // them back when region_id is present. Explicit unpriced reads omit both.
+    const fields = pricing
+      ? requestedFields
+      : requestedFields.split(",").filter((field) => !field.includes("calculated_price")).join(",")
     const result = await sdk.store.product.list({
-      fields: PRODUCT_FIELDS,
-      region_id,
       limit: 24,
-      ...params,
+      ...query,
+      fields,
+      ...(pricing ? { region_id: typeof requestedRegion === "string" ? requestedRegion : await getRegionId() } : {}),
     })
     return result as unknown as ProductListResult
   })()
-  return (await Promise.race([
-    call,
-    new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`medusa product list timed out after ${QUERY_TIMEOUT_MS}ms`)),
-        QUERY_TIMEOUT_MS
-      )
-    ),
-  ])) as ProductListResult
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      call,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`medusa product list timed out after ${QUERY_TIMEOUT_MS}ms`)),
+          QUERY_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
 }
 
 export async function listProducts(
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
+  options: ProductListOptions = {}
 ): Promise<ProductListResult> {
+  const pricing = options.pricing !== false
   const limit = typeof params.limit === "number" ? params.limit : 24
   const handles =
     typeof params.handle === "string"
@@ -215,13 +231,13 @@ export async function listProducts(
   try {
     // Very large listings bypass the cache (keeps multi-MB values out of Redis).
     if (limit > MAX_CACHEABLE_LIMIT) {
-      return await listProductsUncached(params)
+      return await listProductsUncached(params, pricing)
     }
     const tags = ["products"]
     for (const handle of new Set(handles)) tags.push(`product:${handle}`)
     const cached = unstable_cache(
-      () => listProductsUncached(params),
-      ["products", DATA_VERSION, stableKey(params)],
+      () => listProductsUncached(params, pricing),
+      ["products", DATA_VERSION, pricing ? "priced" : "unpriced", stableKey(params)],
       { revalidate: CACHE_TTL_SECONDS, tags }
     )
     return await cached()
@@ -276,13 +292,10 @@ export function applyCaseTypePrices(
 }
 
 export async function getProductByHandle(handle: string) {
-  // No calculated_price: the product page and the WTYL cards apply the fixed
-  // case-type price after fetch, so this stays a light one-product query (~0.5s)
-  // instead of pricing all ~109 variants (~3s).
   const { products } = await listProducts({
     handle,
     limit: 1,
-    fields: PRODUCT_FIELDS_NOPRICE,
+    fields: PRODUCT_PAGE_FIELDS,
   })
   return products?.[0]
 }

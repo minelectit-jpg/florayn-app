@@ -113,7 +113,7 @@ export default async function CollectionPage({ params, searchParams }: Params) {
         : { category_id: group.id }),
       limit: 100,
       fields: COLLECTION_FIELDS,
-    }),
+    }, { pricing: false }),
     getDeviceCatalog(),
     getCollectionPage(slug),
   ])

@@ -2,23 +2,26 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
-import type { PackDesign } from "@/components/choose-design-modal"
 import type { BundleAirpods } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import LazyReveal from "@/components/lazy-reveal"
 import ProductBuyBox from "@/components/product-buy-box"
-import YouWillLove, { type YouWillLoveItem } from "@/components/you-will-love"
+import YouWillLove from "@/components/you-will-love"
 import RecommendedForYou, {
   type RecommendedItem,
 } from "@/components/recommended-for-you"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
-import { MoreDesigns, type RelatedProduct } from "@/components/product-sections"
+import { MoreDesigns } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
 import type { FeatureBlock, GalleryVideoMap } from "@/lib/content"
 import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
-import type { ProductVariantMatrix } from "@/lib/product-view-data"
+import {
+  expandProductViewDesigns,
+  type ProductDesignData,
+  type ProductVariantMatrix,
+} from "@/lib/product-view-data"
 import { pairKey } from "@/lib/variant-matrix"
 
 /**
@@ -31,6 +34,7 @@ import { pairKey } from "@/lib/variant-matrix"
  * variant, each of which carries its own renders in metadata.
  */
 export default function ProductView({
+  pagePath,
   matrix,
   variants,
   families,
@@ -41,9 +45,8 @@ export default function ProductView({
   productTitle,
   initialCaseType,
   initialDevice,
-  moreDesignItems,
+  designData,
   bundleConfig,
-  packDesigns,
   caseTypeRecords,
   bundleAirpods,
   shipping,
@@ -53,8 +56,8 @@ export default function ProductView({
   featureBlocks,
   productForm,
   galleryVideos,
-  youWillLoveItems,
 }: {
+  pagePath: string
   matrix: ProductVariantMatrix
   variants: StoreVariant[]
   /** device name -> family label, for grouping the device drawer. */
@@ -73,12 +76,10 @@ export default function ProductView({
   initialCaseType: string
   initialDevice: string
   fitCopy?: string | null
-  /** Sibling designs for the MORE DESIGNS strip; rendered on the live device. */
-  moreDesignItems?: RelatedProduct[]
+  /** Shared choices for related designs, featured picks and mixed-device packs. */
+  designData: ProductDesignData
   /** Multi-buy tier config for the pack selector, or null when off. */
   bundleConfig?: BundleConfig | null
-  /** Other designs a pack slot can be filled from (prepared server-side). */
-  packDesigns?: PackDesign[]
   /** Construction records for the pack picker's case-type popup. */
   caseTypeRecords?: CaseTypeRecord[]
   /** This design's AirPods case for the Matching Set bundle, or null. */
@@ -98,9 +99,13 @@ export default function ProductView({
   productForm?: string | null
   /** Design gallery videos, keyed by case type; shown first when one matches. */
   galleryVideos?: GalleryVideoMap
-  /** Admin-picked designs for "We think you'll love"; rendered on the live pair. */
-  youWillLoveItems?: YouWillLoveItem[]
 }) {
+  const [hydratedPath, setHydratedPath] = useState<string | null>(null)
+  useEffect(() => { setHydratedPath(pagePath) }, [pagePath])
+  const { moreDesignItems, packDesigns, youWillLoveItems } = useMemo(
+    () => expandProductViewDesigns(designData),
+    [designData]
+  )
   const variantById = useMemo(
     () => new Map(variants.map((v) => [v.id, v])),
     [variants]
@@ -182,7 +187,8 @@ export default function ProductView({
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+    <div data-product-ready data-product-path={pagePath} data-product-hydrated={hydratedPath === pagePath}
+      className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
       <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery
           key={selected?.id ?? "default"}

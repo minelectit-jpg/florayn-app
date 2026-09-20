@@ -1,7 +1,7 @@
 import { cache } from "react"
 
 import { getDeviceCatalog, type DeviceRecord } from "@/lib/catalog"
-import { listProducts, PRODUCT_FIELDS_NOPRICE, type StoreProduct } from "@/lib/medusa"
+import { listProducts, PRODUCT_PAGE_FIELDS, type StoreProduct } from "@/lib/medusa"
 
 /**
  * /product/<slug>/ serves two kinds of page.
@@ -40,7 +40,7 @@ const resolveProductPageCached = cache(async (
   const { products } = await listProducts({
     handle: device ? [slug, baseHandle] : slug,
     limit: device ? 2 : 1,
-    fields: PRODUCT_FIELDS_NOPRICE,
+    fields: PRODUCT_PAGE_FIELDS,
   })
   const direct = products.find((product) => product.handle === slug)
   if (direct) {

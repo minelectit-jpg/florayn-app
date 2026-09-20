@@ -16,7 +16,12 @@ async function storeFetch<T>(
         "x-publishable-api-key": MEDUSA_PUBLISHABLE_KEY,
         ...(init?.headers ?? {}),
       },
-      next: { revalidate: 60 },
+      next: {
+        revalidate: 60,
+        tags: path === "/store/stock"
+          ? ["stock"]
+          : ["catalog", `catalog:${path.split("/")[2]}`],
+      },
     })
 
     if (!res.ok) {

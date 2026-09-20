@@ -48,12 +48,34 @@ const GET_TIMEOUT_MS = 60
 const SET_TIMEOUT_MS = 200
 const BREAKER_THRESHOLD = 4 // consecutive failures before tripping
 const BREAKER_COOLDOWN_MS = 30_000
+const FRESHNESS_KEY = `${PREFIX}:freshness:v1`
+const warningTimes = new Map()
+const pendingInvalidations = new Set()
+let pendingRetry
+
+// All timestamps share the generation's Redis key. If allkeys-lru evicts this
+// hash, a new generation makes surviving values miss instead of forgetting an
+// invalidation. Legacy entries migrate lazily on their next render.
+const ENSURE_GENERATION_SCRIPT = `
+local generation = redis.call("HGET", KEYS[1], "generation")
+if not generation then
+  generation = ARGV[1]
+  redis.call("HSET", KEYS[1], "generation", generation)
+end
+return generation
+`
 
 // Run the membership read and deletion atomically relative to MULTI writes.
 // Otherwise a new entry can arrive after SMEMBERS and lose its tag index when
 // invalidation deletes the index. UNLINK frees large payloads asynchronously;
 // bounded batches avoid Lua unpack limits for tags shared by many pages.
 const REVALIDATE_TAG_SCRIPT = `
+if not redis.call("HGET", KEYS[2], "generation") then
+  redis.call("HSET", KEYS[2], "generation", ARGV[2])
+end
+local now = redis.call("TIME")
+local timestamp = now[1] * 1000 + now[2] / 1000
+redis.call("HSET", KEYS[2], "tag:" .. ARGV[1], tostring(timestamp))
 local keys = redis.call("SMEMBERS", KEYS[1])
 for first = 1, #keys, 256 do
   redis.call("UNLINK", unpack(keys, first, math.min(first + 255, #keys)))
@@ -79,6 +101,7 @@ function resolveBuildId(serverDistDir) {
 }
 
 let client
+let connectionPromise
 let connecting = false
 let failures = 0
 let unhealthyUntil = 0
@@ -93,6 +116,17 @@ function tripBreaker() {
 function resetBreaker() {
   failures = 0
   unhealthyUntil = 0
+}
+
+function reportFailure(operation, error) {
+  const now = Date.now()
+  if (now - (warningTimes.get(operation) ?? 0) < 30_000) return
+  warningTimes.set(operation, now)
+  const code = error && typeof error.code === "string" && /^[A-Z_]+$/.test(error.code)
+    ? error.code
+    : "CACHE_OPERATION_FAILED"
+  // Never include Redis URLs, cached values, or arbitrary exception messages.
+  console.warn(`[storefront-cache] ${operation} failed (${code})`)
 }
 
 function db() {
@@ -111,7 +145,8 @@ function db() {
       },
     })
     client.on("error", () => {}) // swallow — never let an 'error' event throw
-    client.connect().catch(() => {})
+    connectionPromise = client.connect()
+    connectionPromise.catch(() => {})
   } catch {
     client = null
   } finally {
@@ -132,14 +167,72 @@ async function withTimeout(promise, ms) {
   }
 }
 
-async function ready() {
-  if (Date.now() < unhealthyUntil) return null // circuit open — skip Redis
+async function ready(waitForConnection = false) {
+  // Explicit invalidations can probe a recovered connection during the render
+  // circuit's cooldown; their own deadline still bounds each retry.
+  if (!waitForConnection && Date.now() < unhealthyUntil) return null
   const c = db()
+  if (waitForConnection && c && !c.isReady && connectionPromise) {
+    try { await withTimeout(connectionPromise, 500) } catch { return null }
+  }
   if (!c || !c.isReady) return null
   return c
 }
 
+async function invalidateTags(tags) {
+  const c = await ready(true)
+  if (!c) {
+    reportFailure("invalidate", { code: "CACHE_UNAVAILABLE" })
+    throw new Error("The storefront cache is unavailable")
+  }
+  try {
+    const deadline = Date.now() + 3000
+    for (const tag of [...new Set(tags)]) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) throw new Error("Cache invalidation deadline exceeded")
+      await withTimeout(c.eval(REVALIDATE_TAG_SCRIPT, {
+        keys: [`${PREFIX}:tag:${tag}`, FRESHNESS_KEY],
+        arguments: [tag, crypto.randomUUID()],
+      }), Math.min(SET_TIMEOUT_MS, remaining))
+      pendingInvalidations.delete(tag)
+    }
+    resetBreaker()
+  } catch (error) {
+    tripBreaker()
+    reportFailure("invalidate", error)
+    throw new Error("The storefront cache invalidation failed")
+  }
+}
+
+function retryPendingInvalidations() {
+  if (pendingRetry || !pendingInvalidations.size) return
+  pendingRetry = (async () => {
+    // Respect the render circuit while retrying in the background. Reads remain
+    // misses until Redis acknowledges the queued invalidations.
+    if (!await ready()) return
+    await invalidateTags([...pendingInvalidations])
+  })().catch(() => {}).finally(() => { pendingRetry = undefined })
+}
+
 module.exports = class RedisCacheHandler {
+  // The API awaits this acknowledgement; Next's revalidate helpers otherwise
+  // defer their cache work until after the route has returned its response.
+  static async invalidateTags(tags) {
+    return invalidateTags(tags)
+  }
+
+  static async close() {
+    if (!client) return
+    try {
+      if (client.isOpen) await withTimeout(client.quit(), 500)
+    } finally {
+      if (client.isOpen) await client.disconnect()
+      client = undefined
+      connectionPromise = undefined
+      resetBreaker()
+    }
+  }
+
   constructor(ctx) {
     this.buildId = resolveBuildId(ctx && ctx.serverDistDir)
   }
@@ -155,6 +248,10 @@ module.exports = class RedisCacheHandler {
   }
 
   async get(cacheKey, ctx) {
+    if (pendingInvalidations.size) {
+      retryPendingInvalidations()
+      return null
+    }
     const c = await ready()
     if (!c) return null
     try {
@@ -171,10 +268,21 @@ module.exports = class RedisCacheHandler {
         raw = await withTimeout(c.get(this.legacyRouteKey(cacheKey)), GET_TIMEOUT_MS)
         value = raw ? deserializeLegacy(raw) : null
       }
+      if (value) {
+        const tags = [...new Set([...(value.tags || []), ...(ctx?.tags || []), ...(ctx?.softTags || [])])]
+        const [generation, ...invalidatedAt] = await withTimeout(
+          c.hmGet(FRESHNESS_KEY, ["generation", ...tags.map((tag) => `tag:${tag}`)]),
+          GET_TIMEOUT_MS
+        )
+        if (!generation || value.cacheGeneration !== generation || invalidatedAt.some(
+          (timestamp) => timestamp != null && Number(timestamp) >= value.lastModified
+        )) value = null
+      }
       resetBreaker()
       return value // CacheHandlerValue { value, lastModified, tags }
-    } catch {
+    } catch (error) {
       tripBreaker()
+      reportFailure("get", error)
       return null // miss -> Next renders from origin (== today)
     }
   }
@@ -190,7 +298,13 @@ module.exports = class RedisCacheHandler {
       tags = [...new Set(tags)]
 
       const rk = this.key(cacheKey, isFetch)
-      const entry = { value: data, lastModified: Date.now(), tags }
+      // Capture the write's start before asynchronous codec/Redis work. An edit
+      // during that work must make this older result stale, even if SET is last.
+      const lastModified = Date.now()
+      const cacheGeneration = await withTimeout(c.eval(ENSURE_GENERATION_SCRIPT, {
+        keys: [FRESHNESS_KEY], arguments: [crypto.randomUUID()],
+      }), SET_TIMEOUT_MS)
+      const entry = { value: data, lastModified, tags, cacheGeneration }
       const payload = isFetch ? serializeLegacy(entry) : await serializeRoute(entry)
       // Publish the value and its tag memberships together. Revalidation must
       // not miss an entry whose tag index is still being written in the background.
@@ -201,22 +315,20 @@ module.exports = class RedisCacheHandler {
       }
       await withTimeout(transaction.exec(), SET_TIMEOUT_MS)
       resetBreaker()
-    } catch {
+    } catch (error) {
       tripBreaker()
+      reportFailure("set", error)
     }
   }
 
   async revalidateTag(tagOrTags) {
-    const c = await ready()
-    if (!c) return
+    const tags = [].concat(tagOrTags)
     try {
-      for (const t of [].concat(tagOrTags)) {
-        const idx = `${PREFIX}:tag:${t}`
-        await withTimeout(c.eval(REVALIDATE_TAG_SCRIPT, { keys: [idx] }), SET_TIMEOUT_MS)
-      }
-      resetBreaker()
+      await invalidateTags(tags)
     } catch {
-      tripBreaker()
+      // Next also calls this after cart/order server actions. A cache outage
+      // must not turn an already-committed mutation into a false action failure.
+      for (const tag of tags) pendingInvalidations.add(tag)
     }
   }
 

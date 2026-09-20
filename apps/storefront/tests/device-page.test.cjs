@@ -70,7 +70,7 @@ function loadResolver({ devices = [iphone], products = [] } = {}) {
       }
       if (name === "@/lib/medusa") {
         return {
-          PRODUCT_FIELDS_NOPRICE: "product-fields-without-prices",
+          PRODUCT_PAGE_FIELDS: "lean-product-page-fields",
           listProducts: async (query) => {
             queries.push(JSON.parse(JSON.stringify(query)))
             const handles = [].concat(query.handle)
@@ -98,7 +98,7 @@ test("a device URL resolves using one combined exact/base lookup", async () => {
   assert.deepEqual(resolver.queries, [{
     handle: ["amber-leopard-iphone-17-pro-max", "amber-leopard"],
     limit: 2,
-    fields: "product-fields-without-prices",
+    fields: "lean-product-page-fields",
   }])
 })
 

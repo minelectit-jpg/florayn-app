@@ -1,0 +1,56 @@
+name: Storefront performance and freshness
+on:
+  pull_request:
+  push:
+    branches: [main, "codex/**"]
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/storefront/package-lock.json
+      - run: npm ci
+      - run: npm --prefix apps/storefront ci
+      - run: npm test
+      - name: Verify cache freshness with isolated Redis
+        working-directory: apps/storefront
+        run: node --test tests/cache-redis.integration.cjs
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      - name: Verify actual Next.js invalidation and unrelated cache reuse
+        working-directory: apps/storefront
+        run: node tests/cache-next.integration.cjs
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/1
+      - name: Build backend and admin with Medusa lint
+        run: npm --prefix apps/backend run build
+        env:
+          MEDUSA_DISABLE_TELEMETRY: "1"
+      - name: Build against the local synthetic catalog
+        run: |
+          node apps/storefront/tests/fixtures/mock-store-api.cjs > "$RUNNER_TEMP/storefront-fixture.log" 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:9901/__audit/health
+          npm --prefix apps/storefront run build
+        env:
+          NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://127.0.0.1:9901
+          NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: pk_local_fixture_only
+          NEXT_FONT_GOOGLE_MOCKED_RESPONSES: ${{ github.workspace }}/apps/storefront/tests/fixtures/google-fonts.cjs
+          NEXT_TELEMETRY_DISABLED: "1"

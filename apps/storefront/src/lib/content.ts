@@ -55,7 +55,7 @@ export async function getSiteContent(): Promise<SiteContent> {
   try {
     const res = await fetch(`${BACKEND}/store/content`, {
       headers: { "x-publishable-api-key": KEY },
-      next: { revalidate: 60 },
+      next: { revalidate: 60, tags: ["content", "content:site"] },
     })
     if (!res.ok) return EMPTY
     return (await res.json()) as SiteContent
@@ -79,7 +79,7 @@ export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
   try {
     const res = await fetch(`${BACKEND}/store/case-types`, {
       headers: { "x-publishable-api-key": KEY },
-      next: { revalidate: 300 },
+      next: { revalidate: 300, tags: ["catalog", "catalog:case-types"] },
     })
     if (!res.ok) return []
     const json = (await res.json()) as {
@@ -127,7 +127,7 @@ export async function getProductSections(): Promise<ProductSections> {
   try {
     const res = await fetch(`${BACKEND}/store/content/product-sections`, {
       headers: { "x-publishable-api-key": KEY },
-      next: { revalidate: 60 },
+      next: { revalidate: 60, tags: ["content", "content:product-sections"] },
     })
     if (!res.ok) return { featureBlocks: [], featuredPicks: [] }
     const json = (await res.json()) as Partial<ProductSections>
@@ -160,7 +160,7 @@ export async function getGalleryVideos(
       )}`,
       {
         headers: { "x-publishable-api-key": KEY },
-        next: { revalidate: 60 },
+        next: { revalidate: 60, tags: ["content", "content:gallery-videos", `product:${designSlug}`] },
       }
     )
     if (!res.ok) return {}
@@ -191,7 +191,7 @@ export async function getCollectionPage(
   try {
     const res = await fetch(`${BACKEND}/store/collection-pages/${slug}`, {
       headers: { "x-publishable-api-key": KEY },
-      next: { revalidate: 60 },
+      next: { revalidate: 60, tags: ["content", `content:collection:${slug}`] },
     })
     if (!res.ok) return null
     const data = (await res.json()) as { page: CollectionPage }

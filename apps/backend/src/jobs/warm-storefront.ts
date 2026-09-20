@@ -3,18 +3,12 @@ import { Modules } from "@medusajs/framework/utils"
 import { setTimeout as delay } from "node:timers/promises"
 
 /**
- * Keep the Cloudflare edge (and the Next ISR route cache) HOT for every product,
+ * Keep the Next ISR route cache warm for commonly used product device URLs,
  * shop and home page, so a real visitor almost never triggers a cold render.
  *
- * CF's free plan has no async stale-while-revalidate: once an edge entry's TTL
- * lapses, the NEXT request revalidates synchronously against origin (~1s cold).
- * This job runs frequently enough (every 20 min, vs the 2h edge TTL) that it is
- * usually the one that eats that revalidation just after a page expires, not a
- * customer. Pages that are still fresh return an instant edge HIT, so a run is
- * cheap when everything is already warm.
- *
- * It warms with `Sec-Fetch-Dest: document` — the exact signal the CF cache rule
- * keys on — so only the full-page HTML variant is warmed (RSC nav is untouched).
+ * One paced pass every 20 minutes leaves CPU for customer requests. HTML uses
+ * Next's own cache/freshness instead of an independent forced Cloudflare TTL.
+ * Document requests populate Next's rendered HTML/RSC route cache together.
  */
 const STOREFRONT = process.env.STOREFRONT_URL || "https://new.florayn.com"
 // The devices real visitors land on per product form (shop grid + menu links +
@@ -86,8 +80,8 @@ export default async function warmStorefront(container: MedusaContainer) {
           redirect: "manual",
           signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remainingMs)),
         })
-        const cf = (r.headers.get("cf-cache-status") || "").toUpperCase()
-        if (cf === "HIT") hit++
+        const cached = (r.headers.get("x-nextjs-cache") || r.headers.get("cf-cache-status") || "").toUpperCase()
+        if (cached === "HIT") hit++
         else warmed++
         await r.arrayBuffer()
         if (r.status >= 400) bad++
@@ -105,7 +99,7 @@ export default async function warmStorefront(container: MedusaContainer) {
     logger.info(
       `[warm-storefront] processed=${processed}/${urls.length} remaining=${urls.length - processed} ` +
       `next=${nextUrlIndex} in ${((Date.now() - start) / 1000).toFixed(1)}s — ` +
-      `edge HIT=${hit} warmed=${warmed} bad=${bad}`
+      `cache HIT=${hit} warmed=${warmed} bad=${bad}`
     )
   } finally {
     running = false
@@ -114,5 +108,5 @@ export default async function warmStorefront(container: MedusaContainer) {
 
 export const config = {
   name: "warm-storefront-edge",
-  schedule: "*/20 * * * *", // every 20 minutes (edge TTL is 2h)
+  schedule: "*/20 * * * *",
 }

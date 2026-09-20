@@ -195,7 +195,7 @@ export async function getSeoConfig(): Promise<SeoConfig> {
   try {
     const res = await fetch(`${BACKEND}/store/seo`, {
       headers: { "x-publishable-api-key": KEY },
-      next: { revalidate: 300 },
+      next: { revalidate: 300, tags: ["seo"] },
     })
     if (!res.ok) return FALLBACK
     return (await res.json()) as SeoConfig

@@ -133,7 +133,7 @@ export default async function ShopView({
       handle: handles,
       limit: PAGE_SIZE,
       fields: "id,handle,variants.id,variants.options.value",
-    })
+    }, { pricing: false })
     for (const p of products) {
       const v = (p.variants ?? []).find((vv) => {
         const vals = (vv.options ?? []).map((o) => o.value)

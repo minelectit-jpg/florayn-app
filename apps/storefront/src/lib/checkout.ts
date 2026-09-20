@@ -68,7 +68,7 @@ export async function getDistricts(): Promise<DistrictsResponse | null> {
   try {
     const res = await fetch(`${MEDUSA_BACKEND_URL}/store/districts`, {
       headers: headers(),
-      next: { revalidate: 3600 },
+      next: { revalidate: 3600, tags: ["catalog", "catalog:districts"] },
     })
     if (!res.ok) {
       return null

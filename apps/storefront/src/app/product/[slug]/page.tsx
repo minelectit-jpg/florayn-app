@@ -7,7 +7,6 @@ import {
   type RecommendedVariant,
 } from "@/components/recommended-for-you"
 import RegularProductView from "@/components/regular-product-view"
-import { type YouWillLoveItem } from "@/components/you-will-love"
 import {
   PairsWellWith,
   ShippingNote,
@@ -31,7 +30,7 @@ import {
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
-import { productViewMatrix, productViewVariants } from "@/lib/product-view-data"
+import { productViewDesigns, productViewMatrix, productViewVariants } from "@/lib/product-view-data"
 
 type Params = {
   params: Promise<{ slug: string }>
@@ -153,7 +152,7 @@ export default async function ProductPage({ params }: Params) {
     const designSlug = resolved?.product.metadata?.design_slug as string | undefined
     return Promise.all([
       collectionId
-        ? listProducts({ collection_id: [collectionId], limit: 100, fields: POOL_FIELDS })
+        ? listProducts({ collection_id: [collectionId], limit: 100, fields: POOL_FIELDS }, { pricing: false })
         : Promise.resolve({ products: [] as StoreProduct[] }),
       getGalleryVideos(designSlug ?? ""),
     ])
@@ -164,7 +163,7 @@ export default async function ProductPage({ params }: Params) {
       handle: featuredPicks,
       limit: featuredPicks.length,
       fields: POOL_FIELDS,
-    })
+    }, { pricing: false })
     const byHandle = new Map(products.map((p) => [p.handle, p]))
     return featuredPicks
       .map((handle) => byHandle.get(handle))
@@ -195,9 +194,8 @@ export default async function ProductPage({ params }: Params) {
   const designName = (product.metadata?.design_name as string) ?? product.title
   const { featureBlocks } = productSections
 
-  // The product was fetched without calculated_price (fast); price its variants
-  // from the fixed case-type price so the buy box and case-type tiles show the
-  // right amount without the engine ever running for ~109 variants.
+  // Apply the existing fixed prices for supported case types. Variants such as
+  // Alcantara retain the region-calculated prices fetched with the product.
   const priceByCaseType = new Map(caseTypes.map((c) => [c.name, c.price]))
   applyCaseTypePrices(product, priceByCaseType)
 
@@ -207,6 +205,7 @@ export default async function ProductPage({ params }: Params) {
     return (
       <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
         <RegularProductView
+          pagePath={`/product/${slug}/`}
           product={product}
           featureBlocks={featureBlocks}
           collection={
@@ -291,148 +290,16 @@ export default async function ProductPage({ params }: Params) {
   // than showing ৳0 - an accepted trade for the handful of Alcantara designs.
   for (const p of pool) applyCaseTypePrices(p, priceByCaseType)
 
-  // MORE DESIGNS: other designs' phone cases in the same collection. Each one
-  // carries renders keyed by "device|caseType" (and by device alone) so the
-  // strip can follow the customer's exact model + finish.
-  const rendersFor = (
-    p: StoreProduct
-  ): { pair: Record<string, string>; device: Record<string, string> } => {
-    const optId = (title: string) =>
-      p.options?.find((o) => o.title.toLowerCase() === title)?.id
-    const deviceOptId = optId("device")
-    const caseOptId = optId("case type")
-    const pair: Record<string, string> = {}
-    const device: Record<string, string> = {}
-    if (!deviceOptId) return { pair, device }
-    for (const v of p.variants ?? []) {
-      const dev = v.options?.find((o) => o.option_id === deviceOptId)?.value
-      if (!dev) continue
-      const img = (v.metadata?.images as string[] | undefined)?.[0]
-      if (!img) continue
-      if (!device[dev]) device[dev] = img
-      const ct = caseOptId
-        ? v.options?.find((o) => o.option_id === caseOptId)?.value
-        : undefined
-      if (ct) {
-        const key = `${dev}|${ct}`
-        if (!pair[key]) pair[key] = img
-      }
-    }
-    return { pair, device }
-  }
-
   const otherPhoneDesigns = pool.filter(
     (p) =>
       p.metadata?.form === "phone" && p.metadata?.design_slug !== designSlug
   )
 
-  const moreDesignItems: RelatedProduct[] = otherPhoneDesigns
-    .slice(0, 12)
-    .map((p) => {
-      const renders = rendersFor(p)
-      return {
-        id: p.id,
-        title: p.title,
-        handle: p.handle,
-        thumbnail: p.thumbnail,
-        label: (p.metadata?.design_name as string) ?? p.title,
-        price: minPrice(p),
-        // imageByPair keeps the strip on the customer's exact choice - the same
-        // case type on the same device - so it never falls back to another
-        // finish (e.g. showing Armor tiles while Signature is selected).
-        // imageByDevice is the fallback when a design lacks that precise pair.
-        imageByPair: renders.pair,
-        imageByDevice: renders.device,
-      }
-    })
-
-  // WE THINK YOU'LL LOVE: the admin's hand-picked designs. Each is reduced to a
-  // compact, device+case-type-aware shape (renders and a variant per pair) so
-  // the card follows the live selection without embedding four whole products
-  // (~600KB) in the page.
-  // One query for all picks, not one round-trip per pick (an N+1 that put N full
-  // ~230KB product fetches on the backend per cold render). Reorder to the
-  // admin's chosen order since the API does not guarantee it.
-  // Picks also carry a precomputed card - rebuild their variants from it, then
-  // price them from case types (fetched without calculated_price).
+  // Picks also carry a precomputed card. Keep their existing pricing, then
+  // share each design's choices across the strips and the pack picker.
   for (const p of pickedProducts) hydratePoolVariantsFromCard(p)
   for (const p of pickedProducts) applyCaseTypePrices(p, priceByCaseType)
-  const youWillLoveItems: YouWillLoveItem[] = pickedProducts.map((p) => {
-    const renders = rendersFor(p)
-    const optId = (t: string) =>
-      p.options?.find((o) => o.title.toLowerCase() === t)?.id
-    const devOpt = optId("device")
-    const caseOpt = optId("case type")
-    const variantByPair: Record<string, { id: string; price: number }> = {}
-    for (const v of p.variants ?? []) {
-      const dev = devOpt
-        ? v.options?.find((o) => o.option_id === devOpt)?.value
-        : undefined
-      const ct = caseOpt
-        ? v.options?.find((o) => o.option_id === caseOpt)?.value
-        : undefined
-      if (!dev || !ct) continue
-      const key = `${dev}|${ct}`
-      if (!variantByPair[key]) {
-        variantByPair[key] = {
-          id: v.id,
-          price: v.calculated_price?.calculated_amount ?? 0,
-        }
-      }
-    }
-    return {
-      id: p.id,
-      name: (p.metadata?.design_name as string) ?? p.title,
-      handle: p.handle,
-      thumbnail: p.thumbnail ?? null,
-      imageByPair: renders.pair,
-      imageByDevice: renders.device,
-      variantByPair,
-      price: minPrice(p),
-    }
-  })
-
-  // PACK PICKER: every other phone design with its variant id + price + render
-  // per "device|caseType", so the Choose-a-design modal can offer and add them
-  // without a cross-origin browser call.
-  const packDesigns = otherPhoneDesigns.map((p) => {
-    const optId = (title: string) =>
-      p.options?.find((o) => o.title.toLowerCase() === title)?.id
-    const deviceOptId = optId("device")
-    const caseOptId = optId("case type")
-    const variants: Record<
-      string,
-      { variantId: string; price: number; image: string | null }
-    > = {}
-    for (const v of p.variants ?? []) {
-      const dev = deviceOptId
-        ? v.options?.find((o) => o.option_id === deviceOptId)?.value
-        : undefined
-      const ct = caseOptId
-        ? v.options?.find((o) => o.option_id === caseOptId)?.value
-        : undefined
-      const price = v.calculated_price?.calculated_amount
-      // Skip variants with no resolved price (Alcantara, priced per device and
-      // not fetched here) so the pack can never offer or add one at ৳0.
-      if (!dev || !ct || !(typeof price === "number" && price > 0)) continue
-      const key = `${dev}|${ct}`
-      if (variants[key]) continue
-      variants[key] = {
-        variantId: v.id,
-        price,
-        image:
-          (v.metadata?.images as string[] | undefined)?.[0] ??
-          p.thumbnail ??
-          null,
-      }
-    }
-    return {
-      handle: (p.metadata?.design_slug as string) ?? p.handle,
-      name: (p.metadata?.design_name as string) ?? p.title,
-      thumbnail: p.thumbnail ?? null,
-      variants,
-    }
-  })
+  const designData = productViewDesigns(otherPhoneDesigns, pickedProducts)
 
   // MATCHING SET (bundle): this design's AirPods case, its variants keyed by
   // AirPods model, so the bundle panel can offer the model and price it.
@@ -575,6 +442,7 @@ export default async function ProductPage({ params }: Params) {
   return (
     <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
       <ProductView
+        pagePath={`/product/${slug}/`}
         matrix={productViewMatrix(matrix)}
         variants={productViewVariants(product.variants ?? [])}
         families={families}
@@ -595,9 +463,8 @@ export default async function ProductPage({ params }: Params) {
         initialCaseType={initialCaseType}
         initialDevice={initialDevice}
         fitCopy={deviceCopy}
-        moreDesignItems={moreDesignItems}
+        designData={designData}
         bundleConfig={bundleConfig}
-        packDesigns={packDesigns}
         caseTypeRecords={caseTypes}
         bundleAirpods={bundleAirpods}
         shipping={<ShippingNote />}
@@ -615,7 +482,6 @@ export default async function ProductPage({ params }: Params) {
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
-        youWillLoveItems={youWillLoveItems}
       />
     </article>
   )

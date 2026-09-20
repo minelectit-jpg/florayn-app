@@ -6,7 +6,8 @@ import type {
   MiddlewareVerb,
 } from "@medusajs/framework/http"
 
-import { revalidateStorefront } from "../lib/revalidate-storefront"
+import { queueStorefrontRevalidation } from "../lib/revalidate-storefront"
+import { storefrontWriteTags } from "../lib/storefront-write-domains"
 
 /**
  * After any successful admin write to storefront-visible data, flush the
@@ -14,13 +15,14 @@ import { revalidateStorefront } from "../lib/revalidate-storefront"
  * `finish` and is fire-and-forget, so it never delays or fails the save itself.
  */
 const revalidateAfterWrite = (
-  _req: MedusaRequest,
+  req: MedusaRequest,
   res: MedusaResponse,
   next: MedusaNextFunction
 ) => {
   res.on("finish", () => {
     if (res.statusCode >= 200 && res.statusCode < 400) {
-      void revalidateStorefront()
+      const tags = storefrontWriteTags(req.originalUrl)
+      if (tags.length) void queueStorefrontRevalidation({ tags })
     }
   })
   next()
@@ -28,12 +30,10 @@ const revalidateAfterWrite = (
 
 // The admin path prefixes whose writes change what the storefront renders.
 const STOREFRONT_WRITE_PREFIXES = [
-  "/admin/content/*", // features, gallery videos, WTYL, home, menu, footer, SEO, collections
-  "/admin/case-types/*", // construction prices
-  "/admin/devices/*", // which models are on sale
-  "/admin/designs/*", // add / remove a design
-  "/admin/bundles/*", // pack + matching-set settings
-  "/admin/stock/*", // in-stock badges
+  "content", "case-types", "devices", "designs", "bundles", "stock",
+  "products", "product-variants", "product-collections", "product-categories",
+  "price-lists", "price-preferences", "prices", "inventory-items",
+  "media", "wire-images", "rebuild-cards",
 ]
 
 export default defineMiddlewares({
@@ -60,9 +60,11 @@ export default defineMiddlewares({
     },
 
     // Auto-refresh the storefront after storefront-visible writes.
-    ...STOREFRONT_WRITE_PREFIXES.map((matcher) => ({
+    ...STOREFRONT_WRITE_PREFIXES.flatMap((prefix) => [
+      `/admin/${prefix}`, `/admin/${prefix}/*`,
+    ]).map((matcher) => ({
       matcher,
-      method: ["POST", "PUT", "DELETE"] as MiddlewareVerb[],
+      method: ["POST", "PUT", "PATCH", "DELETE"] as MiddlewareVerb[],
       middlewares: [revalidateAfterWrite],
     })),
   ],

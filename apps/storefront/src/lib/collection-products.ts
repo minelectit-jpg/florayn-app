@@ -7,7 +7,7 @@ import { getRegionId, sdk, type StoreProduct, type StoreVariant } from "@/lib/me
 export const COLLECTION_FIELDS =
   "id,title,handle,subtitle,thumbnail,metadata,images.url," +
   "options.id,options.title,options.values.value," +
-  "variants.id,variants.title,*variants.options"
+  "variants.id,variants.title,variants.options.option_id,variants.options.value"
 
 const VARIANT_BATCH_SIZE = 100
 const VARIANT_FIELDS = "id,title,metadata,*calculated_price"

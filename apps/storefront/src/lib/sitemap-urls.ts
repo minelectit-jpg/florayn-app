@@ -48,8 +48,8 @@ export const getSitemapUrls = cache(async (): Promise<string[]> => {
         limit: PRODUCT_BATCH_SIZE,
         offset,
         order: "id",
-        fields: "id,handle,options.id,options.title,*variants.options",
-      })
+        fields: "id,handle,options.id,options.title,variants.options.option_id,variants.options.value",
+      }, { pricing: false })
       if (result.error) throw new Error(result.error)
       products.push(...result.products)
       count = result.count

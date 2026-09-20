@@ -33,7 +33,8 @@ function loadSource(relativePath, dependencies = {}, globals = {}) {
 }
 
 const plain = (value) => JSON.parse(JSON.stringify(value))
-const { productViewMatrix, productViewVariants } = loadSource("lib/product-view-data.ts")
+const productViewData = loadSource("lib/product-view-data.ts")
+const { productViewMatrix, productViewVariants } = productViewData
 const { buildVariantMatrix, pairKey } = loadSource("lib/variant-matrix.ts")
 
 function fixture() {
@@ -130,6 +131,7 @@ test("projected data still selects valid fallback devices, null prices and fallb
       },
     },
     "@/lib/variant-matrix": { pairKey },
+    "@/lib/product-view-data": productViewData,
     "@/lib/product-forms": { featuresGroup: () => undefined },
   })
   const product = fixture()
@@ -139,6 +141,7 @@ test("projected data still selects valid fallback devices, null prices and fallb
     initialCaseType: "Signature", initialDevice: "iPhone 14",
     families: {}, stock: {}, fallbackImages: ["https://images.invalid/fallback.webp"],
     designName: "Example", productHandle: product.handle, productTitle: product.title,
+    designData: productViewData.productViewDesigns([], []),
     tabs: null, pairs: null,
   }
   const render = () => {
@@ -167,22 +170,36 @@ test("projected data still selects valid fallback devices, null prices and fallb
   assert.equal(view.gallery.items[0].url, product.variants[0].metadata.images[0])
 })
 
-function loadProductCache() {
+function loadProductCache({ regionUnavailable = false } = {}) {
   const entries = new Map()
   const registrations = []
+  const queries = []
+  const timers = new Set()
+  let nextTimer = 0
   let productCalls = 0
   let regionCalls = 0
   const sdk = {
     store: {
-      region: { list: async () => { regionCalls++; return { regions: [{ id: "region-bd" }] } } },
+      region: { list: async () => {
+        regionCalls++
+        if (regionUnavailable) throw new Error("region service unavailable")
+        return { regions: [{ id: "region-bd" }] }
+      } },
       product: { list: async (query) => {
         productCalls++
-        assert.equal(query.region_id, "region-bd")
-        return { products: [{ id: `revision-${productCalls}` }], count: 1 }
+        queries.push(plain(query))
+        // Medusa 2.19 injects calculated prices for every variant whenever a
+        // region is supplied, even when no price fields were requested.
+        const priced = Boolean(query.region_id) || query.fields.includes("calculated_price")
+        const variants = [1900, 2250].map((amount, i) => ({
+          id: `alcantara-${i}`, title: `Alcantara / Model ${i}`,
+          ...(priced ? { calculated_price: { calculated_amount: amount, currency_code: "bdt" } } : {}),
+        }))
+        return { products: [{ id: `revision-${productCalls}`, variants }], count: 1 }
       } },
     },
   }
-  const { listProducts } = loadSource("lib/medusa.ts", {
+  const medusa = loadSource("lib/medusa.ts", {
     "@medusajs/js-sdk": { __esModule: true, default: class { constructor() { return sdk } } },
     "next/cache": {
       unstable_cache(fn, keyParts, options) {
@@ -197,10 +214,11 @@ function loadProductCache() {
   }, {
     process: { env: { NODE_ENV: "test", NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: "test-public-key" } },
     // Product calls resolve immediately; do not create a real 15-second timer.
-    setTimeout: () => 0,
+    setTimeout: () => { const id = nextTimer++; timers.add(id); return id },
+    clearTimeout: (id) => timers.delete(id),
   })
   return {
-    listProducts, registrations,
+    ...medusa, registrations, queries, timers,
     productCalls: () => productCalls,
     regionCalls: () => regionCalls,
     invalidate(tag) {
@@ -229,4 +247,73 @@ test("scalar handles remain individually invalidatable and non-string values nev
   assert.deepEqual(Array.from(cache.registrations[0].tags), ["products", "product:example-phone"])
   await cache.listProducts({ handle: ["example-phone", null, 42, "another-phone"], limit: 2 })
   assert.deepEqual(Array.from(cache.registrations[1].tags), ["products", "product:example-phone", "product:another-phone"])
+})
+
+test("unpriced catalogue reads do not resolve a region or trigger implicit backend pricing", async () => {
+  const cache = loadProductCache({ regionUnavailable: true })
+  const query = { handle: "example-phone", fields: "id,handle,variants.id,variants.options.value" }
+  const result = await cache.listProducts(query, { pricing: false })
+  assert.equal(result.error, undefined)
+  assert.equal(cache.regionCalls(), 0)
+  assert.equal(Object.hasOwn(cache.queries[0], "region_id"), false)
+  assert.equal(result.products[0].variants[0].calculated_price, undefined)
+  await cache.listProducts(query, { pricing: false })
+  assert.equal(cache.productCalls(), 1)
+  assert.equal(cache.timers.size, 0, "completed calls must not leave timeout callbacks pending")
+})
+
+test("unpriced mode removes explicit region and price fields, including the default field set", async () => {
+  const cache = loadProductCache()
+  await cache.listProducts({ region_id: "region-bd", fields: "id,*variants.calculated_price,variants.id" }, { pricing: false })
+  await cache.listProducts({}, { pricing: false })
+  for (const query of cache.queries) {
+    assert.equal(Object.hasOwn(query, "region_id"), false)
+    assert.doesNotMatch(query.fields, /calculated_price/)
+  }
+  assert.equal(cache.regionCalls(), 0)
+})
+
+test("priced and unpriced cache entries stay separate and defaults preserve actual regional amounts", async () => {
+  const cache = loadProductCache()
+  const query = { handle: "example-phone", fields: "id,variants.id" }
+  const unpriced = await cache.listProducts(query, { pricing: false })
+  const priced = await cache.listProducts(query)
+  assert.equal(unpriced.products[0].variants[0].calculated_price, undefined)
+  assert.deepEqual(plain(priced.products[0].variants.map((v) => v.calculated_price)), [
+    { calculated_amount: 1900, currency_code: "bdt" },
+    { calculated_amount: 2250, currency_code: "bdt" },
+  ])
+  assert.equal(cache.queries[1].region_id, "region-bd")
+  assert.equal(cache.productCalls(), 2)
+  await cache.listProducts(query, { pricing: false })
+  await cache.listProducts(query, { pricing: true })
+  assert.equal(cache.productCalls(), 2, "each mode should reuse its own successful data")
+  cache.invalidate("product:example-phone")
+  await cache.listProducts(query)
+  await cache.listProducts(query, { pricing: false })
+  assert.equal(cache.productCalls(), 4, "product invalidation must clear both modes")
+})
+
+test("product pages keep device-specific and regular-product prices with narrow relation fields", async () => {
+  const cache = loadProductCache()
+  const product = await cache.getProductByHandle("regular-or-alcantara")
+  const query = cache.queries[0]
+  assert.equal(query.region_id, "region-bd")
+  assert.equal(query.fields, cache.PRODUCT_PAGE_FIELDS)
+  assert.doesNotMatch(query.fields, /\*/)
+  for (const field of ["variants.id", "variants.title", "variants.metadata", "variants.options.option_id", "variants.options.value", "variants.calculated_price.calculated_amount", "variants.calculated_price.currency_code", "options.values.value", "images.url"]) {
+    assert.ok(query.fields.split(",").includes(field), `${field} remains necessary for price/selection/gallery behavior`)
+  }
+  assert.deepEqual(plain(product.variants.map((v) => v.calculated_price.calculated_amount)), [1900, 2250])
+  assert.equal(cache.timers.size, 0)
+})
+
+test("explicit pricing regions remain scoped and large unpriced batches still bypass pricing", async () => {
+  const cache = loadProductCache()
+  await cache.listProducts({ region_id: "region-other", fields: "id,variants.id" })
+  assert.equal(cache.queries[0].region_id, "region-other")
+  assert.equal(cache.regionCalls(), 0)
+  await cache.listProducts({ limit: 201, fields: "id,handle" }, { pricing: false })
+  assert.equal(Object.hasOwn(cache.queries[1], "region_id"), false)
+  assert.equal(cache.regionCalls(), 0)
 })

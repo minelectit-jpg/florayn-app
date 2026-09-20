@@ -143,7 +143,7 @@ export async function getBundleConfig(): Promise<BundleConfig | null> {
       headers: { "x-publishable-api-key": KEY },
       // Tiers change rarely and are edited in the admin, so a short revalidate
       // keeps the product page fast without going stale for long.
-      next: { revalidate: 60 },
+      next: { revalidate: 60, tags: ["bundles"] },
     })
     if (!res.ok) return null
     return (await res.json()) as BundleConfig

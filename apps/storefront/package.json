@@ -6,7 +6,8 @@
     "dev": "next dev --port 8000",
     "build": "next build",
     "start": "next start -p ${PORT:-8000}",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@medusajs/js-sdk": "2.19.0",

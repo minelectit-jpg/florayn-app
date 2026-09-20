@@ -21,8 +21,10 @@ function fakeRedis() {
   const entries = new Map()
   const indexes = new Map()
   const ttls = new Map()
+  const hashes = new Map([["florayn:sf:freshness:v1", new Map([["generation", "test-generation"]])]])
   return {
-    entries, indexes, ttls,
+    entries, indexes, ttls, hashes,
+    now: Date.now(),
     isReady: true,
     reads: 0,
     transactions: 0,
@@ -30,6 +32,7 @@ function fakeRedis() {
     on() {},
     async connect() {},
     async get(key) { this.reads++; return entries.get(key) ?? null },
+    async hmGet(key, fields) { return fields.map((field) => hashes.get(key)?.get(field) ?? null) },
     multi() {
       const operations = []
       const transaction = {
@@ -45,15 +48,27 @@ function fakeRedis() {
           return transaction
         },
         expire(key, ttl) { operations.push(() => ttls.set(key, ttl)); return transaction },
-        exec: async () => { this.transactions++; operations.forEach(operation => operation()) },
+        exec: async () => {
+          if (this.beforeExec) await this.beforeExec()
+          this.transactions++
+          operations.forEach(operation => operation())
+        },
       }
       return transaction
     },
     // Model Redis's atomic script execution as one synchronous section. Hooks
     // let tests schedule MULTI writes immediately before or after that section.
-    async eval(_script, { keys: [index] }) {
+    async eval(_script, { keys: [index, freshness], arguments: args }) {
+      if (!freshness) {
+        if (!hashes.has(index)) hashes.set(index, new Map())
+        const hash = hashes.get(index)
+        if (!hash.has("generation")) hash.set("generation", args[0])
+        return hash.get("generation")
+      }
       this.evaluations++
       if (this.beforeEval) await this.beforeEval()
+      if (!hashes.has(freshness)) hashes.set(freshness, new Map([["generation", args[1]]]))
+      hashes.get(freshness).set(`tag:${args[0]}`, String(this.now++))
       const keys = [...(indexes.get(index) ?? [])]
       for (const key of keys) {
         entries.delete(key)
@@ -70,7 +85,9 @@ function fakeRedis() {
 function handler(redis, { configured = true, buildId = "build-a" } = {}) {
   const filename = path.resolve(__dirname, "../cache-handler.js")
   const sandbox = {
-    module: { exports: {} }, Buffer, Map, Set, Date, setTimeout, clearTimeout,
+    module: { exports: {} }, Buffer, Map, Set,
+    Date: class extends Date { static now() { return redis.now++ } },
+    console: { warn() {} }, setTimeout, clearTimeout,
     process: { env: configured ? { STOREFRONT_REDIS_URL: "redis://unused.invalid/1" } : {}, cwd: () => "/app" },
     require(name) {
       if (name === "redis") return { createClient: () => redis }
@@ -118,7 +135,7 @@ test("route codec preserves all Next route payload kinds and reduces binary expa
 test("handler reuses old FETCH data and publishes old-reader-compatible FETCH writes", async () => {
   const redis = fakeRedis()
   const cache = handler(redis)
-  const existing = { value: { kind: "FETCH", data: { body: "warm products" } }, lastModified: 50, tags: ["products"] }
+  const existing = { value: { kind: "FETCH", data: { body: "warm products" } }, lastModified: 50, tags: ["products"], cacheGeneration: "test-generation" }
   redis.entries.set("florayn:sf:fetch:products", codec.serializeLegacy(existing))
   assert.deepEqual(await cache.get("products", { kind: "FETCH" }), existing)
   await cache.set("products", existing.value, { fetchCache: true, tags: ["products"] })
@@ -145,7 +162,7 @@ test("legacy route fallback stays in its build and tag invalidation removes both
   const redis = fakeRedis()
   const cache = handler(redis)
   const oldKey = "florayn:sf:route:build-a:/product/example"
-  const old = { value: { kind: "APP_PAGE", html: "old", rscData: Buffer.from("old-rsc") }, lastModified: 100, tags: ["products"] }
+  const old = { value: { kind: "APP_PAGE", html: "old", rscData: Buffer.from("old-rsc") }, lastModified: 100, tags: ["products"], cacheGeneration: "test-generation" }
   redis.entries.set(oldKey, codec.serializeLegacy(old))
   redis.indexes.set("florayn:sf:tag:products", new Set([oldKey]))
   assert.deepEqual(await cache.get("/product/example", { kind: "APP_PAGE" }), old)
@@ -216,13 +233,87 @@ test("a stalled Redis GET is bounded and becomes a cache miss", async () => {
   assert.ok(performance.now() - start < 1000)
 })
 
-test("failed Redis writes and invalidations do not reject rendering", async () => {
+test("instance invalidation does not fail committed actions, but static acknowledgement stays strict", async () => {
   const redis = fakeRedis()
   redis.multi = () => { throw new Error("offline") }
   redis.eval = async () => { throw new Error("offline") }
   const cache = handler(redis)
   await cache.set("product", { kind: "APP_PAGE", rscData: Buffer.from("rsc") }, { tags: ["products"] })
   await cache.revalidateTag("products")
+  await assert.rejects(cache.constructor.invalidateTags(["products"]), /invalidation failed/)
+  assert.equal(await cache.get("product", { kind: "APP_PAGE" }), null)
+})
+
+test("unconfigured Redis does not fail action revalidation", async () => {
+  const cache = handler(fakeRedis(), { configured: false })
+  await cache.revalidateTag("_N_T_/cart")
+  await assert.rejects(cache.constructor.invalidateTags(["products"]), /unavailable/)
+})
+
+test("failed instance tags block stale reads until recovery acknowledges them", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  await cache.set("old", { kind: "FETCH", data: { body: "old" } }, { fetchCache: true, tags: ["products"] })
+  const originalEval = redis.eval
+  redis.eval = async () => { throw new Error("temporary outage") }
+  await cache.revalidateTag("products")
+  assert.equal(await cache.get("old", { kind: "FETCH" }), null)
+  redis.eval = originalEval
+  // Explicit acknowledgement also clears the pending process-local marker.
+  await cache.constructor.invalidateTags(["products"])
+  await cache.set("new", { kind: "FETCH", data: { body: "new" } }, { fetchCache: true, tags: ["products"] })
+  assert.ok(await cache.get("new", { kind: "FETCH" }))
+  assert.equal(await cache.get("old", { kind: "FETCH" }), null)
+})
+
+test("implicit path softTags invalidate untagged native fetch data", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  await cache.set("native-content", { kind: "FETCH", data: { body: "old content" } }, { fetchCache: true })
+  assert.ok(await cache.get("native-content", { kind: "FETCH", softTags: ["_N_T_/layout"] }))
+  await cache.revalidateTag("_N_T_/layout")
+  assert.ok(redis.entries.has("florayn:sf:fetch:native-content"))
+  assert.equal(await cache.get("native-content", { kind: "FETCH", softTags: ["_N_T_/layout"] }), null)
+})
+
+test("timestamp checks still invalidate values after their tag index was evicted", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  await cache.set("stock", { kind: "FETCH", data: { body: "old stock" } }, { fetchCache: true, tags: ["stock"] })
+  redis.indexes.delete("florayn:sf:tag:stock")
+  await cache.revalidateTag("stock")
+  assert.ok(redis.entries.has("florayn:sf:fetch:stock"))
+  assert.equal(await cache.get("stock", { kind: "FETCH" }), null)
+})
+
+test("evicting the timestamp hash makes surviving values miss across generations", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  await cache.set("first", { kind: "FETCH", data: { body: "before eviction" } }, { fetchCache: true })
+  redis.hashes.delete("florayn:sf:freshness:v1")
+  assert.equal(await cache.get("first", { kind: "FETCH" }), null)
+  await cache.set("second", { kind: "FETCH", data: { body: "after eviction" } }, { fetchCache: true })
+  assert.ok(await cache.get("second", { kind: "FETCH" }))
+  assert.equal(await cache.get("first", { kind: "FETCH" }), null)
+})
+
+test("legacy values without a freshness generation are migrated conservatively", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  redis.entries.set("florayn:sf:fetch:legacy", codec.serializeLegacy({ value: { kind: "FETCH" }, lastModified: 50 }))
+  assert.equal(await cache.get("legacy", { kind: "FETCH" }), null)
+})
+
+test("an invalidation during a write rejects the older result even if SET finishes last", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  redis.beforeExec = async () => {
+    redis.beforeExec = null
+    await cache.revalidateTag("products")
+  }
+  await cache.set("product", { kind: "FETCH", data: { body: "old result" } }, { fetchCache: true, tags: ["products"] })
+  assert.ok(redis.entries.has("florayn:sf:fetch:product"))
+  assert.equal(await cache.get("product", { kind: "FETCH" }), null)
 })
 
 test("a stalled Redis write is bounded", async () => {

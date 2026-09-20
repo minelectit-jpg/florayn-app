@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import FeaturesSection from "@/components/features-section"
 import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
@@ -21,17 +21,21 @@ type AddState = "idle" | "adding" | "added" | "error"
  * just a single variant, so the store owner can add normal products freely.
  */
 export default function RegularProductView({
+  pagePath,
   product,
   collection,
   tabs,
   featureBlocks,
 }: {
+  pagePath: string
   product: StoreProduct
   collection?: { title: string; handle: string } | null
   tabs?: ReactNode
   /** Feature blocks; keyed by this product's form label (AirPods, Sticky Pad…). */
   featureBlocks?: FeatureBlock[]
 }) {
+  const [hydratedPath, setHydratedPath] = useState<string | null>(null)
+  useEffect(() => { setHydratedPath(pagePath) }, [pagePath])
   const { add } = useCart()
   const variants = product.variants ?? []
   const options = product.options ?? []
@@ -104,7 +108,8 @@ export default function RegularProductView({
   )
 
   return (
-    <div className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+    <div data-product-ready data-product-path={pagePath} data-product-hydrated={hydratedPath === pagePath}
+      className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
       <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery key={selected?.id ?? "default"} items={images} label={product.title} />
       </div>

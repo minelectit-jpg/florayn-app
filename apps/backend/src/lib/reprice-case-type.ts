@@ -1,5 +1,6 @@
 import { Modules } from "@medusajs/framework/utils"
 import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows"
+import { rebuildCards } from "./rebuild-cards"
 
 /**
  * Re-price every variant of a case type across the whole catalogue.
@@ -36,7 +37,7 @@ export async function repriceCaseType({
   )
 
   const variantIds: string[] = []
-  let productCount = 0
+  const productIds: string[] = []
   for (const product of products) {
     const optionTitleById = new Map<string, string>(
       (product.options ?? []).map((o: any) => [o.id, o.title])
@@ -51,7 +52,7 @@ export async function repriceCaseType({
         touched = true
       }
     }
-    if (touched) productCount++
+    if (touched) productIds.push(product.id)
   }
 
   if (variantIds.length) {
@@ -65,5 +66,6 @@ export async function repriceCaseType({
     })
   }
 
-  return { variants: variantIds.length, products: productCount }
+  if (productIds.length) await rebuildCards(container, { productIds })
+  return { variants: variantIds.length, products: productIds.length }
 }

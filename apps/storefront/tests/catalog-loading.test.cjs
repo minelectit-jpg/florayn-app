@@ -52,8 +52,9 @@ test("sitemaps cover a catalog larger than 600 products without pricing or phant
     react: uncachedReact,
     "@/lib/catalog": { getDeviceCatalog: async () => devices },
     "@/lib/medusa": {
-      listProducts: async (query) => {
+      listProducts: async (query, options) => {
         calls++
+        assert.equal(options?.pricing, false, "omitting price fields alone still invokes Medusa pricing")
         assert.ok(query.limit <= 200, "catalog batches must fit the product data cache")
         assert.doesNotMatch(query.fields, /calculated_price|metadata|images/)
         return { products: products.slice(query.offset, query.offset + query.limit), count: products.length }
@@ -82,11 +83,13 @@ test("home prices only selected phone designs and keeps carousel order and real 
     "@/lib/content": { getSiteContent: async () => ({ sections: [{ key: "picks", type: "product_carousel", config: { limit: 5 } }] }) },
     "@/lib/medusa": {
       CARD_FIELDS: "id,title,handle,metadata,*variants,*variants.calculated_price",
-      listProducts: async (query) => {
+      listProducts: async (query, options) => {
         if (!query.id) {
+          assert.equal(options?.pricing, false)
           assert.doesNotMatch(query.fields, /variants|calculated_price/)
           return { products: candidates, count: candidates.length }
         }
+        assert.notEqual(options?.pricing, false, "the visible carousel still needs actual region prices")
         pricedCount = query.id.length
         assert.deepEqual(Array.from(query.id), expected.map((p) => p.id))
         return { products: [...expected].reverse(), count: expected.length }
@@ -136,7 +139,8 @@ test("collection loads compatibility before hydrating selected-device prices and
     "@/lib/variant-matrix": { buildVariantMatrix },
     "@/lib/medusa": {
       sdk: { store: { collection: { list: async () => ({ collections: [{ id: "collection-1", title: "Alcantara" }] }) } } },
-      listProducts: async (query) => {
+      listProducts: async (query, options) => {
+        assert.equal(options?.pricing, false)
         assert.equal(query.collection_id, "collection-1")
         assert.doesNotMatch(query.fields, /variants\.calculated_price|variants\.metadata/)
         assert.doesNotMatch(query.fields, /description|\*collection|\*categories/)
@@ -150,4 +154,32 @@ test("collection loads compatibility before hydrating selected-device prices and
   assert.equal(card.props.product.variants[0].calculated_price.calculated_amount, 1900)
   assert.equal(card.props.product.variants[1].calculated_price.calculated_amount, 2200)
   assert.equal(card.props.product.variants[0].metadata.images[0], "https://images.invalid/0.webp")
+})
+
+test("shop Quick Add resolves the chosen device and construction without invoking unused pricing", async () => {
+  const device = { name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
+  const caseType = { name: "Signature", slug: "signature", price: 1400 }
+  const { default: ShopView } = loadSource("components/shop-view.tsx", {
+    "next/link": { __esModule: true, default: "Link" },
+    "@/lib/catalog": {
+      getDeviceCatalog: async () => [device],
+      getCaseTypes: async () => [caseType],
+      getShopCatalog: async () => [{ slug: "example", name: "Example", forms: ["phone"], caseTypes: ["signature"] }],
+      shopCardImage: () => "https://images.invalid/selected.webp",
+    },
+    "@/lib/medusa": { listProducts: async (query, options) => {
+      assert.equal(options?.pricing, false)
+      assert.doesNotMatch(query.fields, /calculated_price/)
+      assert.deepEqual(Array.from(query.handle), ["example"])
+      return { products: [{ id: "p1", handle: "example", variants: [
+        { id: "wrong-device", options: [{ value: "Signature" }, { value: "iPhone 14" }] },
+        { id: "selected-variant", options: [{ value: "Signature" }, { value: device.name }] },
+      ] }], count: 1 }
+    } },
+  })
+  const tree = await ShopView({ deviceSlug: device.slug, caseTypeSlug: caseType.slug })
+  const grid = tree.props.children[1].props
+  assert.equal(grid.products[0].variants[0].id, "selected-variant")
+  assert.equal(grid.products[0].variants[0].calculated_price.calculated_amount, 1400)
+  assert.equal(grid.products[0].variants[0].metadata.images[0], "https://images.invalid/selected.webp")
 })
