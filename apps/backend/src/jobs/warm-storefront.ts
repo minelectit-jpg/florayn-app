@@ -1,5 +1,6 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
+import { setTimeout as delay } from "node:timers/promises"
 
 /**
  * Keep the Cloudflare edge (and the Next ISR route cache) HOT for every product,
@@ -24,7 +25,11 @@ const DEVICES_BY_FORM: Record<string, string[]> = {
   phone: ["iphone-17-pro-max", "iphone-16-pro-max"],
   airpods: ["airpods-pro-3", "airpods-4", "airpods-pro-2", "airpods-3", "airpods-pro"],
 }
-const CONCURRENCY = 3
+const REQUEST_INTERVAL_MS = 250
+const REQUEST_TIMEOUT_MS = 10_000
+const PASS_BUDGET_MS = 18 * 60 * 1000
+let running = false
+let nextUrlIndex = 0
 const HEADERS = {
   "Sec-Fetch-Dest": "document",
   "Sec-Fetch-Mode": "navigate",
@@ -35,62 +40,76 @@ const HEADERS = {
 
 export default async function warmStorefront(container: MedusaContainer) {
   const logger = container.resolve("logger")
-  const productModule = container.resolve(Modules.PRODUCT)
-
-  // Every live product (handle + form), from product metadata.
-  const products = await productModule.listProducts(
-    {},
-    { select: ["handle", "metadata"], take: 10000 }
-  )
-
-  // Home + the shop landings the menu links to.
-  const urls = [
-    "/",
-    "/shop/iphone-17-pro-max/signature/",
-    "/shop/iphone-16-pro-max/signature/",
-    "/shop/airpods-pro-3/signature/",
-  ]
-  // Warm each product on the devices its form actually sells to visitors. The
-  // handle already carries the form suffix (e.g. `<design>-airpods`), so the URL
-  // is `/product/<handle>-<device>/`.
-  for (const p of products) {
-    const meta = (p.metadata ?? {}) as Record<string, any>
-    const devs = DEVICES_BY_FORM[String(meta.form ?? "")]
-    if (!devs || !p.handle) continue
-    for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=signature`)
+  if (running) {
+    logger.info("[warm-storefront] skipped: previous pass is still active")
+    return
   }
-
-  let i = 0
-  let hit = 0
-  let warmed = 0
-  let bad = 0
+  running = true
   const start = Date.now()
+  const deadline = start + PASS_BUDGET_MS
+  try {
+    const productModule = container.resolve(Modules.PRODUCT)
+    const products = await productModule.listProducts(
+      {},
+      { select: ["handle", "metadata"], take: 10000, order: { handle: "ASC" } }
+    )
 
-  async function worker() {
-    while (i < urls.length) {
-      const u = urls[i++]
+    const urls = [
+      "/",
+      "/shop/iphone-17-pro-max/signature/",
+      "/shop/iphone-16-pro-max/signature/",
+      "/shop/airpods-pro-3/signature/",
+    ]
+    for (const p of products) {
+      const meta = (p.metadata ?? {}) as Record<string, any>
+      const devs = DEVICES_BY_FORM[String(meta.form ?? "")]
+      if (!devs || !p.handle) continue
+      for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=signature`)
+    }
+
+    nextUrlIndex %= urls.length
+    let processed = 0
+    let hit = 0
+    let warmed = 0
+    let bad = 0
+
+    // One request at a time leaves CPU for customers. A partial pass resumes at
+    // its next URL on the following run, so slow early pages cannot starve the
+    // tail of the catalogue. The guard is shared by runs in this worker process.
+    while (processed < urls.length && Date.now() < deadline) {
+      const u = urls[nextUrlIndex]
+      const remainingMs = deadline - Date.now()
+      if (remainingMs <= 0) break
       try {
         const r = await fetch(`${STOREFRONT}${u}`, {
           headers: HEADERS,
           redirect: "manual",
+          signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remainingMs)),
         })
         const cf = (r.headers.get("cf-cache-status") || "").toUpperCase()
         if (cf === "HIT") hit++
         else warmed++
-        await r.arrayBuffer().catch(() => {})
+        await r.arrayBuffer()
         if (r.status >= 400) bad++
       } catch {
         bad++
       }
+      processed++
+      nextUrlIndex = (nextUrlIndex + 1) % urls.length
+      if (processed < urls.length) {
+        const pauseMs = Math.min(REQUEST_INTERVAL_MS, Math.max(0, deadline - Date.now()))
+        if (pauseMs) await delay(pauseMs)
+      }
     }
-  }
 
-  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
-  logger.info(
-    `[warm-storefront] ${urls.length} urls in ${(
-      (Date.now() - start) / 1000
-    ).toFixed(1)}s — edge HIT=${hit} warmed=${warmed} bad=${bad}`
-  )
+    logger.info(
+      `[warm-storefront] processed=${processed}/${urls.length} remaining=${urls.length - processed} ` +
+      `next=${nextUrlIndex} in ${((Date.now() - start) / 1000).toFixed(1)}s — ` +
+      `edge HIT=${hit} warmed=${warmed} bad=${bad}`
+    )
+  } finally {
+    running = false
+  }
 }
 
 export const config = {
