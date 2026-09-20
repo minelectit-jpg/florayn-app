@@ -14,8 +14,9 @@ import { useCart } from "@/components/cart-provider"
 import type { BundleConfig } from "@/lib/bundles"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
+import type { ProductVariantMatrix } from "@/lib/product-view-data"
 import { formatPrice } from "@/lib/money"
-import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
+import { pairKey } from "@/lib/variant-matrix"
 
 type AddState = "idle" | "adding" | "added" | "error"
 
@@ -74,7 +75,7 @@ export default function ProductBuyBox({
   moreDesigns,
   shipping,
 }: {
-  matrix: VariantMatrix
+  matrix: ProductVariantMatrix
   /** The variant for the current (caseType, device) pair, or null. */
   selected: StoreVariant | null
   /** device name -> family label, for grouping the drawer. */

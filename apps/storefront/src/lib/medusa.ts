@@ -206,19 +206,19 @@ export async function listProducts(
   params: Record<string, unknown> = {}
 ): Promise<ProductListResult> {
   const limit = typeof params.limit === "number" ? params.limit : 24
-  const handle =
+  const handles =
     typeof params.handle === "string"
-      ? params.handle
-      : Array.isArray(params.handle) && params.handle.length === 1
-        ? String(params.handle[0])
-        : undefined
+      ? [params.handle]
+      : Array.isArray(params.handle)
+        ? params.handle.filter((handle): handle is string => typeof handle === "string")
+        : []
   try {
     // Very large listings bypass the cache (keeps multi-MB values out of Redis).
     if (limit > MAX_CACHEABLE_LIMIT) {
       return await listProductsUncached(params)
     }
     const tags = ["products"]
-    if (handle) tags.push(`product:${handle}`)
+    for (const handle of new Set(handles)) tags.push(`product:${handle}`)
     const cached = unstable_cache(
       () => listProductsUncached(params),
       ["products", DATA_VERSION, stableKey(params)],

@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
+import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
+import { cache } from "react"
 
 import CollectionFilters from "@/components/collection-filters"
 import CollectionHero from "@/components/collection-hero"
@@ -20,6 +22,15 @@ const DEFAULT_DEVICE = "iPhone 17 Pro Max"
 /** Families that come in more than one construction. */
 const MULTI_CASE_TYPE_FAMILIES = new Set(["iphone", "samsung"])
 
+// Keep actual region-calculated variant prices (including per-device prices),
+// options and card images. Detail-page descriptions and taxonomy joins are not
+// needed to render or filter this grid.
+const COLLECTION_FIELDS =
+  "id,title,handle,subtitle,thumbnail,metadata,images.url," +
+  "options.id,options.title,options.values.value," +
+  "variants.id,variants.title,variants.metadata," +
+  "*variants.options,*variants.calculated_price"
+
 /**
  * /collection/<slug>/ serves two kinds of grouping:
  *
@@ -30,8 +41,8 @@ const MULTI_CASE_TYPE_FAMILIES = new Set(["iphone", "samsung"])
  * Collections are checked first so a curated collection can shadow a category
  * of the same handle.
  */
-async function resolveCollection(slug: string) {
-  try {
+const getCollectionGroup = unstable_cache(
+  async (slug: string) => {
     const { collections } = await sdk.store.collection.list({
       handle: slug,
       limit: 1,
@@ -44,11 +55,6 @@ async function resolveCollection(slug: string) {
         description: null as string | null,
       }
     }
-  } catch {
-    // Fall through to categories.
-  }
-
-  try {
     const { product_categories } = await sdk.store.category.list({
       handle: slug,
       limit: 1,
@@ -62,12 +68,21 @@ async function resolveCollection(slug: string) {
         description: category.description ?? null,
       }
     }
-  } catch {
-    // Nothing matched.
-  }
+    return null
+  },
+  ["collection-group-v1"],
+  { revalidate: 300, tags: ["products"] }
+)
 
-  return null
-}
+// Metadata and the body share one lookup. Backend failures escape the persistent
+// cache, then retain the existing not-found fallback for this request only.
+const resolveCollection = cache(async (slug: string) => {
+  try {
+    return await getCollectionGroup(slug)
+  } catch {
+    return null
+  }
+})
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params
@@ -100,11 +115,13 @@ export default async function CollectionPage({ params, searchParams }: Params) {
   }
 
   const [{ products }, deviceCatalog, landing] = await Promise.all([
-    listProducts(
-      group.kind === "collection"
-        ? { collection_id: group.id, limit: 100 }
-        : { category_id: group.id, limit: 100 }
-    ),
+    listProducts({
+      ...(group.kind === "collection"
+        ? { collection_id: group.id }
+        : { category_id: group.id }),
+      limit: 100,
+      fields: COLLECTION_FIELDS,
+    }),
     getDeviceCatalog(),
     getCollectionPage(slug),
   ])

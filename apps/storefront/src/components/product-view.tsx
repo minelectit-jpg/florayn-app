@@ -17,8 +17,9 @@ import type { BundleConfig } from "@/lib/bundles"
 import type { FeatureBlock, GalleryVideoMap } from "@/lib/content"
 import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
-import type { StoreProduct, StoreVariant } from "@/lib/medusa"
-import { pairKey, type VariantMatrix } from "@/lib/variant-matrix"
+import type { StoreVariant } from "@/lib/medusa"
+import type { ProductVariantMatrix } from "@/lib/product-view-data"
+import { pairKey } from "@/lib/variant-matrix"
 
 /**
  * The two-column top of the product page.
@@ -54,7 +55,7 @@ export default function ProductView({
   galleryVideos,
   youWillLoveItems,
 }: {
-  matrix: VariantMatrix
+  matrix: ProductVariantMatrix
   variants: StoreVariant[]
   /** device name -> family label, for grouping the device drawer. */
   families: Record<string, string>

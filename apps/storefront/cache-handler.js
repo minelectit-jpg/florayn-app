@@ -24,19 +24,22 @@
 //     same-commit rebuild gets a new namespace -> no stale chunks on redeploy).
 //
 // SAFETY (this is load-bearing — it runs on the hot path of every cached render):
-//   - Every Redis op has a HARD timeout (Promise.race). A reachable-but-slow/hung
-//     Redis can never block a render longer than the timeout; on timeout we treat
-//     it as a miss (get) or no-op (set), i.e. render from origin like today.
+//   - Each Redis wait has a timeout (Promise.race). A route miss can make two
+//     reads, and encoding/decoding is outside these per-command timeouts. A
+//     timeout returns a cache miss or stops waiting for a write; it does not
+//     cancel a command that Redis has already received.
 //   - A circuit breaker skips Redis entirely for a cool-off window after repeated
 //     failures, so a sustained outage adds ~0ms to requests.
 //   - disableOfflineQueue + connectTimeout so commands fail fast instead of
 //     queueing during a flap. If STOREFRONT_REDIS_URL is unset, the handler is
-//     inert and the app behaves exactly as it does with the default fs cache.
+//     inert. Cache misses render from origin; Next does not fall back to its
+//     filesystem cache after a custom handler has been selected.
 
 const fs = require("node:fs")
 const path = require("node:path")
 const crypto = require("node:crypto")
 const { createClient } = require("redis")
+const { serializeLegacy, deserializeLegacy, serializeRoute, deserializeRoute } = require("./cache-codec")
 
 const PREFIX = "florayn:sf"
 const ROUTE_TTL = 60 * 60 * 72 // 72h — old-build route namespaces self-evict
@@ -45,6 +48,19 @@ const GET_TIMEOUT_MS = 60
 const SET_TIMEOUT_MS = 200
 const BREAKER_THRESHOLD = 4 // consecutive failures before tripping
 const BREAKER_COOLDOWN_MS = 30_000
+
+// Run the membership read and deletion atomically relative to MULTI writes.
+// Otherwise a new entry can arrive after SMEMBERS and lose its tag index when
+// invalidation deletes the index. UNLINK frees large payloads asynchronously;
+// bounded batches avoid Lua unpack limits for tags shared by many pages.
+const REVALIDATE_TAG_SCRIPT = `
+local keys = redis.call("SMEMBERS", KEYS[1])
+for first = 1, #keys, 256 do
+  redis.call("UNLINK", unpack(keys, first, math.min(first + 255, #keys)))
+end
+redis.call("DEL", KEYS[1])
+return #keys
+`
 
 // .next/BUILD_ID is a fresh random id per build (we do NOT set generateBuildId).
 // Fail CLOSED: if it can't be read, use a per-process random id so we never share
@@ -104,11 +120,16 @@ function db() {
   return client
 }
 
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("redis-timeout")), ms)),
-  ])
+async function withTimeout(promise, ms) {
+  let timer
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("redis-timeout")), ms) }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function ready() {
@@ -116,23 +137,6 @@ async function ready() {
   const c = db()
   if (!c || !c.isReady) return null
   return c
-}
-
-// Buffers (APP_PAGE.rscData, APP_ROUTE body) and Maps (APP_PAGE.segmentData) do
-// not survive a naive JSON round-trip.
-function serialize(o) {
-  return JSON.stringify(o, (_k, v) =>
-    v instanceof Map ? { __map__: Array.from(v.entries()) } : v
-  )
-}
-function deserialize(s) {
-  return JSON.parse(s, (_k, v) => {
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      if (v.type === "Buffer" && Array.isArray(v.data)) return Buffer.from(v.data)
-      if (Array.isArray(v.__map__)) return new Map(v.__map__)
-    }
-    return v
-  })
 }
 
 module.exports = class RedisCacheHandler {
@@ -143,7 +147,11 @@ module.exports = class RedisCacheHandler {
   key(k, isFetch) {
     return isFetch
       ? `${PREFIX}:fetch:${k}`
-      : `${PREFIX}:route:${this.buildId}:${k}`
+      : `${PREFIX}:route:v2:${this.buildId}:${k}`
+  }
+
+  legacyRouteKey(k) {
+    return `${PREFIX}:route:${this.buildId}:${k}`
   }
 
   async get(cacheKey, ctx) {
@@ -151,9 +159,20 @@ module.exports = class RedisCacheHandler {
     if (!c) return null
     try {
       const isFetch = ctx && ctx.kind === "FETCH"
-      const raw = await withTimeout(c.get(this.key(cacheKey, isFetch)), GET_TIMEOUT_MS)
+      let raw = await withTimeout(c.get(this.key(cacheKey, isFetch)), GET_TIMEOUT_MS)
+      let value
+      if (isFetch) {
+        value = raw ? deserializeLegacy(raw) : null
+      } else if (raw) {
+        value = await deserializeRoute(raw)
+      } else {
+        // A same-build migration can reuse its old route entry. Never read a
+        // different build's HTML, because it references different JS chunks.
+        raw = await withTimeout(c.get(this.legacyRouteKey(cacheKey)), GET_TIMEOUT_MS)
+        value = raw ? deserializeLegacy(raw) : null
+      }
       resetBreaker()
-      return raw ? deserialize(raw) : null // CacheHandlerValue { value, lastModified, tags }
+      return value // CacheHandlerValue { value, lastModified, tags }
     } catch {
       tripBreaker()
       return null // miss -> Next renders from origin (== today)
@@ -168,25 +187,20 @@ module.exports = class RedisCacheHandler {
       let tags = (ctx && ctx.tags) || []
       const header = data.headers && data.headers["x-next-cache-tags"]
       if (typeof header === "string" && header) tags = tags.concat(header.split(","))
+      tags = [...new Set(tags)]
 
       const rk = this.key(cacheKey, isFetch)
-      const payload = serialize({ value: data, lastModified: Date.now(), tags })
-      await withTimeout(c.set(rk, payload, { EX: isFetch ? FETCH_TTL : ROUTE_TTL }), SET_TIMEOUT_MS)
-      resetBreaker()
-
-      // Tag index — fire-and-forget so it never extends the response.
-      if (tags.length) {
-        for (const t of tags) {
-          const idx = `${PREFIX}:tag:${t}`
-          void withTimeout(
-            (async () => {
-              await c.sAdd(idx, rk)
-              await c.expire(idx, FETCH_TTL)
-            })(),
-            SET_TIMEOUT_MS
-          ).catch(() => {})
-        }
+      const entry = { value: data, lastModified: Date.now(), tags }
+      const payload = isFetch ? serializeLegacy(entry) : await serializeRoute(entry)
+      // Publish the value and its tag memberships together. Revalidation must
+      // not miss an entry whose tag index is still being written in the background.
+      const transaction = c.multi().set(rk, payload, { EX: isFetch ? FETCH_TTL : ROUTE_TTL })
+      for (const t of tags) {
+        const idx = `${PREFIX}:tag:${t}`
+        transaction.sAdd(idx, rk).expire(idx, FETCH_TTL)
       }
+      await withTimeout(transaction.exec(), SET_TIMEOUT_MS)
+      resetBreaker()
     } catch {
       tripBreaker()
     }
@@ -198,9 +212,7 @@ module.exports = class RedisCacheHandler {
     try {
       for (const t of [].concat(tagOrTags)) {
         const idx = `${PREFIX}:tag:${t}`
-        const keys = await withTimeout(c.sMembers(idx), SET_TIMEOUT_MS)
-        if (keys && keys.length) await withTimeout(c.del(keys), SET_TIMEOUT_MS)
-        await withTimeout(c.del(idx), SET_TIMEOUT_MS)
+        await withTimeout(c.eval(REVALIDATE_TAG_SCRIPT, { keys: [idx] }), SET_TIMEOUT_MS)
       }
       resetBreaker()
     } catch {

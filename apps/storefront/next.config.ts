@@ -31,9 +31,9 @@ const nextConfig: NextConfig = {
    * NOT pin generateBuildId, so even a same-commit rebuild gets a new namespace and
    * can never serve an old build's HTML -> no ChunkLoadError) while keeping the
    * fetch/data cache build-independent so product data stays warm across deploys.
-   * If STOREFRONT_REDIS_URL is unset or Redis is slow/down, the handler no-ops with
-   * hard timeouts + a circuit breaker, so the app behaves exactly as with the
-   * default filesystem cache and never renders slower than today.
+   * Redis operations use timeouts and a circuit breaker. If Redis is unavailable,
+   * reads become cache misses; a custom handler does not inherit a filesystem
+   * fallback. Monitor Redis availability alongside origin response times.
    */
   cacheHandler: path.join(import.meta.dirname, "cache-handler.js"),
 

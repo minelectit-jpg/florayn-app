@@ -31,16 +31,16 @@ import {
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
+import { productViewMatrix, productViewVariants } from "@/lib/product-view-data"
 
 type Params = {
   params: Promise<{ slug: string }>
 }
 
 export const dynamicParams = true
-// ISR: pages are cached and served instantly (even the first ad visitor gets a
-// prebuilt page), then rebuilt in the background at most this often. `?case=` is
-// read on the client instead of via searchParams, so the route stays static and
-// does not fall back to per-request rendering.
+// Generate product routes on demand, then reuse the ISR result. The first
+// uncached visit still renders the page. `?case=` is read on the client so
+// different constructions share the same static route.
 export const revalidate = 600
 
 /*
@@ -138,41 +138,68 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function ProductPage({ params }: Params) {
   const { slug } = await params
-  const resolved = await resolveProductPage(slug)
-  if (!resolved) notFound()
+  const productPromise = resolveProductPage(slug).then((resolved) => resolved
+    ? { ...resolved, matrix: buildVariantMatrix(resolved.product) }
+    : null)
+  const sectionsPromise = getProductSections()
 
-  const { product, device } = resolved
-
-  const designSlug = product.metadata?.design_slug as string | undefined
-  const designName = (product.metadata?.design_name as string) ?? product.title
-
-  // One parallel round for everything that only needs the product itself; the
-  // page used to await these one by one, which was most of its slow TTFB.
+  // Start each dependency as soon as its inputs are available. A slow stock or
+  // SEO request must not postpone collection data or the featured-picks query.
+  const relatedPromise = productPromise.then(async (resolved) => {
+    if (!resolved?.matrix.caseTypes.length || !resolved.matrix.devices.length) {
+      return [{ products: [] as StoreProduct[] }, {}] as const
+    }
+    const collectionId = resolved?.product.collection?.id
+    const designSlug = resolved?.product.metadata?.design_slug as string | undefined
+    return Promise.all([
+      collectionId
+        ? listProducts({ collection_id: [collectionId], limit: 100, fields: POOL_FIELDS })
+        : Promise.resolve({ products: [] as StoreProduct[] }),
+      getGalleryVideos(designSlug ?? ""),
+    ])
+  })
+  const picksPromise = Promise.all([sectionsPromise, productPromise]).then(async ([{ featuredPicks }, resolved]) => {
+    if (!featuredPicks.length || !resolved?.matrix.caseTypes.length || !resolved.matrix.devices.length) return [] as StoreProduct[]
+    const { products } = await listProducts({
+      handle: featuredPicks,
+      limit: featuredPicks.length,
+      fields: POOL_FIELDS,
+    })
+    const byHandle = new Map(products.map((p) => [p.handle, p]))
+    return featuredPicks
+      .map((handle) => byHandle.get(handle))
+      .filter((p): p is StoreProduct => Boolean(p))
+  })
   const [
+    resolved,
     families,
     deviceCatalog,
     stock,
     caseTypes,
     bundleConfig,
     productSections,
+    seoConfig,
   ] = await Promise.all([
+    productPromise,
     getDeviceFamilyMap(),
     getDeviceCatalog(),
     getBlankStock(),
     getCaseTypes(),
     getBundleConfig(),
-    getProductSections(),
+    sectionsPromise,
+    productPromise.then((resolved) => resolved?.device ? getSeoConfig() : null),
   ])
-  const { featureBlocks, featuredPicks } = productSections
+  if (!resolved) notFound()
+  const { product, device, matrix } = resolved
+  const designSlug = product.metadata?.design_slug as string | undefined
+  const designName = (product.metadata?.design_name as string) ?? product.title
+  const { featureBlocks } = productSections
 
   // The product was fetched without calculated_price (fast); price its variants
   // from the fixed case-type price so the buy box and case-type tiles show the
   // right amount without the engine ever running for ~109 variants.
   const priceByCaseType = new Map(caseTypes.map((c) => [c.name, c.price]))
   applyCaseTypePrices(product, priceByCaseType)
-
-  // The (Case Type x Device) matrix drives both selectors and the gallery.
-  const matrix = buildVariantMatrix(product)
 
   // A regular product (no Case Type + Device options) - e.g. a manually-added
   // one-off - renders as a plain product page instead of the linked selectors.
@@ -194,6 +221,11 @@ export default async function ProductPage({ params }: Params) {
       </article>
     )
   }
+
+  const [[poolResult, galleryVideos], pickedProducts] = await Promise.all([
+    relatedPromise,
+    picksPromise,
+  ])
 
   /*
    * The base page's default device: the NEWEST flagship phone (iPhone first,
@@ -236,9 +268,9 @@ export default async function ProductPage({ params }: Params) {
 
   // Fit sentence, generated from the device's own attributes (device pages only).
   let deviceCopy: string | null = null
-  if (device) {
+  if (device && seoConfig) {
     const seo = resolveSeo({
-      config: await getSeoConfig(),
+      config: seoConfig,
       designSlug,
       deviceSlug: device.slug,
       values: { design: designName, device: device.name, caseType: "" },
@@ -248,22 +280,7 @@ export default async function ProductPage({ params }: Params) {
       : null
   }
 
-  // Related products (this design's collection) and the design's gallery videos,
-  // fetched together. The pool is fetched WITHOUT calculated_price - pricing all
-  // ~24 collection products' variants was ~1.7s of the cold render - and priced
-  // from the fixed case-type price instead (same trick as the main product), so
-  // the below-the-fold strips still show a price without the engine running.
-  const collectionId = product.collection?.id
-  const [poolResult, galleryVideos] = await Promise.all([
-    collectionId
-      ? listProducts({
-          collection_id: [collectionId],
-          limit: 100,
-          fields: POOL_FIELDS,
-        })
-      : Promise.resolve({ products: [] as StoreProduct[] }),
-    getGalleryVideos(designSlug ?? ""),
-  ])
+  // The collection query was started alongside the independent page data.
   const { products: pool } = poolResult
   // Rebuild each pool product's variants from its precomputed metadata.card
   // (POOL_FIELDS no longer hydrates real variants). Then price them exactly as
@@ -336,19 +353,6 @@ export default async function ProductPage({ params }: Params) {
   // One query for all picks, not one round-trip per pick (an N+1 that put N full
   // ~230KB product fetches on the backend per cold render). Reorder to the
   // admin's chosen order since the API does not guarantee it.
-  const pickedProducts: StoreProduct[] = featuredPicks?.length
-    ? await (async () => {
-        const { products } = await listProducts({
-          handle: featuredPicks,
-          limit: featuredPicks.length,
-          fields: POOL_FIELDS,
-        })
-        const byHandle = new Map(products.map((p) => [p.handle, p]))
-        return featuredPicks
-          .map((h) => byHandle.get(h))
-          .filter((p): p is StoreProduct => Boolean(p))
-      })()
-    : []
   // Picks also carry a precomputed card - rebuild their variants from it, then
   // price them from case types (fetched without calculated_price).
   for (const p of pickedProducts) hydratePoolVariantsFromCard(p)
@@ -571,8 +575,8 @@ export default async function ProductPage({ params }: Params) {
   return (
     <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
       <ProductView
-        matrix={matrix}
-        variants={product.variants ?? []}
+        matrix={productViewMatrix(matrix)}
+        variants={productViewVariants(product.variants ?? [])}
         families={families}
         stock={stock}
         fallbackImages={fallbackImages}

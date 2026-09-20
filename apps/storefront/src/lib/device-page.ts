@@ -1,5 +1,7 @@
+import { cache } from "react"
+
 import { getDeviceCatalog, type DeviceRecord } from "@/lib/catalog"
-import { getProductByHandle, type StoreProduct } from "@/lib/medusa"
+import { listProducts, PRODUCT_FIELDS_NOPRICE, type StoreProduct } from "@/lib/medusa"
 
 /**
  * /product/<slug>/ serves two kinds of page.
@@ -11,8 +13,8 @@ import { getProductByHandle, type StoreProduct } from "@/lib/medusa"
  * of its own, matching the shape the live catalogue has - without giving up
  * one product per design and case type in the admin.
  *
- * The base handle is tried first, so a design whose slug happens to end in
- * something device-shaped still resolves to itself.
+ * An exact product handle always takes precedence, so a design whose slug
+ * happens to end in something device-shaped still resolves to itself.
  */
 export type ResolvedProductPage = {
   product: StoreProduct
@@ -22,23 +24,31 @@ export type ResolvedProductPage = {
   baseHandle: string
 }
 
-export async function resolveProductPage(
+const resolveProductPageCached = cache(async (
   slug: string
-): Promise<ResolvedProductPage | null> {
-  const direct = await getProductByHandle(slug)
-  if (direct) {
-    return { product: direct, device: null, baseHandle: direct.handle }
-  }
-
+): Promise<ResolvedProductPage | null> => {
   // Longest device slug first, so iphone-15-pro-max wins over iphone-15.
   const devices = [...(await getDeviceCatalog())].sort(
     (a, b) => b.slug.length - a.slug.length
   )
   const device = devices.find((d) => slug.endsWith(`-${d.slug}`))
+  const baseHandle = device ? slug.slice(0, -(device.slug.length + 1)) : slug
+
+  // Resolve both possibilities in one query instead of waiting for the exact
+  // handle to miss before fetching the base product. With no device catalogue,
+  // ordinary product handles can still resolve through the same lookup.
+  const { products } = await listProducts({
+    handle: device ? [slug, baseHandle] : slug,
+    limit: device ? 2 : 1,
+    fields: PRODUCT_FIELDS_NOPRICE,
+  })
+  const direct = products.find((product) => product.handle === slug)
+  if (direct) {
+    return { product: direct, device: null, baseHandle: direct.handle }
+  }
   if (!device) return null
 
-  const baseHandle = slug.slice(0, -(device.slug.length + 1))
-  const product = await getProductByHandle(baseHandle)
+  const product = products.find((candidate) => candidate.handle === baseHandle)
   if (!product) return null
 
   // The device page only exists if the product is actually sold for it. A
@@ -50,6 +60,17 @@ export async function resolveProductPage(
   if (!fits) return null
 
   return { product, device, baseHandle }
+})
+
+export async function resolveProductPage(
+  slug: string
+): Promise<ResolvedProductPage | null> {
+  // Metadata and the page share the lookup within a render. Give each caller
+  // its own product because the page applies display prices to its variants.
+  const resolved = await resolveProductPageCached(slug)
+  return resolved
+    ? { ...resolved, product: structuredClone(resolved.product) }
+    : null
 }
 
 /** The URL for one device of one product. */

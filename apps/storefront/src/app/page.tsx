@@ -15,14 +15,16 @@ export default async function HomePage() {
 
   let products: StoreProduct[] = []
   if (carousel) {
-    // Card fields only - the home carousel renders cards, so pulling every
-    // product's full gallery and per-variant image arrays here is what made
-    // this fetch heavy enough to time out during prerender.
-    const { products: pool } = await listProducts({ limit: 48, fields: CARD_FIELDS })
+    // Pick the designs before asking Medusa to price their variants. Most of
+    // these 48 candidates never appear in the five-card carousel.
+    const { products: pool } = await listProducts({
+      limit: 48,
+      fields: "id,handle,metadata",
+    })
     // One card per design, so a row of five is five artworks rather than the
     // same artwork in five constructions.
     const seen = new Set<string>()
-    products = pool
+    const selected = pool
       .filter((product) => {
         // The phone case is a design's representative card; skip AirPods etc.
         if ((product.metadata?.form ?? "phone") !== "phone") return false
@@ -33,6 +35,18 @@ export default async function HomePage() {
         return true
       })
       .slice(0, limit)
+
+    if (selected.length) {
+      const { products: cards } = await listProducts({
+        id: selected.map((product) => product.id),
+        limit: selected.length,
+        fields: CARD_FIELDS,
+      })
+      const byId = new Map(cards.map((product) => [product.id, product]))
+      products = selected
+        .map((product) => byId.get(product.id))
+        .filter((product): product is StoreProduct => Boolean(product))
+    }
   }
 
   if (!content.sections.length) {

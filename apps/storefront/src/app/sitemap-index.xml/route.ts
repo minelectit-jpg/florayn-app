@@ -1,8 +1,6 @@
-import { getDeviceCatalog } from "@/lib/catalog"
-import { listProducts } from "@/lib/medusa"
+import { getSitemapUrls, SITEMAP_CHUNK_SIZE } from "@/lib/sitemap-urls"
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://florayn.com"
-const CHUNK = 5000
 
 /**
  * The sitemap index.
@@ -14,17 +12,8 @@ const CHUNK = 5000
 export const revalidate = 86400
 
 export async function GET() {
-  const [{ products }, devices] = await Promise.all([
-    listProducts({ limit: 600 }),
-    getDeviceCatalog(),
-  ])
-  const names = new Set(devices.map((d) => d.name))
-
-  let count = 3 + products.length
-  for (const product of products) {
-    count += (product.variants ?? []).filter((v) => names.has(v.title)).length
-  }
-  const chunks = Math.max(1, Math.ceil(count / CHUNK))
+  const urls = await getSitemapUrls()
+  const chunks = Math.max(1, Math.ceil(urls.length / SITEMAP_CHUNK_SIZE))
   const now = new Date().toISOString()
 
   const body =
