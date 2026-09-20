@@ -100,7 +100,7 @@ test("home prices only selected phone designs and keeps carousel order and real 
   assert.deepEqual(Array.from(cards, (p) => p.variants[0].calculated_price.calculated_amount), expected.map((p) => p.variants[0].calculated_price.calculated_amount))
 })
 
-test("collection keeps selected-device prices and images with narrowed fields", async () => {
+test("collection loads compatibility before hydrating selected-device prices and images", async () => {
   const product = {
     id: "p-1", handle: "alcantara-phone", title: "Alcantara", metadata: { form: "phone" },
     options: [
@@ -115,19 +115,30 @@ test("collection keeps selected-device prices and images with narrowed fields", 
     })),
   }
   const { buildVariantMatrix } = loadSource("lib/variant-matrix.ts", {})
+  const { COLLECTION_FIELDS } = loadSource("lib/collection-products.ts", {
+    "next/cache": { unstable_cache: (fn) => fn },
+    "@/lib/medusa": {},
+  })
   const { default: CollectionPage } = loadSource("app/collection/[slug]/page.tsx", {
     react: uncachedReact,
     "next/cache": { unstable_cache: (fn) => fn },
     "next/navigation": { notFound: () => { throw new Error("unexpected 404") } },
     "@/lib/catalog": { getDeviceCatalog: async () => [{ name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }] },
+    "@/lib/collection-products": {
+      COLLECTION_FIELDS,
+      hydrateCollectionProducts: async (products, device) => {
+        assert.equal(device, "iPhone 17 Pro Max")
+        assert.equal(products[0].id, product.id)
+        return { products: [product] }
+      },
+    },
     "@/lib/content": { getCollectionPage: async () => null },
     "@/lib/variant-matrix": { buildVariantMatrix },
     "@/lib/medusa": {
       sdk: { store: { collection: { list: async () => ({ collections: [{ id: "collection-1", title: "Alcantara" }] }) } } },
       listProducts: async (query) => {
         assert.equal(query.collection_id, "collection-1")
-        assert.match(query.fields, /variants\.calculated_price/)
-        assert.match(query.fields, /variants\.metadata/)
+        assert.doesNotMatch(query.fields, /variants\.calculated_price|variants\.metadata/)
         assert.doesNotMatch(query.fields, /description|\*collection|\*categories/)
         return { products: [product], count: 1 }
       },

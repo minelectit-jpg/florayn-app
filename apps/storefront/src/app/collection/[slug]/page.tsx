@@ -7,6 +7,7 @@ import CollectionFilters from "@/components/collection-filters"
 import CollectionHero from "@/components/collection-hero"
 import ProductCard from "@/components/product-card"
 import { getDeviceCatalog } from "@/lib/catalog"
+import { COLLECTION_FIELDS, hydrateCollectionProducts } from "@/lib/collection-products"
 import { getCollectionPage } from "@/lib/content"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
@@ -21,15 +22,6 @@ const DEFAULT_DEVICE = "iPhone 17 Pro Max"
 
 /** Families that come in more than one construction. */
 const MULTI_CASE_TYPE_FAMILIES = new Set(["iphone", "samsung"])
-
-// Keep actual region-calculated variant prices (including per-device prices),
-// options and card images. Detail-page descriptions and taxonomy joins are not
-// needed to render or filter this grid.
-const COLLECTION_FIELDS =
-  "id,title,handle,subtitle,thumbnail,metadata,images.url," +
-  "options.id,options.title,options.values.value," +
-  "variants.id,variants.title,variants.metadata," +
-  "*variants.options,*variants.calculated_price"
 
 /**
  * /collection/<slug>/ serves two kinds of grouping:
@@ -175,7 +167,8 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     : forDevice
 
   const sort = first(query.sort) || "featured"
-  let sorted = sortProducts(filtered, sort)
+  const priced = await hydrateCollectionProducts(filtered, device)
+  let sorted = sortProducts(priced.products, sort)
 
   /*
    * A curated design list wins over the default ordering, but only while the
