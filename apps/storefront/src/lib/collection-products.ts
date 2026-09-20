@@ -10,7 +10,8 @@ export const COLLECTION_FIELDS =
   "variants.id,variants.title,variants.options.option_id,variants.options.value"
 
 const VARIANT_BATCH_SIZE = 100
-const VARIANT_FIELDS = "id,title,metadata,*calculated_price"
+const VARIANT_FIELDS =
+  "id,title,metadata,calculated_price.calculated_amount,calculated_price.currency_code"
 const QUERY_TIMEOUT_MS = 15_000
 const LEGACY_COLLECTION_FIELDS =
   "id,title,handle,subtitle,thumbnail,metadata,images.url," +
@@ -37,7 +38,11 @@ async function getPricingRegion(): Promise<string | undefined> {
 }
 
 /** Match ProductCard's device scope, including its all-variant fallback. */
-export function collectionVariantIds(products: StoreProduct[], device: string): string[] {
+export function collectionVariantIds(
+  products: StoreProduct[],
+  device: string,
+  includeFirstVariant = true
+): string[] {
   const ids = new Set<string>()
   for (const product of products) {
     const variants = product.variants ?? []
@@ -45,9 +50,9 @@ export function collectionVariantIds(products: StoreProduct[], device: string): 
       ? variants.filter((variant) => variant.options?.some((option) => option.value === device))
       : variants
     for (const variant of matching.length ? matching : variants) ids.add(variant.id)
-    // Collection price sorting currently uses the first variant, even when a
-    // different device is selected. Keep that amount and QuickAdd fallback.
-    if (variants[0]) ids.add(variants[0].id)
+    // The two price sorts use the first variant even on a different device.
+    // Other sorts only need the card's device scope (or all-variant fallback).
+    if (includeFirstVariant && variants[0]) ids.add(variants[0].id)
   }
   return [...ids].sort()
 }
@@ -104,9 +109,10 @@ async function loadPricedFallback(products: StoreProduct[]): Promise<{ products:
 /** Price only cards' visible device variants, using Medusa's real price engine. */
 export async function hydrateCollectionProducts(
   products: StoreProduct[],
-  device: string
+  device: string,
+  { includeFirstVariant = true }: { includeFirstVariant?: boolean } = {}
 ): Promise<{ products: StoreProduct[] }> {
-  const ids = collectionVariantIds(products, device)
+  const ids = collectionVariantIds(products, device, includeFirstVariant)
   if (!ids.length) return { products }
   try {
     const regionId = await getPricingRegion()

@@ -7,10 +7,12 @@ import {
   getCaseTypes,
   getDeviceCatalog,
   getShopCatalog,
+  getShopCards,
   shopCardImage,
   type CaseTypeRecord,
   type DeviceRecord,
   type ShopDesign,
+  type ShopCard,
 } from "@/lib/catalog"
 import { listProducts, type StoreProduct, type StoreVariant } from "@/lib/medusa"
 
@@ -22,8 +24,8 @@ const PAGE_SIZE = 32
  * list. Pulling every variant's calculated_price for ~180 designs took ~40s once
  * the whole library went live; instead the grid pages through the catalogue
  * (design + case types, no variants), prices each card from the fixed case-type
- * price, builds its image URL from the wired R2 path, and fetches variant ids for
- * only the current page (so Quick Add still works) - no per-variant price ever.
+ * price, and fetches variant IDs and stored card images for only the current
+ * page (so Quick Add still works) - no per-variant price calculation.
  *
  * Routes (path-based paging so each page is its own ISR entry):
  *   /shop                                   -> everything (page 1)
@@ -111,46 +113,63 @@ export default async function ShopView({
     current * PAGE_SIZE
   )
 
-  // Sample render per case type for the case-type picker (built, not fetched).
+  // Variant id per card, so Quick Add keeps working - fetched for THIS page only
+  // (32 products), and without calculated_price. Falls back to no-add if the
+  // lookup is slow or missing; the card still links to the product page.
+  const variantByHandle = new Map<string, string>()
+  const cardsByHandle = new Map<string, ShopCard>()
+  if (device && pageDesigns.length) {
+    const handles = pageDesigns.map((d) => handleFor(d.slug, targetForm))
+    const cards = await getShopCards(handles, device.name, caseType?.name ?? "")
+    for (const card of cards ?? []) {
+      cardsByHandle.set(card.handle, card)
+      if (card.variantId) variantByHandle.set(card.handle, card.variantId)
+    }
+    // Legacy products without card metadata and rolling backend deployments
+    // retain their old ID lookup. Do not fetch all-model metadata or galleries.
+    const missing = handles.filter((handle) => !variantByHandle.has(handle))
+    if (missing.length) {
+      const { products } = await listProducts({
+        handle: missing,
+        limit: PAGE_SIZE,
+        fields: "id,handle,variants.id,variants.options.value",
+      }, { pricing: false })
+      for (const p of products) {
+        const v = (p.variants ?? []).find((vv) => {
+          const vals = (vv.options ?? []).map((o) => o.value)
+          return vals.includes(device.name) && vals.includes(caseType?.name ?? "")
+        })
+        if (v?.id) variantByHandle.set(p.handle!, v.id)
+      }
+    }
+  }
+
+  // Reuse this page's stored renders when available; other picker samples keep
+  // the legacy path without fetching another page's products.
   const caseTypeImages: Record<string, string> = {}
   if (device) {
     for (const ct of shownCaseTypes) {
       const sample = catalog.find(
         (d) => d.forms.includes(targetForm) && d.caseTypes.includes(ct.slug)
       )
-      if (sample)
-        caseTypeImages[ct.slug] = shopCardImage(sample.slug, ct.slug, device.slug)
-    }
-  }
-
-  // Variant id per card, so Quick Add keeps working - fetched for THIS page only
-  // (32 products), and without calculated_price. Falls back to no-add if the
-  // lookup is slow or missing; the card still links to the product page.
-  const variantByHandle = new Map<string, string>()
-  if (device && pageDesigns.length) {
-    const handles = pageDesigns.map((d) => handleFor(d.slug, targetForm))
-    const { products } = await listProducts({
-      handle: handles,
-      limit: PAGE_SIZE,
-      fields: "id,handle,variants.id,variants.options.value",
-    }, { pricing: false })
-    for (const p of products) {
-      const v = (p.variants ?? []).find((vv) => {
-        const vals = (vv.options ?? []).map((o) => o.value)
-        return vals.includes(device.name) && vals.includes(caseType?.name ?? "")
-      })
-      if (v?.id) variantByHandle.set(p.handle!, v.id)
+      if (sample) {
+        caseTypeImages[ct.slug] = cardsByHandle.get(handleFor(sample.slug, targetForm))?.imagesByCaseType?.[ct.name] ??
+          shopCardImage(sample.slug, ct.slug, device.slug)
+      }
     }
   }
 
   // Build a light, ProductCard-shaped object per card: one variant carrying the
-  // constructed image and the fixed case-type price, so ProductCard renders it
+  // stored image and the fixed case-type price, so ProductCard renders it
   // unchanged (it scopes to the device+case-type variant and reads that image
   // and price).
   const price = caseType?.price ?? 0
   const products: StoreProduct[] = pageDesigns.map((d) => {
     const handle = handleFor(d.slug, targetForm)
-    const image = device ? shopCardImage(d.slug, caseSlug, device.slug) : null
+    const image = device
+      ? cardsByHandle.get(handle)?.image ??
+        shopCardImage(d.slug, caseSlug, device.slug)
+      : null
     const variant = {
       // Empty when the id lookup missed, so QuickAdd hides rather than trying to
       // add a non-existent variant; the card still links to the product page.

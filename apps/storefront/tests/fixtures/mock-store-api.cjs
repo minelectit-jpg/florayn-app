@@ -83,6 +83,19 @@ const server = http.createServer(async (req, res) => {
     case "/store/content/gallery-videos": return send(res, { videos: {} })
     case "/store/seo": return send(res, { templates: { title: "{design} {device} Case", description: "{design} test case for {device}", heading: "{design} {device} Case", fit_copy_enabled: true }, overrides: [] })
     case "/store/shop-catalog": return send(res, { designs: products.filter((p) => p.metadata.form === "phone").map((p) => ({ slug: p.handle, name: p.title, caseTypes: caseTypes.map((c) => c.slug), forms: ["phone", ...(p.handle === "audit-bloom" ? ["airpods"] : [])] })) })
+    case "/store/shop-cards": {
+      const handles = (url.searchParams.get("handles") || "").split(",")
+      const prefix = `${url.searchParams.get("device")}|`
+      const caseType = url.searchParams.get("case_type")
+      return send(res, { cards: products.filter((p) => handles.includes(p.handle)).map((p) => {
+        const pairs = p.metadata.card.pairs
+        const selected = pairs[`${prefix}${caseType}`]
+        return {
+          handle: p.handle, variantId: selected?.variantId ?? null, image: selected?.image ?? null,
+          imagesByCaseType: Object.fromEntries(Object.entries(pairs).filter(([key]) => key.startsWith(prefix)).map(([key, pair]) => [key.slice(prefix.length), pair.image])),
+        }
+      }) })
+    }
     case "/store/collections": return send(res, { collections: !filters(url, "handle").length || filters(url, "handle").includes(collection.handle) ? [collection] : [] })
     case "/store/product-categories": return send(res, { product_categories: [] })
     case "/store/products": {

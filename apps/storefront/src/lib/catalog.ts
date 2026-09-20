@@ -10,6 +10,7 @@ async function storeFetch<T>(
   init?: RequestInit
 ): Promise<T | null> {
   try {
+    const domain = path.split("?")[0].split("/")[2]
     const res = await fetch(`${MEDUSA_BACKEND_URL}${path}`, {
       ...init,
       headers: {
@@ -18,9 +19,11 @@ async function storeFetch<T>(
       },
       next: {
         revalidate: 60,
-        tags: path === "/store/stock"
+        tags: domain === "stock"
           ? ["stock"]
-          : ["catalog", `catalog:${path.split("/")[2]}`],
+          : ["shop-cards", "shop-catalog"].includes(domain)
+            ? ["products", "catalog", `catalog:${domain}`]
+            : ["catalog", `catalog:${domain}`],
       },
     })
 
@@ -115,6 +118,28 @@ export function shopCardImage(
   deviceSlug: string
 ): string {
   return `${R2_BASE}/${designSlug}/${caseTypeSlug}/${deviceSlug}/1.webp`
+}
+
+export type ShopCard = {
+  handle: string
+  variantId: string | null
+  image: string | null
+  /** Case-type names for this device only, never the all-model image matrix. */
+  imagesByCaseType: Record<string, string>
+}
+
+/** Only this page's selected device renders and exact add-to-cart variants. */
+export async function getShopCards(
+  handles: string[], deviceName: string, caseTypeName: string
+): Promise<ShopCard[] | null> {
+  if (!handles.length) return []
+  const query = new URLSearchParams({
+    handles: [...new Set(handles)].sort().join(","),
+    device: deviceName,
+    case_type: caseTypeName,
+  })
+  const data = await storeFetch<{ cards: ShopCard[] }>(`/store/shop-cards?${query}`)
+  return Array.isArray(data?.cards) ? data.cards : null
 }
 
 export type ShopDesign = {

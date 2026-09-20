@@ -82,12 +82,12 @@ function fakeRedis() {
   }
 }
 
-function handler(redis, { configured = true, buildId = "build-a" } = {}) {
+function handler(redis, { configured = true, buildId = "build-a", warnings = [] } = {}) {
   const filename = path.resolve(__dirname, "../cache-handler.js")
   const sandbox = {
     module: { exports: {} }, Buffer, Map, Set,
     Date: class extends Date { static now() { return redis.now++ } },
-    console: { warn() {} }, setTimeout, clearTimeout,
+    console: { warn(message) { warnings.push(message) } }, setTimeout, clearTimeout,
     process: { env: configured ? { STOREFRONT_REDIS_URL: "redis://unused.invalid/1" } : {}, cwd: () => "/app" },
     require(name) {
       if (name === "redis") return { createClient: () => redis }
@@ -209,11 +209,13 @@ test("tag invalidation removes a concurrent earlier write and preserves a later 
 
 test("corrupt route and legacy payloads become misses", async () => {
   const redis = fakeRedis()
-  const cache = handler(redis)
+  const warnings = []
+  const cache = handler(redis, { warnings })
   redis.entries.set("florayn:sf:route:v2:build-a:bad", "v2:invalid-compressed-data")
   assert.equal(await cache.get("bad", { kind: "APP_PAGE" }), null)
   redis.entries.set("florayn:sf:fetch:bad", "not JSON")
   assert.equal(await cache.get("bad", { kind: "FETCH" }), null)
+  assert.deepEqual(warnings, ["[storefront-cache] get.decode failed (Z_DATA_ERROR)"])
   await assert.rejects(codec.deserializeRoute("v99:unknown"))
 })
 
@@ -225,12 +227,62 @@ test("failing Redis opens the circuit breaker instead of retrying every request"
   assert.equal(redis.reads, 4)
 })
 
-test("a stalled Redis GET is bounded and becomes a cache miss", async () => {
+test("80 ms Redis GET and freshness waits still return the cached value", async () => {
   const redis = fakeRedis()
-  redis.get = () => new Promise(() => {})
+  const warnings = []
+  const cache = handler(redis, { warnings })
+  const value = { kind: "FETCH", data: { body: "warm content" } }
+  await cache.set("content", value, { fetchCache: true, tags: ["content"] })
+  const get = redis.get.bind(redis)
+  const hmGet = redis.hmGet.bind(redis)
+  redis.get = async (key) => {
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    return get(key)
+  }
+  redis.hmGet = async (key, fields) => {
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    return hmGet(key, fields)
+  }
+  assert.deepEqual((await cache.get("content", { kind: "FETCH" })).value, value)
+  assert.deepEqual(warnings, [])
+})
+
+test("a Redis GET exceeding 120 ms becomes a bounded miss with a typed warning", async () => {
+  const redis = fakeRedis()
+  const warnings = []
+  let timer
+  redis.get = () => new Promise((resolve) => { timer = setTimeout(() => resolve("late payload"), 300) })
   const start = performance.now()
-  assert.equal(await handler(redis).get("product", { kind: "APP_PAGE" }), null)
-  assert.ok(performance.now() - start < 1000)
+  try {
+    assert.equal(await handler(redis, { warnings }).get("product", { kind: "APP_PAGE" }), null)
+    assert.ok(performance.now() - start < 1000)
+    assert.deepEqual(warnings, ["[storefront-cache] get.read failed (REDIS_TIMEOUT)"])
+  } finally {
+    clearTimeout(timer)
+  }
+})
+
+test("a stalled freshness check is a miss and reports its own timeout phase", async () => {
+  const redis = fakeRedis()
+  const warnings = []
+  const cache = handler(redis, { warnings })
+  await cache.set("content", { kind: "FETCH", data: { body: "cached content" } }, { fetchCache: true })
+  redis.hmGet = () => new Promise(() => {})
+  assert.equal(await cache.get("content", { kind: "FETCH" }), null)
+  assert.deepEqual(warnings, ["[storefront-cache] get.freshness failed (REDIS_TIMEOUT)"])
+})
+
+test("read diagnostics omit arbitrary Redis errors, keys, and values", async () => {
+  const redis = fakeRedis()
+  const warnings = []
+  const secret = "redis://private-user:private-password@private-host/1"
+  redis.get = async () => {
+    const error = new Error(secret)
+    error.code = secret
+    throw error
+  }
+  assert.equal(await handler(redis, { warnings }).get(secret, { kind: "APP_PAGE" }), null)
+  assert.deepEqual(warnings, ["[storefront-cache] get.read failed (CACHE_OPERATION_FAILED)"])
 })
 
 test("instance invalidation does not fail committed actions, but static acknowledgement stays strict", async () => {
@@ -248,6 +300,20 @@ test("unconfigured Redis does not fail action revalidation", async () => {
   const cache = handler(fakeRedis(), { configured: false })
   await cache.revalidateTag("_N_T_/cart")
   await assert.rejects(cache.constructor.invalidateTags(["products"]), /unavailable/)
+})
+
+test("explicit invalidation retains its aggregate three-second deadline", async () => {
+  const redis = fakeRedis()
+  const cache = handler(redis)
+  const evaluate = redis.eval.bind(redis)
+  redis.eval = async (...args) => {
+    const result = await evaluate(...args)
+    // Model individually successful commands that consume the aggregate budget.
+    redis.now += 750
+    return result
+  }
+  await assert.rejects(cache.constructor.invalidateTags(Array.from({ length: 10 }, (_, i) => `content:${i}`)), /invalidation failed/)
+  assert.equal(redis.evaluations, 4)
 })
 
 test("failed instance tags block stale reads until recovery acknowledges them", async () => {
@@ -318,9 +384,12 @@ test("an invalidation during a write rejects the older result even if SET finish
 
 test("a stalled Redis write is bounded", async () => {
   const redis = fakeRedis()
+  const warnings = []
   const transaction = { set: () => transaction, exec: () => new Promise(() => {}) }
   redis.multi = () => transaction
   const start = performance.now()
-  await handler(redis).set("products", { kind: "FETCH", data: { body: "products" } }, { fetchCache: true })
-  assert.ok(performance.now() - start < 1000)
+  await handler(redis, { warnings }).set("products", { kind: "FETCH", data: { body: "products" } }, { fetchCache: true })
+  const elapsed = performance.now() - start
+  assert.ok(elapsed >= 180 && elapsed < 1000)
+  assert.deepEqual(warnings, ["[storefront-cache] set failed (REDIS_TIMEOUT)"])
 })

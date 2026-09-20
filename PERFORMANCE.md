@@ -5,6 +5,16 @@ variants. A new design or model should not require duplicating products to make
 pages fast. Fetch the fields the page needs, preserve actual regional pricing
 where required, and share repeated browser data.
 
+Shop pages request at most 32 published products from `/store/shop-cards`, with
+only the selected device's images and exact cart variant IDs. Keep full card
+matrices on the backend. The fallback for missing card records fetches only
+variant IDs/options; it must not calculate prices or load every model's gallery.
+New uploaded designs are admitted using saved compatibility metadata and have
+their card rebuilt before creation reports success. They need no static design
+manifest entry. Adding a genuinely new device or construction is a separate
+catalog feature: the current onboarding code still validates seeded device and
+case-type definitions, so update those definitions and tests together.
+
 ## Product payload budget
 
 `apps/storefront/src/lib/product-view-data.ts` sends one compact related-design
@@ -151,8 +161,11 @@ publish a change. Case-type repricing repairs the card data before it completes.
 
 The event queue is bounded and serial. Failed batches retain their IDs and retry
 after a minute. It is process-local: restarting a worker can lose a pending batch.
-After an interrupted import, use the existing admin **Refresh storefront** action;
-data TTLs remain a fallback. A multi-worker rollout needs a durable shared outbox
+After an interrupted import, repair the affected design with an authenticated
+`POST /admin/rebuild-cards` request containing `{"slug":"affected-design-slug"}`,
+then use the existing admin **Refresh storefront** action. Refreshing caches or
+waiting for their TTL cannot reconstruct missing or stale database card metadata.
+A multi-worker rollout needs a durable shared outbox
 and a distributed lease for the warmer. Standalone pricing-module integrations
 must also publish a covered product/variant event or invoke storefront refresh.
 
@@ -168,3 +181,25 @@ Deploy this branch only to the verified `new.florayn.com` storefront and
 Cloudflare document cache so Next can honor content changes. Static assets and
 images retain their separate cache behavior. Never purge the whole Cloudflare zone
 or change `florayn.com` as part of this deployment.
+
+## Optimized image CDN cache
+
+The Cloudflare cache rule for exactly `new.florayn.com` and `/_next/image`
+or `/_next/image/` caches successful image responses using the origin TTL.
+It respects browser cache directives, bypasses responses without cache control,
+and does not store 400-599 responses. Cache Rules Vary normalizes `Accept` and
+`Accept-Encoding`; unexpected Vary headers bypass caching. The full query string
+remains part of the cache key, including `url`, `w`, and `q`.
+
+Do not replace this with an unconditional cache-everything rule: WebP and JPEG
+responses for the same image URL must remain separate. Verify MISS then HIT for
+each format, different widths producing different ETags, and invalid widths
+remaining uncached when changing these rules. On September 20, 2026, those checks
+passed; cached image responses took 50-66 ms from the test connection. This is
+an image-response measurement, not a full-page load measurement.
+
+Images have long origin, Next, browser, and CDN TTLs. Replacing bytes at the same
+URL does not become fresh through data revalidation alone. Any replacement-image
+feature must version its URLs consistently for product galleries and shop cards.
+Normal new uploads and replacements are different workflows; test both before
+changing image publishing.

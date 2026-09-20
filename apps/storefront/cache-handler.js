@@ -44,7 +44,9 @@ const { serializeLegacy, deserializeLegacy, serializeRoute, deserializeRoute } =
 const PREFIX = "florayn:sf"
 const ROUTE_TTL = 60 * 60 * 72 // 72h — old-build route namespaces self-evict
 const FETCH_TTL = 60 * 60 * 24 * 7 // 7d backstop; Next's own revalidate governs freshness
-const GET_TIMEOUT_MS = 60
+// Leave room for brief render/event-loop contention on the shared 2-vCPU host.
+// A healthy local Redis read is still immediate; only stalled reads wait longer.
+const GET_TIMEOUT_MS = 120
 const SET_TIMEOUT_MS = 200
 const BREAKER_THRESHOLD = 4 // consecutive failures before tripping
 const BREAKER_COOLDOWN_MS = 30_000
@@ -160,7 +162,13 @@ async function withTimeout(promise, ms) {
   try {
     return await Promise.race([
       promise,
-      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("redis-timeout")), ms) }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error("Redis command timed out")
+          error.code = "REDIS_TIMEOUT"
+          reject(error)
+        }, ms)
+      }),
     ])
   } finally {
     clearTimeout(timer)
@@ -254,10 +262,12 @@ module.exports = class RedisCacheHandler {
     }
     const c = await ready()
     if (!c) return null
+    let phase = "read"
     try {
       const isFetch = ctx && ctx.kind === "FETCH"
       let raw = await withTimeout(c.get(this.key(cacheKey, isFetch)), GET_TIMEOUT_MS)
       let value
+      phase = "decode"
       if (isFetch) {
         value = raw ? deserializeLegacy(raw) : null
       } else if (raw) {
@@ -265,10 +275,13 @@ module.exports = class RedisCacheHandler {
       } else {
         // A same-build migration can reuse its old route entry. Never read a
         // different build's HTML, because it references different JS chunks.
+        phase = "read"
         raw = await withTimeout(c.get(this.legacyRouteKey(cacheKey)), GET_TIMEOUT_MS)
+        phase = "decode"
         value = raw ? deserializeLegacy(raw) : null
       }
       if (value) {
+        phase = "freshness"
         const tags = [...new Set([...(value.tags || []), ...(ctx?.tags || []), ...(ctx?.softTags || [])])]
         const [generation, ...invalidatedAt] = await withTimeout(
           c.hmGet(FRESHNESS_KEY, ["generation", ...tags.map((tag) => `tag:${tag}`)]),
@@ -282,7 +295,7 @@ module.exports = class RedisCacheHandler {
       return value // CacheHandlerValue { value, lastModified, tags }
     } catch (error) {
       tripBreaker()
-      reportFailure("get", error)
+      reportFailure(`get.${phase}`, error)
       return null // miss -> Next renders from origin (== today)
     }
   }

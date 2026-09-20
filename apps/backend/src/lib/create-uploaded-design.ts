@@ -9,6 +9,7 @@ import {
 import { CATALOG_MODULE } from "../modules/catalog"
 import { CASE_TYPES } from "../modules/catalog/data/case-types"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
+import { rebuildCards } from "./rebuild-cards"
 
 const CURRENCY = "bdt"
 
@@ -352,6 +353,7 @@ export async function createUploadedDesign({
         design_slug: slug,
         design_name: cleanName,
         form,
+        case_type_slugs: formCaseTypes.map((caseType) => caseType.slug),
         image_granularity: "device",
         ...(themeName ? { theme: themeName } : {}),
       },
@@ -375,6 +377,10 @@ export async function createUploadedDesign({
       [CATALOG_MODULE]: { design_id: designRecord.id },
     })
   }
+
+  // Successful publication includes the card used by shop/related sections.
+  // Do not depend on an in-memory event batch surviving a worker restart.
+  await rebuildCards(container, { productIds: created.map((product: any) => product.id) })
 
   return {
     design: slug,

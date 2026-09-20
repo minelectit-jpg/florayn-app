@@ -62,6 +62,9 @@ function harness({ fetchDetails, fetchProducts, region = async () => "region-bd"
           assert.ok(["/store/product-variants", "/store/products"].includes(url))
           assert.equal(options.query.region_id, "region-bd")
           assert.ok(options.signal)
+          if (url === "/store/product-variants") {
+            assert.equal(options.query.fields, "id,title,metadata,calculated_price.calculated_amount,calculated_price.currency_code")
+          }
           const calls = url === "/store/products" ? fallbackQueries : queries
           calls.push(plain(options.query))
           active++
@@ -91,6 +94,13 @@ test("collection requests selected device in every construction plus the first v
   assert.deepEqual(plain(collectionVariantIds([product()], "iPhone 17")), ["alcantara", "first", "selected"])
   assert.deepEqual(plain(collectionVariantIds([product()], "missing-device")), ["alcantara", "first", "other", "selected"])
   assert.deepEqual(plain(collectionVariantIds([product()], "")), ["alcantara", "first", "other", "selected"])
+})
+
+test("non-price sorts omit only the unused first variant and preserve the all-variant fallback", () => {
+  const { collectionVariantIds } = harness()
+  assert.deepEqual(plain(collectionVariantIds([product()], "iPhone 17", false)), ["alcantara", "selected"])
+  assert.deepEqual(plain(collectionVariantIds([product()], "missing-device", false)), ["alcantara", "first", "other", "selected"])
+  assert.deepEqual(plain(collectionVariantIds([product()], "", false)), ["alcantara", "first", "other", "selected"])
 })
 
 test("actual per-device prices and galleries merge by ID without changing compatibility or input data", async () => {

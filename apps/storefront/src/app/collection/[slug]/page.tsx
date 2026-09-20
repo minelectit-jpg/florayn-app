@@ -100,6 +100,8 @@ function first(value: string | string[] | undefined): string {
 export default async function CollectionPage({ params, searchParams }: Params) {
   const { slug } = await params
   const query = await searchParams
+  const devicesPromise = getDeviceCatalog()
+  const landingPromise = getCollectionPage(slug)
   const group = await resolveCollection(slug)
 
   if (!group) {
@@ -114,8 +116,8 @@ export default async function CollectionPage({ params, searchParams }: Params) {
       limit: 100,
       fields: COLLECTION_FIELDS,
     }, { pricing: false }),
-    getDeviceCatalog(),
-    getCollectionPage(slug),
+    devicesPromise,
+    landingPromise,
   ])
 
   /*
@@ -167,24 +169,30 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     : forDevice
 
   const sort = first(query.sort) || "featured"
-  const priced = await hydrateCollectionProducts(filtered, device)
-  let sorted = sortProducts(priced.products, sort)
-
   /*
    * A curated design list wins over the default ordering, but only while the
    * shopper has not asked for a different sort - their choice should not be
    * silently overridden.
    */
   const curated = landing?.design_slugs ?? []
-  if (curated.length && sort === "featured") {
-    const rank = new Map(curated.map((designSlug, i) => [designSlug, i]))
-    sorted = sorted
-      .filter((product) => rank.has(product.metadata?.design_slug as string))
-      .sort(
-        (a, b) =>
-          (rank.get(a.metadata?.design_slug as string) ?? 0) -
-          (rank.get(b.metadata?.design_slug as string) ?? 0)
-      )
+  const rank = curated.length && sort === "featured"
+    ? new Map(curated.map((designSlug, i) => [designSlug, i]))
+    : null
+  // Device/case options still describe the whole collection. Price only cards
+  // that survive the same curated membership filter used for rendering.
+  const visible = rank
+    ? filtered.filter((product) => rank.has(product.metadata?.design_slug as string))
+    : filtered
+  const priced = await hydrateCollectionProducts(visible, device, {
+    includeFirstVariant: sort === "price-asc" || sort === "price-desc",
+  })
+  let sorted = sortProducts(priced.products, sort)
+  if (rank) {
+    sorted = sorted.sort(
+      (a, b) =>
+        (rank.get(a.metadata?.design_slug as string) ?? 0) -
+        (rank.get(b.metadata?.design_slug as string) ?? 0)
+    )
   }
 
   const resultLabel = device
