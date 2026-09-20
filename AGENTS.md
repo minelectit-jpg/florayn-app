@@ -78,14 +78,20 @@ cd apps/backend && <pm> run lint       # medusa lint
 cd apps/storefront && <pm> run lint    # next lint
 ```
 
-### Test (backend only; the storefront has no test suite)
+### Tests
 
 ```bash
-<pm> run test                                              # all test tasks via turbo
+<pm> run test                                              # backend + storefront regression suites
+<pm> --prefix apps/storefront test                         # storefront regression suite
 cd apps/backend && <pm> run test:unit                      # **/src/**/__tests__/**/*.unit.spec.ts
 cd apps/backend && <pm> run test:integration:modules       # **/src/modules/*/__tests__/**
 cd apps/backend && <pm> run test:integration:http          # **/integration-tests/http/*.spec.ts
 ```
+
+Read `PERFORMANCE.md` before changing storefront data/cache behavior. The
+`Storefront performance and freshness` CI workflow covers payload budgets,
+selectors/prices/cart IDs, real Redis invalidation and actual Next.js caching.
+Run `npm run perf:check` for scoped sequential response benchmarks after deployment.
 
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
