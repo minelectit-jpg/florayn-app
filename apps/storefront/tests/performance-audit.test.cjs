@@ -316,8 +316,8 @@ test("a pending shop measurement follows a resize from four to three columns", a
 test("image resource summaries expose numbers without source URLs", async () => {
   const grid = shop("/shop/iphone-17-pro/signature/", [image(), image()])
   const h = harness({ shops: [grid], pathname: grid.dataset.shopPath, resources: [
-    { name: "hero.webp", startTime: 0, transferSize: 8192, duration: 123.4 },
-    { name: "other.webp", startTime: 0, transferSize: 16384, duration: 999 },
+    { name: "hero.webp", startTime: 12.3, responseEnd: 135.7, transferSize: 8192, duration: 123.4 },
+    { name: "other.webp", startTime: 0, responseEnd: 999, transferSize: 16384, duration: 999 },
   ] })
   await h.paint()
   const reading = h.readings.at(-1)
@@ -325,8 +325,59 @@ test("image resource summaries expose numbers without source URLs", async () => 
   assert.equal(reading.shopImageResourceCount, 1)
   assert.equal(reading.shopImageTransferKB, 8)
   assert.equal(reading.shopImageMaxResponseMs, 123)
+  assert.equal(reading.shopImageFirstRequestMs, 12)
+  assert.equal(reading.shopImageLastResponseMs, 136)
+  assert.equal(reading.shopAllImageResourceCount, 1)
+  assert.equal(reading.shopAllImageTransferKB, 8)
   assert.equal(reading.resourceKB, 24)
   assert.equal(JSON.stringify(reading).includes("webp"), false)
+  h.stop()
+})
+
+test("shop resource snapshots separate two-row timings from all rendered card images after navigation", async () => {
+  const grid = shop("/shop/second/", Array.from({ length: 9 }, () => image()))
+  grid.children[1].img.currentSrc = "second.webp"
+  grid.children[8].img.currentSrc = "later-row.webp"
+  // A deferred placeholder is not an image, nor a reason to read a noscript URL.
+  grid.children.push({ matches: () => true, querySelector: () => null })
+  const h = harness({ resources: [
+    { name: "hero.webp", startTime: 99, responseEnd: 112, transferSize: 32768, duration: 13 },
+    { name: "hero.webp", startTime: 120, responseEnd: 190, transferSize: 2048, duration: 70 },
+    { name: "second.webp", startTime: 130, responseEnd: 215.8, transferSize: 4096, duration: 85.8 },
+    { name: "later-row.webp", startTime: 115, responseEnd: 225, transferSize: 8192, duration: 110 },
+    { name: "unrelated.webp", startTime: 110, responseEnd: 800, transferSize: 65536, duration: 690 },
+  ] })
+  h.click("/shop/second/")
+  h.location.pathname = "/shop/second/"
+  h.shops.push(grid)
+  h.setTime(230)
+  h.mutate()
+  await h.paint()
+  const reading = h.readings.at(-1)
+  assert.equal(reading.kind, "navigation")
+  assert.equal(reading.shopImageCount, 8)
+  assert.equal(reading.shopImageResourceCount, 2)
+  assert.equal(reading.shopImageTransferKB, 6)
+  assert.equal(reading.shopImageFirstRequestMs, 20)
+  assert.equal(reading.shopImageLastResponseMs, 116)
+  assert.equal(reading.shopAllImageResourceCount, 3)
+  assert.equal(reading.shopAllImageTransferKB, 14)
+  assert.equal(JSON.stringify(reading).includes("webp"), false)
+  h.stop()
+})
+
+test("missing timing entries report zero exposed resources without an invented request time", async () => {
+  const grid = shop("/shop/")
+  const h = harness({ shops: [grid], pathname: "/shop/", resources: [] })
+  await h.paint()
+  const reading = h.readings.at(-1)
+  assert.equal(reading.shopImagesReadyMs, 132)
+  assert.equal(reading.shopImageResourceCount, 0)
+  assert.equal(reading.shopImageTransferKB, 0)
+  assert.equal(reading.shopAllImageResourceCount, 0)
+  assert.equal(reading.shopAllImageTransferKB, 0)
+  assert.equal(reading.shopImageFirstRequestMs, undefined)
+  assert.equal(reading.shopImageLastResponseMs, undefined)
   h.stop()
 })
 

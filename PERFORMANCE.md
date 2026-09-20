@@ -185,11 +185,18 @@ or change `florayn.com` as part of this deployment.
 ## Optimized image CDN cache
 
 Shop grids preload the first eight main images with high fetch priority, covering
-two desktop rows. Remaining main images are native lazy/low priority; the browser
-may start nearby rows early. Keep URLs in server HTML, avoiding a hydration gate
-or waiting for every leading image before allowing a scrolled-to image to load.
-The bounded eight also covers mobile/tablet without a viewport effect delaying
-initial discovery. Card sizes must match the 2/3/4-column CSS, padding and gaps,
+two desktop rows. Native lazy/low priority alone still allowed lower rows to
+compete with those requests, so later images start as reserved boxes with inert
+responsive noscript fallbacks. A single grid observer admits a later card when
+it approaches the viewport. Once the first eight images settle (load or error),
+remaining images are released to normal native lazy/low loading. A four-second
+fail-open prevents a stuck critical request blocking the rest. Cached-complete
+images, failed/missing sources, sorting/device changes and cleanup are covered.
+Keep the first eight URLs and preloads in active server HTML: their discovery
+must never wait for hydration. Keep working noscript fallbacks for later images
+and never block a scrolled-to card waiting for unrelated images. The bounded
+eight also covers mobile/tablet without a viewport effect delaying initial
+discovery. Card sizes must match the 2/3/4-column CSS, padding and gaps,
 including the 1024px breakpoint and 1470px page-width cap. Do not revert to an
 uncapped 25vw on large screens. SSR regression tests verify preload/loading
 attributes with the real Next Image component and responsive size boundaries.
@@ -209,7 +216,11 @@ decoded and followed by two animation frames. It is an observed upper bound,
 not a claim about an empty browser/CDN cache. `shopImageCount` and
 `shopImagesLoaded` show progress; `shopImageResourceCount`, `shopImageTransferKB`
 and `shopImageMaxResponseMs` summarize matching resource timings without exposing
-URLs. Cached/prefetched resources may have missing or zero timings/transfer size.
+URLs. `shopImageFirstRequestMs`/`shopImageLastResponseMs` are relative to the
+measurement start; `shopAllImageResourceCount`/`shopAllImageTransferKB` cover
+rendered primary images at readiness. Resource entries count completed requests,
+not pending ones. Cached/prefetched resources may have missing or zero timings/
+transfer size; missing first/last timing values stay absent, not invented zeros.
 A server-supplied `data-shop-path` marker prevents
 old grid content completing a new navigation reading. Normal visits still have
 no diagnostic observers or telemetry. Test direct loads, navigation, mobile,

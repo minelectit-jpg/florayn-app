@@ -15,7 +15,7 @@ export default function PerformanceAuditPanel() {
       <strong>Local performance check</strong>
       <pre className="mt-1 whitespace-pre-wrap">{JSON.stringify(reading, null, 2)}</pre>
       <p>Product ready is an observed upper bound: hydrated content + decoded hero + two frames. LCP is for this document only. No data is sent.</p>
-      <p className="mt-1">Shop images ready: first two rows at the current column count, decoded + two frames. Also an observed upper bound; failed or missing images never count as ready. Image timing covers exposed Resource Timing entries only.</p>
+      <p className="mt-1">Shop images ready: first two rows at the current column count, decoded + two frames. Also an observed upper bound; failed or missing images never count as ready. Image resource totals are a snapshot at that point. Timings are relative to this measurement and cover exposed Resource Timing entries only; absent entries are not instant loads.</p>
     </aside>
   )
 }

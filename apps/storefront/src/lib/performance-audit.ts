@@ -12,6 +12,11 @@ export type PerformanceReading = {
   shopImageResourceCount?: number
   shopImageTransferKB?: number
   shopImageMaxResponseMs?: number
+  shopImageFirstRequestMs?: number
+  shopImageLastResponseMs?: number
+  /** Snapshot of all rendered primary shop images when the first two rows finish. */
+  shopAllImageResourceCount?: number
+  shopAllImageTransferKB?: number
   resourceKB?: number
 }
 
@@ -136,6 +141,17 @@ export function startPerformanceAudit(onReading: (reading: PerformanceReading) =
           latest.shopImageResourceCount = imageResources.length
           latest.shopImageTransferKB = Math.round(imageResources.reduce((sum, entry) => sum + entry.transferSize, 0) / 1024)
           latest.shopImageMaxResponseMs = Math.round(Math.max(0, ...imageResources.map((entry) => entry.duration)))
+          if (imageResources.length) {
+            latest.shopImageFirstRequestMs = Math.round(Math.min(...imageResources.map((entry) => entry.startTime)) - started)
+            latest.shopImageLastResponseMs = Math.round(Math.max(...imageResources.map((entry) => entry.responseEnd)) - started)
+          }
+          const allSources = new Set(Array.from(grid.children).filter((card) => card.matches(".fl-card"))
+            .map((card) => card.querySelector<HTMLImageElement>(".fl-card__media > img"))
+            .filter((img): img is HTMLImageElement => !!img)
+            .map((img) => img.currentSrc || img.src))
+          const allImageResources = resources.filter((entry) => entry.startTime >= started && allSources.has(entry.name))
+          latest.shopAllImageResourceCount = allImageResources.length
+          latest.shopAllImageTransferKB = Math.round(allImageResources.reduce((sum, entry) => sum + entry.transferSize, 0) / 1024)
           latest.resourceKB = Math.round(resources.filter((entry) => entry.startTime >= started)
             .reduce((sum, entry) => sum + entry.transferSize, 0) / 1024)
           onReading({ ...latest })

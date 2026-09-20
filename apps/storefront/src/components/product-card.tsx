@@ -37,6 +37,7 @@ export default function ProductCard({
   badges,
   priority,
   fetchPriority,
+  deferImage,
 }: {
   product: StoreProduct
   /** Selected device from the filter bar; drives the link, image and price. */
@@ -52,6 +53,8 @@ export default function ProductCard({
   priority?: boolean
   /** Optional request ordering; shop grids keep later rows behind early cards. */
   fetchPriority?: "high" | "low" | "auto"
+  /** Shop-only admission gate; the image has an SSR noscript fallback. */
+  deferImage?: boolean
 }) {
   const metadata = product.metadata ?? {}
   const designName =
@@ -117,6 +120,7 @@ export default function ProductCard({
           sizes={CARD_IMAGE_SIZES}
           priority={priority}
           fetchPriority={fetchPriority}
+          deferred={deferImage}
           className={`fl-card__img transition-opacity duration-300 ${
             hoverImage ? "group-hover:opacity-0" : ""
           }`}
@@ -128,6 +132,7 @@ export default function ProductCard({
             alt=""
             label={designName}
             sizes={CARD_IMAGE_SIZES}
+            deferred={deferImage}
             className="fl-card__img opacity-0 transition-opacity duration-300 group-hover:opacity-100"
             fillMode="absolute"
           />

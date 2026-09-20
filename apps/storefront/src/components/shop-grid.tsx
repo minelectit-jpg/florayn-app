@@ -4,8 +4,10 @@ import Link from "next/link"
 import { useMemo, useRef, useState } from "react"
 
 import ProductCard from "@/components/product-card"
+import { useShopImageLoading } from "@/components/use-shop-image-loading"
 import type { StoreProduct } from "@/lib/medusa"
 import { priceRange } from "@/lib/money"
+import { SHOP_PRIORITY_IMAGES } from "@/lib/shop-image-loading"
 
 type SortKey = "featured" | "newest" | "price-asc" | "price-desc"
 
@@ -73,6 +75,17 @@ export default function ShopGrid({
         return list
     }
   }, [products, sort])
+
+  // Include ordered image identities so model, sort, and updated renders start
+  // a fresh bounded batch without remounting every card or resetting Quick Add.
+  const imageBatchKey = useMemo(() => JSON.stringify([
+    routePath, device, caseType,
+    sorted.map((product) => [
+      product.id, product.thumbnail, product.images?.map((image) => image.url),
+      product.variants?.map((variant) => [variant.id, variant.options, variant.metadata?.images]),
+    ]),
+  ]), [routePath, device, caseType, sorted])
+  const { gridRef, deferred } = useShopImageLoading(imageBatchKey)
 
   const activeLabel = SORTS.find((s) => s.key === sort)?.label ?? "Featured"
   const count = totalCount ?? products.length
@@ -155,7 +168,7 @@ export default function ShopGrid({
         </div>
       </div>
 
-      <div className="fl-grid" data-shop-path={routePath}>
+      <div ref={gridRef} className="fl-grid" data-shop-path={routePath}>
         {sorted.map((product, i) => (
           <ProductCard
             key={product.id}
@@ -166,8 +179,9 @@ export default function ShopGrid({
             caseTypeSlug={caseTypeSlug ?? null}
             // Two desktop rows (four columns) get early requests. Keep this
             // bounded on mobile too, without waiting for viewport hydration.
-            priority={i < 8}
-            fetchPriority={i < 8 ? "high" : "low"}
+            priority={i < SHOP_PRIORITY_IMAGES}
+            fetchPriority={i < SHOP_PRIORITY_IMAGES ? "high" : "low"}
+            deferImage={deferred(i)}
           />
         ))}
       </div>

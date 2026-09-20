@@ -23,6 +23,7 @@ export default function ProductImage({
   sizes,
   priority,
   fetchPriority,
+  deferred = false,
   className = "",
   fillMode = "cover",
 }: {
@@ -33,6 +34,8 @@ export default function ProductImage({
   sizes?: string
   priority?: boolean
   fetchPriority?: "high" | "low" | "auto"
+  /** Reserve layout until the shop admits this image; retain no-JS access. */
+  deferred?: boolean
   className?: string
   fillMode?: "cover" | "absolute"
 }) {
@@ -74,18 +77,24 @@ export default function ProductImage({
     )
   }
 
-  return (
+  const image = (
     <Image
       src={src}
       alt={alt}
       fill
       sizes={sizes}
-      priority={priority}
-      fetchPriority={fetchPriority}
+      priority={deferred ? false : priority}
+      loading={deferred ? "lazy" : undefined}
+      fetchPriority={deferred ? "low" : fetchPriority}
       className={owned ? className : `object-cover ${className}`}
       onError={() => setFailed(true)}
     />
   )
+
+  // With scripting enabled, noscript contents are inert and cannot start cold
+  // optimizer requests. Without JavaScript the same responsive image loads.
+  // Deferred images force lazy/no-priority so no preload escapes the fallback.
+  return deferred ? <noscript>{image}</noscript> : image
 }
 
 function hashOf(value: string): number {

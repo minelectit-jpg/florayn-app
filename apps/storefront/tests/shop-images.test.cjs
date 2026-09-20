@@ -68,16 +68,18 @@ function imageTags(markup) {
   return Array.from(markup.matchAll(/<img\b[^>]*>/g), ([tag]) => attributes(tag))
 }
 
-test("shop SSR prioritizes only the first eight main images and emits all later images lazily", () => {
+test("shop SSR preloads eight main images and defers remaining requests with responsive noscript fallbacks", () => {
   const markup = renderToStaticMarkup(React.createElement(ShopGrid, {
     products: Array.from({ length: 20 }, (_, index) => product(index)),
     device: "Phone", deviceSlug: "phone", caseType: "Signature", caseTypeSlug: "signature",
     routePath: "/shop/phone/",
   }))
   assert.ok(markup.includes('data-shop-path="/shop/phone/"'), "readiness follows the server route even when a default case type is selected")
-  const images = imageTags(markup)
-  assert.equal(images.length, 20, "every image remains discoverable before hydration")
-  for (const [index, image] of images.entries()) {
+  const fallbacks = Array.from(markup.matchAll(/<noscript>([\s\S]*?)<\/noscript>/g), ([, body]) => imageTags(body)[0])
+  const images = imageTags(markup.replace(/<noscript>[\s\S]*?<\/noscript>/g, ""))
+  assert.equal(images.length, 8, "critical images must remain discoverable before hydration")
+  assert.equal(fallbacks.length, 12, "later rows stay accessible without JavaScript")
+  for (const [index, image] of [...images, ...fallbacks].entries()) {
     assert.equal(image.fetchpriority, index < 8 ? "high" : "low")
     assert.equal(image.loading, index < 8 ? undefined : "lazy")
     assert.ok(image.srcset.includes(" 384w"), "cards retain responsive optimized images")
@@ -142,4 +144,13 @@ test("non-shop cards retain normal scheduling and gallery priority still preload
   const missing = renderToStaticMarkup(React.createElement(ProductImage, { src: null, alt: "Missing Design" }))
   assert.equal(imageTags(missing).length, 0)
   assert.ok(missing.includes('aria-label="Missing Design"'))
+})
+
+test("a deferred image cannot accidentally emit a preload even if a caller sets priority", () => {
+  const markup = renderToStaticMarkup(React.createElement(ProductImage, {
+    src: "/audit/later.webp", alt: "Later", sizes: "341px", deferred: true, priority: true,
+  }))
+  assert.ok(markup.startsWith("<noscript>"))
+  assert.ok(!markup.includes('rel="preload"'))
+  assert.equal(imageTags(markup)[0].loading, "lazy")
 })
