@@ -1,6 +1,14 @@
 import { Modules } from "@medusajs/framework/utils"
 import { updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows"
+import { CATALOG_MODULE } from "../modules/catalog"
 import { rebuildCards } from "./rebuild-cards"
+
+export type PriceGroup = {
+  label?: string
+  price: number
+  /** Device SLUGS this group's price applies to. */
+  devices: string[]
+}
 
 /**
  * Re-price every variant of a case type across the whole catalogue.
@@ -11,22 +19,47 @@ import { rebuildCards } from "./rebuild-cards"
  * variants whose Case Type option is this one, and updates their price. It is
  * the workflow behind the admin Case Types screen's price field.
  *
- * A flat amount is applied to all of them. That is correct for the five flat
- * constructions; Alcantara varies its price by device group, so its variants
- * should not be flat-repriced here (the screen guards against it).
+ * Flat by default: `amount` is applied to every variant, which is correct for
+ * the five flat constructions. Pass `priceGroups` (Alcantara) to price each
+ * variant by its DEVICE instead - a variant whose device is in a group gets
+ * that group's price; a device in no group falls back to `amount`.
  */
 export async function repriceCaseType({
   container,
   caseTypeName,
   amount,
   currencyCode = "bdt",
+  priceGroups,
 }: {
   container: any
   caseTypeName: string
   amount: number
   currencyCode?: string
+  priceGroups?: PriceGroup[] | null
 }): Promise<{ variants: number; products: number }> {
   const productModule = container.resolve(Modules.PRODUCT)
+  const perDevice = Array.isArray(priceGroups) && priceGroups.length > 0
+
+  // A variant's Device option carries the device NAME; the groups key on slug,
+  // so resolve a name -> slug map once (only when pricing per device).
+  const deviceSlugByName = new Map<string, string>()
+  if (perDevice) {
+    const catalog: any = container.resolve(CATALOG_MODULE)
+    const devices = await catalog.listDevices(
+      {},
+      { select: ["name", "slug"], take: 1000 }
+    )
+    for (const d of devices) deviceSlugByName.set(d.name, d.slug)
+  }
+  const priceForDeviceName = (deviceName: string): number => {
+    if (!perDevice) return amount
+    const slug = deviceSlugByName.get(deviceName)
+    const group = slug
+      ? priceGroups!.find((g) => g.devices.includes(slug))
+      : undefined
+    return group ? group.price : amount
+  }
+
   const products = await productModule.listProducts(
     {},
     {
@@ -36,7 +69,7 @@ export async function repriceCaseType({
     }
   )
 
-  const variantIds: string[] = []
+  const updates: { id: string; prices: { amount: number; currency_code: string }[] }[] = []
   const productIds: string[] = []
   for (const product of products) {
     const optionTitleById = new Map<string, string>(
@@ -44,28 +77,29 @@ export async function repriceCaseType({
     )
     let touched = false
     for (const variant of product.variants ?? []) {
-      const ct = (variant.options ?? []).find(
+      const opts = variant.options ?? []
+      const ct = opts.find(
         (o: any) => optionTitleById.get(o.option_id) === "Case Type"
       )?.value
-      if (ct === caseTypeName) {
-        variantIds.push(variant.id)
-        touched = true
-      }
+      if (ct !== caseTypeName) continue
+      const deviceName =
+        opts.find((o: any) => optionTitleById.get(o.option_id) === "Device")
+          ?.value ?? ""
+      updates.push({
+        id: variant.id,
+        prices: [{ amount: priceForDeviceName(deviceName), currency_code: currencyCode }],
+      })
+      touched = true
     }
     if (touched) productIds.push(product.id)
   }
 
-  if (variantIds.length) {
+  if (updates.length) {
     await updateProductVariantsWorkflow(container).run({
-      input: {
-        product_variants: variantIds.map((id) => ({
-          id,
-          prices: [{ amount, currency_code: currencyCode }],
-        })),
-      },
+      input: { product_variants: updates },
     })
   }
 
   if (productIds.length) await rebuildCards(container, { productIds })
-  return { variants: variantIds.length, products: productIds.length }
+  return { variants: updates.length, products: productIds.length }
 }

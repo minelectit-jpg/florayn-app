@@ -425,6 +425,9 @@ export default async function initialDataSeed({
         description: caseType.description,
         sku_code: caseType.sku_code,
         price: caseType.price,
+        // Persist per-device overrides so they are admin-editable in the DB,
+        // never trapped in the seed constant.
+        price_groups: caseType.price_groups ?? null,
         sort_order: index,
         devices: linked.map((device) => deviceBySlug.get(device.slug)!.id),
       }

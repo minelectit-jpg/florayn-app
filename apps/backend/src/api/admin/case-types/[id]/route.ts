@@ -21,6 +21,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     description?: string
     price?: number
     image_url?: string | null
+    /** Per-device overrides (Alcantara): [{ label, price, devices: [slug] }]. */
+    price_groups?: { label?: string; price?: number; devices?: unknown }[]
   }
 
   const catalog: any = req.scope.resolve(CATALOG_MODULE)
@@ -32,22 +34,46 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   if (typeof body.image_url === "string" || body.image_url === null)
     update.image_url = body.image_url ? body.image_url.trim() : null
 
-  const wantsReprice =
+  const flatChanged =
     Number.isFinite(body.price) &&
     (body.price as number) > 0 &&
     body.price !== existing.price
-  if (wantsReprice) update.price = body.price
+  if (flatChanged) update.price = body.price
+  // The base/flat price the per-device reprice falls back to for a device in no
+  // group (Alcantara's phone shells): the new flat price if it changed, else the
+  // current one.
+  const basePrice = flatChanged ? (body.price as number) : existing.price
 
+  // Clean the per-device groups: keep only positive prices and string slugs.
+  let priceGroups: { label?: string; price: number; devices: string[] }[] | null = null
+  const hasGroups = Array.isArray(body.price_groups)
+  if (hasGroups) {
+    priceGroups = (body.price_groups ?? [])
+      .map((g) => ({
+        label: typeof g.label === "string" && g.label.trim() ? g.label.trim() : undefined,
+        price: Number(g.price),
+        devices: Array.isArray(g.devices)
+          ? g.devices.filter((d): d is string => typeof d === "string")
+          : [],
+      }))
+      .filter((g) => Number.isFinite(g.price) && g.price > 0 && g.devices.length > 0)
+    // Persist the groups (null when cleared) so create paths and the screen read
+    // them from the DB instead of the seed constant.
+    update.price_groups = priceGroups.length ? priceGroups : null
+  }
+
+  const wantsReprice = flatChanged || hasGroups
   const [caseType] = await catalog.updateCaseTypes([update])
 
   let repriced: { variants: number; products: number } | null = null
   if (wantsReprice) {
     // Match variants by the name they actually carry (unchanged, since name is
-    // not editable here).
+    // not editable here). Per-device when groups are set, flat otherwise.
     repriced = await repriceCaseType({
       container: req.scope,
       caseTypeName: existing.name,
-      amount: body.price as number,
+      amount: basePrice,
+      priceGroups: priceGroups && priceGroups.length ? priceGroups : null,
     })
   }
 

@@ -161,11 +161,16 @@ export async function createDesignProducts({
   const dbPriceBySlug = new Map<string, number>(
     dbCaseTypes.map((c: any) => [c.slug, c.price])
   )
+  // Admin-edited per-device overrides (DB) win over the seed's price_groups.
+  const dbGroupsBySlug = new Map<string, any[] | null>(
+    dbCaseTypes.map((c: any) => [c.slug, (c.price_groups as any[] | null) ?? null])
+  )
   const caseTypeSeedBySlug = new Map(CASE_TYPES.map((c) => [c.slug, c]))
   const deviceSeedBySlug = new Map(DEVICES.map((d) => [d.slug, d]))
   const priceFor = (caseTypeSlug: string, deviceSlug: string): number => {
     const seed = caseTypeSeedBySlug.get(caseTypeSlug)
-    const group = seed?.price_groups?.find((g) => g.devices.includes(deviceSlug))
+    const groups = dbGroupsBySlug.get(caseTypeSlug) ?? seed?.price_groups
+    const group = groups?.find((g: any) => g.devices.includes(deviceSlug))
     if (group) return group.price
     return dbPriceBySlug.get(caseTypeSlug) ?? seed?.price ?? 0
   }
