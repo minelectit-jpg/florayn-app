@@ -83,7 +83,7 @@ export default async function ShopView({
   const [devices, caseTypes, catalog] = await Promise.all([
     getDeviceCatalog(),
     getCaseTypes(),
-    getShopCatalog(),
+    getShopCatalog(deviceSlug),
   ])
 
   const device = devices.find((d) => d.slug === deviceSlug) ?? null

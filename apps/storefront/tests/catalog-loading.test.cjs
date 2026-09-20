@@ -271,8 +271,53 @@ test("compact shop card reads have stable URLs, short invalidation tags and a sa
   assert.deepEqual(Array.from(requests[0].options.next.tags), ["products", "catalog", "catalog:shop-cards"])
   await getShopCatalog()
   assert.deepEqual(Array.from(requests.at(-1).options.next.tags), ["products", "catalog", "catalog:shop-catalog"])
+  await getShopCatalog("iphone-17-pro-max")
+  assert.equal(new URL(requests.at(-1).url).searchParams.get("device"), "iphone-17-pro-max")
+  assert.deepEqual(Array.from(requests.at(-1).options.next.tags), ["products", "catalog", "catalog:shop-catalog"])
   ok = false
   assert.equal(await getShopCards(["a"], "Phone", "Signature"), null)
+})
+
+test("shop narrows model and case compatibility before counts and pagination", async () => {
+  const device = { name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
+  const caseTypes = [
+    { name: "Signature", slug: "signature", price: 1400 },
+    { name: "Armor Black", slug: "armor-black", price: 1950 },
+    { name: "Elite", slug: "elite", price: 2200 },
+  ]
+  let requestedHandles
+  const selectedCatalog = [
+    { slug: "compatible-first", name: "First", forms: ["phone"], caseTypes: ["signature", "armor-black"] },
+    { slug: "armor-only", name: "Armor", forms: ["phone"], caseTypes: ["armor-black"] },
+    { slug: "compatible-last", name: "Last", forms: ["phone"], caseTypes: ["signature"] },
+  ]
+  const { default: ShopView } = loadSource("components/shop-view.tsx", {
+    "next/link": { __esModule: true, default: "Link" },
+    "@/lib/catalog": {
+      getDeviceCatalog: async () => [device], getCaseTypes: async () => caseTypes,
+      getShopCatalog: async (slug) => {
+        // An unscoped query would fill the first page with incompatible designs.
+        if (!slug) return Array.from({ length: 40 }, (_, i) => ({ slug: `wrong-model-${i}`, name: "Wrong", forms: ["phone"], caseTypes: ["signature", "elite"] })).concat(selectedCatalog)
+        assert.equal(slug, device.slug)
+        return selectedCatalog
+      },
+      getShopCards: async (handles) => {
+        requestedHandles = Array.from(handles)
+        return handles.map((handle) => ({ handle, variantId: `variant-${handle}`, image: "https://images.invalid/upload.webp", imagesByCaseType: {} }))
+      },
+      shopCardImage: () => "https://images.invalid/legacy.webp",
+    },
+    "@/lib/medusa": { listProducts: async () => { throw new Error("All visible pairs have compact cards") } },
+  })
+  const tree = await ShopView({ deviceSlug: device.slug, caseTypeSlug: "signature", page: 2 })
+  const grid = tree.props.children[1].props
+  assert.deepEqual(requestedHandles, ["compatible-first", "compatible-last"])
+  assert.equal(grid.totalCount, 2)
+  assert.equal(grid.totalPages, 1)
+  assert.equal(grid.currentPage, 1)
+  assert.deepEqual(Array.from(grid.products, (p) => p.handle), ["compatible-first", "compatible-last"])
+  const selectors = tree.props.children[0].props.children[1].props
+  assert.deepEqual(Array.from(selectors.caseTypes, (ct) => ct.slug), ["signature", "armor-black"])
 })
 
 test("collection starts independent reads early and prices only final featured members", async () => {

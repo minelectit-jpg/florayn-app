@@ -83,6 +83,7 @@ function uploadHarness({ beforeCardRead = async () => {} } = {}) {
     listDesigns: async () => [],
     createDesigns: async (designs) => designs.map((design) => ({ ...design, id: `design-${design.slug}` })),
     listCaseTypes: async () => cases,
+    listDevices: async ({ slug }) => seedDevices.DEVICES.filter((device) => device.slug === slug),
   }
   const container = { resolve: (name) => {
     if (name === "product") return productService
@@ -138,9 +139,9 @@ function uploadHarness({ beforeCardRead = async () => {} } = {}) {
   return {
     rows, links, writes, container, pairs,
     publish: () => createUploadedDesign({ container, name: "Future Canvas", pairs }),
-    async storefrontCatalog() {
+    async storefrontCatalog(device) {
       let response
-      await catalogRoute().GET({ scope: container }, { json: (body) => { response = plain(body) } })
+      await catalogRoute().GET({ scope: container, query: device ? { device } : {} }, { json: (body) => { response = plain(body) } })
       return response
     },
   }
@@ -188,6 +189,24 @@ test("a newly uploaded non-manifest design is indexed before success and enters 
   }])
 })
 
+test("device-filtered shop catalogue respects sparse uploaded pairs across models and forms before pagination", async () => {
+  const h = uploadHarness()
+  delete h.pairs.signature["iphone-16-pro-max"]
+  delete h.pairs.alcantara["iphone-17-pro-max"]
+  await h.publish()
+  assert.deepEqual((await h.storefrontCatalog("iphone-17-pro-max")).designs, [
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature"], forms: ["phone"] },
+  ])
+  assert.deepEqual((await h.storefrontCatalog("iphone-16-pro-max")).designs, [], "a design with no matching model must not occupy a page slot")
+  assert.deepEqual((await h.storefrontCatalog("airpods-pro-3")).designs, [
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["alcantara"], forms: ["airpods"] },
+  ])
+  assert.deepEqual((await h.storefrontCatalog("unknown-device")).designs, [])
+  assert.deepEqual((await h.storefrontCatalog()).designs, [
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"] },
+  ], "the no-query response remains compatible with existing clients")
+})
+
 test("a card failure cannot report successful publication", async () => {
   const h = uploadHarness({ beforeCardRead: async () => { throw new Error("card read unavailable") } })
   await assert.rejects(h.publish(), /card read unavailable/)
@@ -218,6 +237,41 @@ test("shop metadata fallback admits older uploads and preserves legacy ordering 
     { slug: "old-upload", name: "Older upload", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"] },
     { slug: "new-upload", name: "New upload", caseTypes: ["signature"], forms: ["phone"] },
   ])
+})
+
+test("device catalogue narrowing keeps missing-card legacy fallback, uses DB device names and validates before reads", async () => {
+  let reads = 0
+  const products = [
+    { handle: "legacy-design", metadata: { design_slug: "legacy-design", form: "phone" } },
+    { handle: "legacy-design-airpods", metadata: { design_slug: "legacy-design", form: "airpods" } },
+    { handle: "db-device-design", metadata: { design_slug: "db-device-design", case_type_slugs: ["signature"], card: { pairs: {
+      "Future Device Name|Signature": { variantId: "new-variant" },
+    } } } },
+    { handle: "empty-index", metadata: { design_slug: "empty-index", case_type_slugs: ["signature"], card: { pairs: {} } } },
+  ]
+  const scope = { resolve: (service) => service === "product" ? { listProducts: async () => { reads++; return products } } : {
+    listCaseTypes: async () => { reads++; return cases },
+    listDevices: async (filter) => {
+      reads++
+      assert.deepEqual(plain(filter), { slug: "future-db-device", is_active: true })
+      return [{ name: "Future Device Name", family: "iphone" }]
+    },
+  } }
+  let response
+  let status = 200
+  const res = { json: (body) => { response = plain(body) }, status: (code) => { status = code; return res } }
+  await catalogRoute().GET({ scope, query: { device: "future-db-device" } }, res)
+  assert.equal(status, 200)
+  assert.deepEqual(response.designs, [
+    { slug: "legacy-design", name: "Legacy Design", caseTypes: ["signature", "armor-black"], forms: ["phone"] },
+    { slug: "db-device-design", name: "db-device-design", caseTypes: ["signature"], forms: ["phone"] },
+  ])
+  for (const device of [[], "", "../private", "x".repeat(201)]) {
+    const before = reads
+    await catalogRoute().GET({ scope, query: { device } }, res)
+    assert.equal(status, 400)
+    assert.equal(reads, before)
+  }
 })
 
 test("a full shop page returns only the selected device's compact cards and excludes draft products", async () => {

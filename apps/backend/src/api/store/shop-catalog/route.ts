@@ -16,11 +16,29 @@ const manifestBySlug = new Map(DESIGNS.map((design) => [design.slug, design]))
  * the shop take ~40s once every design went live; the storefront now builds each
  * card from this list and a page-sized product lookup. Uploaded designs use
  * their persisted card image URLs; legacy designs retain their manifest data.
- * This endpoint never computes per-variant prices.
+ * Optional ?device=<slug> narrows compatibility before storefront pagination.
+ * This endpoint never computes per-variant prices or returns device matrices.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const productModule = req.scope.resolve(Modules.PRODUCT)
   const catalog: any = req.scope.resolve(CATALOG_MODULE)
+  const deviceSlug = req.query?.device
+  if (deviceSlug !== undefined && (typeof deviceSlug !== "string" || !/^[a-z0-9][a-z0-9_-]{0,199}$/i.test(deviceSlug))) {
+    res.status(400).json({ message: "Provide a valid device slug." })
+    return
+  }
+  let device: { name: string; family: string } | undefined
+  if (deviceSlug) {
+    ;[device] = await catalog.listDevices(
+      { slug: deviceSlug, is_active: true },
+      { select: ["name", "family"], take: 1 },
+    )
+    if (!device) {
+      res.json({ designs: [] })
+      return
+    }
+  }
+  const targetForm = device ? ["iphone", "samsung"].includes(device.family) ? "phone" : device.family : null
 
   const [products, caseTypes] = await Promise.all([
     productModule.listProducts({ status: ProductStatus.PUBLISHED }, { select: ["handle", "title", "metadata"], take: 10000 }),
@@ -39,14 +57,30 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     const meta = (p.metadata ?? {}) as Record<string, any>
     const slug = typeof meta.design_slug === "string" ? meta.design_slug.trim() : ""
     if (!slug) continue
+    const form = typeof meta.form === "string" ? meta.form : "phone"
+    if (targetForm && form !== targetForm) continue
     const manifest = manifestBySlug.get(slug)
     const savedSlugs = Array.isArray(meta.case_type_slugs) ? meta.case_type_slugs : []
     const cardNames = Array.isArray(meta.card?.caseTypes) ? meta.card.caseTypes : []
-    const productCaseTypes = [...new Set<string>([
+    let productCaseTypes = [...new Set<string>([
       ...(manifest?.case_types ?? []),
       ...savedSlugs.filter((value: unknown): value is string => typeof value === "string" && validSlugs.has(value)),
       ...cardNames.flatMap((name: unknown) => typeof name === "string" && slugByName.has(name) ? [slugByName.get(name)!] : []),
     ])]
+    const pairs = meta.card?.pairs
+    if (device && pairs && typeof pairs === "object" && !Array.isArray(pairs)) {
+      const prefix = `${device.name}|`
+      const selected = new Set<string>()
+      for (const [key, pair] of Object.entries(pairs)) {
+        if (!key.startsWith(prefix) || !pair || typeof pair !== "object" || Array.isArray(pair)) continue
+        const variantId = (pair as Record<string, unknown>).variantId
+        const caseSlug = slugByName.get(key.slice(prefix.length))
+        if (caseSlug && typeof variantId === "string" && variantId) selected.add(caseSlug)
+      }
+      // A persisted sparse matrix is authoritative. Never invent availability
+      // from another model/form. Missing legacy cards retain the old fallback.
+      productCaseTypes = [...new Set([...productCaseTypes.filter((slug) => selected.has(slug)), ...selected])]
+    }
     // A regular product without design compatibility metadata is not a case.
     if (!productCaseTypes.length) continue
 
@@ -65,7 +99,6 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     for (const caseType of productCaseTypes) {
       if (!entry.caseTypes.includes(caseType)) entry.caseTypes.push(caseType)
     }
-    const form = typeof meta.form === "string" ? meta.form : "phone"
     if (!entry.forms.includes(form)) entry.forms.push(form)
   }
 

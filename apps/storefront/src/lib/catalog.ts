@@ -156,8 +156,9 @@ export type ShopDesign = {
  * Cards get their price from the case type and their image from shopCardImage(),
  * so a 180-design shop never triggers a per-variant price calculation.
  */
-export async function getShopCatalog(): Promise<ShopDesign[]> {
-  const data = await storeFetch<{ designs: ShopDesign[] }>("/store/shop-catalog")
+export async function getShopCatalog(deviceSlug?: string): Promise<ShopDesign[]> {
+  const query = deviceSlug ? `?device=${encodeURIComponent(deviceSlug)}` : ""
+  const data = await storeFetch<{ designs: ShopDesign[] }>(`/store/shop-catalog${query}`)
   return data?.designs ?? []
 }
 
