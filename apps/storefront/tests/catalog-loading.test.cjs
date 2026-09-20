@@ -320,6 +320,60 @@ test("shop narrows model and case compatibility before counts and pagination", a
   assert.deepEqual(Array.from(selectors.caseTypes, (ct) => ct.slug), ["signature", "armor-black"])
 })
 
+test("shop scopes case types by form: Signature Earbuds shows only on AirPods, and a mismatched URL falls back", async () => {
+  const phone = { name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
+  const airpods = { name: "AirPods Pro 3", slug: "airpods-pro-3", family: "airpods" }
+  const caseTypes = [
+    { name: "Signature", slug: "signature", price: 1400, forms: ["phone"] },
+    { name: "Signature Earbuds", slug: "signature-earbuds", price: 750, forms: ["airpods"] },
+  ]
+  // The merged (form-blind) catalogue lists both constructions and both forms.
+  const catalog = [
+    { slug: "bloom", name: "Bloom", forms: ["phone", "airpods"], caseTypes: ["signature", "signature-earbuds"] },
+  ]
+  const deps = (device) => ({
+    "next/link": { __esModule: true, default: "Link" },
+    "@/lib/catalog": {
+      getDeviceCatalog: async () => [phone, airpods],
+      getCaseTypes: async () => caseTypes,
+      getShopCatalog: async (slug) =>
+        // A device query is form-scoped by the backend; model that here.
+        slug === airpods.slug
+          ? [{ slug: "bloom", name: "Bloom", forms: ["airpods"], caseTypes: ["signature-earbuds"] }]
+          : slug === phone.slug
+            ? [{ slug: "bloom", name: "Bloom", forms: ["phone"], caseTypes: ["signature"] }]
+            : catalog,
+      getShopCards: async (handles) =>
+        handles.map((handle) => ({ handle, variantId: `variant-${handle}`, image: "https://images.invalid/x.webp", imagesByCaseType: {} })),
+      shopCardImage: () => "https://images.invalid/legacy.webp",
+    },
+    "@/lib/medusa": { listProducts: async () => ({ products: [], count: 0 }) },
+  })
+
+  // Phone view: only Signature is offered, priced 1400.
+  const { default: PhoneShop } = loadSource("components/shop-view.tsx", deps(phone.slug))
+  const phoneTree = await PhoneShop({ deviceSlug: phone.slug, caseTypeSlug: "signature" })
+  const phoneSelectors = phoneTree.props.children[0].props.children[1].props
+  assert.deepEqual(Array.from(phoneSelectors.caseTypes, (c) => c.slug), ["signature"])
+  assert.equal(phoneTree.props.children[1].props.products[0].variants[0].calculated_price.calculated_amount, 1400)
+
+  // AirPods view: only Signature Earbuds is offered, priced 750.
+  const { default: AirpodsShop } = loadSource("components/shop-view.tsx", deps(airpods.slug))
+  const airTree = await AirpodsShop({ deviceSlug: airpods.slug, caseTypeSlug: "signature-earbuds" })
+  const airSelectors = airTree.props.children[0].props.children[1].props
+  assert.deepEqual(Array.from(airSelectors.caseTypes, (c) => c.slug), ["signature-earbuds"])
+  const airGrid = airTree.props.children[1].props
+  assert.equal(airGrid.products[0].variants[0].calculated_price.calculated_amount, 750)
+  assert.equal(airGrid.caseTypeSlug, "signature-earbuds")
+
+  // A stale/mismatched AirPods + phone-Signature URL falls back to the earbuds
+  // construction rather than emptying the grid at the wrong price.
+  const { default: AirpodsMismatch } = loadSource("components/shop-view.tsx", deps(airpods.slug))
+  const mismatch = await AirpodsMismatch({ deviceSlug: airpods.slug, caseTypeSlug: "signature" })
+  assert.equal(mismatch.props.children[1].props.caseTypeSlug, "signature-earbuds")
+  assert.equal(mismatch.props.children[1].props.products[0].variants[0].calculated_price.calculated_amount, 750)
+})
+
 test("collection starts independent reads early and prices only final featured members", async () => {
   const events = []
   let releaseGroup

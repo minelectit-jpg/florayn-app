@@ -7,7 +7,7 @@ import {
 } from "@medusajs/medusa/core-flows"
 
 import { CATALOG_MODULE } from "../modules/catalog"
-import { CASE_TYPES } from "../modules/catalog/data/case-types"
+import { CASE_TYPES, type CaseTypeSeed } from "../modules/catalog/data/case-types"
 import { devicesFor } from "../modules/catalog/data/design-devices"
 import { DESIGNS } from "../modules/catalog/data/designs"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
@@ -170,6 +170,15 @@ export async function createDesignProducts({
     return dbPriceBySlug.get(caseTypeSlug) ?? seed?.price ?? 0
   }
 
+  // AirPods sell their own "Signature Earbuds" construction, a distinct case type
+  // so it can be priced apart from the phone Signature (1400 vs 750). Remap the
+  // design's "signature" case type to "signature-earbuds" for AirPods products
+  // only; everything else is unchanged. The blank SKU stays "SIG" (both seeds
+  // share sku_code), so AirPods keep drawing from the same SIG blank pool.
+  const earbudsCt = caseTypeSeedBySlug.get("signature-earbuds")
+  const remapCt = (seed: CaseTypeSeed, form: ProductForm): CaseTypeSeed =>
+    form === "airpods" && seed.slug === "signature" && earbudsCt ? earbudsCt : seed
+
   // --- Blanks: reuse existing (by SKU) or create for this design's pairs ---
   const pairs = new Map<string, { caseTypeSlug: string; deviceSlug: string }>()
   for (const caseTypeSlug of design.case_types) {
@@ -204,13 +213,15 @@ export async function createDesignProducts({
     ).run({
       input: {
         items: missing.map(({ caseTypeSlug, deviceSlug }) => {
-          const ct = caseTypeSeedBySlug.get(caseTypeSlug)!
           const dev = deviceSeedBySlug.get(deviceSlug)!
+          // Blank metadata carries the case-type the storefront stock map keys on,
+          // so an AirPods blank must read "Signature Earbuds" to match its variants.
+          const ct = remapCt(caseTypeSeedBySlug.get(caseTypeSlug)!, FORM_BY_FAMILY[dev.family])
           return {
             sku: skuFor(caseTypeSlug, deviceSlug),
             title: `${ct.name} - ${dev.name}`,
             metadata: {
-              case_type_slug: caseTypeSlug,
+              case_type_slug: ct.slug,
               case_type_name: ct.name,
               device_slug: deviceSlug,
               device_name: dev.name,
@@ -260,8 +271,12 @@ export async function createDesignProducts({
     const handle = suffix ? `${design.slug}-${suffix}` : design.slug
 
     const variants: any[] = []
-    for (const caseType of formCaseTypes) {
-      for (const device of ctMap.get(caseType.slug)!) {
+    for (const rawCaseType of formCaseTypes) {
+      const caseType = remapCt(rawCaseType, form)
+      // Look up devices + the shared blank by the design's ORIGINAL case type
+      // slug (ctMap + SIG blank pool are keyed that way); price and label by the
+      // remapped one so AirPods read "Signature Earbuds" at its own price.
+      for (const device of ctMap.get(rawCaseType.slug)!) {
         variants.push({
           title: `${caseType.name} / ${device.name}`,
           sku: `${design.sku_code}-${caseType.sku_code}-${device.sku_code}`,
@@ -269,7 +284,7 @@ export async function createDesignProducts({
           inventory_items: [
             {
               inventory_item_id: blankIdBySku.get(
-                skuFor(caseType.slug, device.slug)
+                skuFor(rawCaseType.slug, device.slug)
               )!,
               required_quantity: 1,
             },
@@ -289,7 +304,13 @@ export async function createDesignProducts({
       ...(collectionId ? { collection_id: collectionId } : {}),
       category_ids: [
         ...formCaseTypes
-          .map((c) => categoryByHandle.get(c.slug))
+          .map((c) => {
+            const ct = remapCt(c, form)
+            // Prefer the remapped case type's own category (e.g. AirPods ->
+            // "signature-earbuds"); fall back to the original if that category
+            // has not been created yet.
+            return categoryByHandle.get(ct.slug) ?? categoryByHandle.get(c.slug)
+          })
           .filter(Boolean),
         ...formFamilies
           .map((family) => categoryByHandle.get(FAMILY_SLUGS[family]))
@@ -305,7 +326,7 @@ export async function createDesignProducts({
         ...(design.theme ? { theme: design.theme } : {}),
       },
       options: [
-        { title: "Case Type", values: formCaseTypes.map((c) => c.name) },
+        { title: "Case Type", values: formCaseTypes.map((c) => remapCt(c, form).name) },
         { title: "Device", values: formDevices.map((d) => d.name) },
       ],
       variants,

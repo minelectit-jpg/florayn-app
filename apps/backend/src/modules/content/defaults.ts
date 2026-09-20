@@ -23,7 +23,7 @@ export const DEFAULT_HOME_SECTIONS = [
     config: {
       items: [
         { label: "Phone Case", href: shop("iphone-17-pro-max") },
-        { label: "Earbuds Case", href: shop("airpods-pro-3") },
+        { label: "Earbuds Case", href: shop("airpods-pro-3", "signature-earbuds") },
         { label: "Watch Bands", href: "/collection/signature/" },
         { label: "Card Holder", href: "/collection/signature/" },
         { label: "Phone Charms", href: "/collection/signature/" },
@@ -80,7 +80,7 @@ export const DEFAULT_HOME_SECTIONS = [
       columns: 2,
       tiles: [
         { label: "Phone Case", href: shop("iphone-17-pro-max") },
-        { label: "EarBuds Case", href: shop("airpods-pro-3") },
+        { label: "EarBuds Case", href: shop("airpods-pro-3", "signature-earbuds") },
       ],
     },
   },
@@ -151,6 +151,16 @@ const iphone = (group: string, rows: [string, string, string?][]): SeedItem[] =>
     group,
     label,
     href: shop(slug),
+    badge: badge ?? null,
+  }))
+
+// AirPods sell the "Signature Earbuds" construction, so their device links carry
+// that case slug rather than the phone default.
+const earbuds = (group: string, rows: [string, string, string?][]): SeedItem[] =>
+  rows.map(([label, slug, badge]) => ({
+    group,
+    label,
+    href: shop(slug, "signature-earbuds"),
     badge: badge ?? null,
   }))
 
@@ -225,8 +235,8 @@ export const DEFAULT_MENU: {
   {
     menu: "primary",
     label: "Earbuds Cases",
-    href: shop("airpods-pro-3"),
-    items: iphone("Apple", [
+    href: shop("airpods-pro-3", "signature-earbuds"),
+    items: earbuds("Apple", [
       ["AirPods 1/2", "airpods-1-2"],
       ["AirPods 3", "airpods-3"],
       ["AirPods 4", "airpods-4"],
@@ -290,7 +300,7 @@ export const DEFAULT_MENU: {
     href: null,
     items: [
       { label: "Shop Phone Case", href: shop("iphone-17-pro-max") },
-      { label: "Shop AirPods Case", href: shop("airpods-pro-3") },
+      { label: "Shop AirPods Case", href: shop("airpods-pro-3", "signature-earbuds") },
       { label: "iPhone 17 Series", href: shop("iphone-17") },
     ],
   },

@@ -410,6 +410,15 @@ export default async function initialDataSeed({
   await catalogModuleService.createCaseTypes(
     CASE_TYPES.map((caseType, index) => {
       const union = new Set(CASE_TYPE_DEVICES[caseType.slug] ?? [])
+      // The phone Signature is not sold on AirPods - those are the separate
+      // Signature Earbuds construction - so keep AirPods off Signature's device
+      // list (signature-earbuds carries them). This mirrors the product-build
+      // remap and lets the shop scope its case-type picker by form.
+      const linked = DEVICES.filter(
+        (device) =>
+          union.has(device.slug) &&
+          !(caseType.slug === "signature" && device.family === "airpods")
+      )
       return {
         slug: caseType.slug,
         name: caseType.name,
@@ -417,9 +426,7 @@ export default async function initialDataSeed({
         sku_code: caseType.sku_code,
         price: caseType.price,
         sort_order: index,
-        devices: DEVICES.filter((device) => union.has(device.slug)).map(
-          (device) => deviceBySlug.get(device.slug)!.id
-        ),
+        devices: linked.map((device) => deviceBySlug.get(device.slug)!.id),
       }
     })
   )
@@ -511,19 +518,35 @@ export default async function initialDataSeed({
   }
   const caseTypeSeedBySlug = new Map(CASE_TYPES.map((c) => [c.slug, c]))
   const deviceSeedBySlug = new Map(DEVICES.map((d) => [d.slug, d]))
+
+  // AirPods sell their own "Signature Earbuds" construction, a distinct case
+  // type priced apart from the phone Signature (750 vs 1400). Designs list
+  // "signature" as their case type; remap it to "signature-earbuds" for AirPods
+  // only. The SIG blank pool is shared (both seeds have sku_code "SIG"), so
+  // AirPods keep drawing from the same blanks - only the label and price differ.
+  const earbudsCt = caseTypeSeedBySlug.get("signature-earbuds")
+  const remapEarbuds = (seed: (typeof CASE_TYPES)[number], isAirpods: boolean) =>
+    isAirpods && seed.slug === "signature" && earbudsCt ? earbudsCt : seed
+
   const pairsArr = [...blankPairs.values()]
   const { result: blankItems } = await createInventoryItemsWorkflow(
     container
   ).run({
     input: {
       items: pairsArr.map(({ caseTypeSlug, deviceSlug }) => {
-        const ct = caseTypeSeedBySlug.get(caseTypeSlug)!
         const dev = deviceSeedBySlug.get(deviceSlug)!
+        // Blank metadata carries the case type the storefront stock map keys on,
+        // so an AirPods blank must read "Signature Earbuds" to match its variants.
+        // The SKU still uses the shared SIG sku_code.
+        const ct = remapEarbuds(
+          caseTypeSeedBySlug.get(caseTypeSlug)!,
+          dev.family === "airpods"
+        )
         return {
           sku: `${ct.sku_code}-${dev.sku_code}`,
           title: `${ct.name} - ${dev.name}`,
           metadata: {
-            case_type_slug: caseTypeSlug,
+            case_type_slug: ct.slug,
             case_type_name: ct.name,
             device_slug: deviceSlug,
             device_name: dev.name,
@@ -642,9 +665,14 @@ export default async function initialDataSeed({
         form === "phone" ? design.name : `${design.name} - ${FORM_LABEL[form]}`
 
       // The sparse variant matrix: only the (case type, device) pairs sold.
+      const isAirpods = form === "airpods"
       const variants: any[] = []
-      for (const caseType of formCaseTypes) {
-        for (const device of ctMap.get(caseType.slug)!) {
+      for (const rawCaseType of formCaseTypes) {
+        // Look up devices + the shared blank by the design's ORIGINAL case type
+        // slug; price and label by the remapped one so AirPods read
+        // "Signature Earbuds" at its own price.
+        const caseType = remapEarbuds(rawCaseType, isAirpods)
+        for (const device of ctMap.get(rawCaseType.slug)!) {
           variants.push({
             // Composite title, since a variant is now a (case type, device) pair.
             title: `${caseType.name} / ${device.name}`,
@@ -655,7 +683,7 @@ export default async function initialDataSeed({
             inventory_items: [
               {
                 inventory_item_id: blankItemIdByPair.get(
-                  `${caseType.slug}|${device.slug}`
+                  `${rawCaseType.slug}|${device.slug}`
                 )!,
                 required_quantity: 1,
               },
@@ -684,7 +712,9 @@ export default async function initialDataSeed({
           ? { collection_id: collectionByTitle.get(design.theme)!.id }
           : {}),
         category_ids: [
-          ...formCaseTypes.map((c) => categoryByHandle.get(c.slug)!.id),
+          ...formCaseTypes.map(
+            (c) => categoryByHandle.get(remapEarbuds(c, isAirpods).slug)!.id
+          ),
           ...formFamilies.map(
             (family) => categoryByHandle.get(FAMILY_SLUGS[family])!.id
           ),
@@ -701,7 +731,10 @@ export default async function initialDataSeed({
           ...(design.theme ? { theme: design.theme } : {}),
         },
         options: [
-          { title: "Case Type", values: formCaseTypes.map((c) => c.name) },
+          {
+            title: "Case Type",
+            values: formCaseTypes.map((c) => remapEarbuds(c, isAirpods).name),
+          },
           { title: "Device", values: formDevices.map((d) => d.name) },
         ],
         variants,

@@ -46,9 +46,20 @@ export const CASE_TYPES: CaseTypeSeed[] = [
     slug: "signature",
     name: "Signature",
     description:
-      "Our full-wrap print finish, available across phones, AirPods, watch bands and wallets.",
+      "Our full-wrap print finish, available across phones, watch bands and wallets.",
     sku_code: "SIG",
     price: 1400,
+  },
+  {
+    // AirPods' own Signature construction. It shares the SIG blank pool (same
+    // sku_code) so it draws from the existing AirPods stock, but is its own case
+    // type so it can be priced independently of the phone Signature (1400).
+    slug: "signature-earbuds",
+    name: "Signature Earbuds",
+    description:
+      "Our full-wrap print finish for AirPods cases, with the keychain loop.",
+    sku_code: "SIG",
+    price: 750,
   },
   {
     slug: "elite-clear",

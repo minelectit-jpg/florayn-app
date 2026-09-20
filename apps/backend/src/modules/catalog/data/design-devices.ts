@@ -280,6 +280,11 @@ export const CASE_TYPE_DEVICES: Record<string, string[]> = {
   "elite-clear": ["iphone-12", "iphone-12-pro", "iphone-12-pro-max", "iphone-13", "iphone-13-pro", "iphone-13-pro-max", "iphone-14", "iphone-14-plus", "iphone-14-pro", "iphone-14-pro-max", "iphone-15", "iphone-15-plus", "iphone-15-pro", "iphone-15-pro-max", "iphone-16", "iphone-16-plus", "iphone-16-pro", "iphone-16-pro-max", "iphone-17", "iphone-17-air", "iphone-17-pro", "iphone-17-pro-max"],
   "essentials": ["iphone-13", "iphone-13-pro", "iphone-13-pro-max", "iphone-14", "iphone-14-pro", "iphone-14-pro-max", "iphone-15", "iphone-15-pro", "iphone-15-pro-max", "iphone-16", "iphone-16-pro", "iphone-16-pro-max"],
   "signature": ["iphone-11", "iphone-11-pro", "iphone-11-pro-max", "iphone-12-mini", "iphone-12", "iphone-12-pro", "iphone-12-pro-max", "iphone-13-mini", "iphone-13", "iphone-13-pro", "iphone-13-pro-max", "iphone-14", "iphone-14-plus", "iphone-14-pro", "iphone-14-pro-max", "iphone-15", "iphone-15-plus", "iphone-15-pro", "iphone-15-pro-max", "iphone-16", "iphone-16-plus", "iphone-16-pro", "iphone-16-pro-max", "iphone-17", "iphone-17-air", "iphone-17-pro", "iphone-17-pro-max", "samsung-s23", "samsung-s23-plus", "samsung-s23-ultra", "samsung-s24", "samsung-s24-plus", "samsung-s24-ultra", "samsung-s25", "samsung-s25-plus", "samsung-s25-ultra", "samsung-s26", "samsung-s26-plus", "samsung-s26-ultra", "airpods-1-2", "airpods-3", "airpods-4", "airpods-pro", "airpods-pro-2", "airpods-pro-3", "airpods-max"],
+  // AirPods' own Signature construction (see case-types.ts). Designs still list
+  // "signature" as their case type; the product builders remap it to
+  // "signature-earbuds" for the AirPods form only. This entry exists so the seed
+  // links the AirPods devices to the earbuds case type's devices m2m.
+  "signature-earbuds": ["airpods-1-2", "airpods-3", "airpods-4", "airpods-pro", "airpods-pro-2", "airpods-pro-3", "airpods-max"],
 }
 
 /** The devices a given design is sold for in a given case type. */

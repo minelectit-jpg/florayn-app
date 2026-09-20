@@ -167,17 +167,41 @@ export type CaseTypeRecord = {
   name: string
   price: number
   description?: string | null
+  /**
+   * The product forms this construction is sold in (phone, airpods, watch,
+   * wallet), derived from the devices linked to it. Lets the shop show only the
+   * case types that fit the current device - e.g. Signature Earbuds is an
+   * AirPods-only construction and must not appear on an iPhone. Absent/empty
+   * when the backend did not send device links; callers must treat that as
+   * "fits any form" rather than "fits none".
+   */
+  forms?: string[]
+}
+
+/** Device family -> the product form it belongs to (mirrors the backend). */
+function formForFamily(family: string): string {
+  return family === "iphone" || family === "samsung" ? "phone" : family
 }
 
 /** The active case types (constructions), in catalogue order, for the shop selectors. */
 export async function getCaseTypes(): Promise<CaseTypeRecord[]> {
   const data = await storeFetch<{ case_types: any[] }>("/store/case-types")
-  return (data?.case_types ?? []).map((c) => ({
-    slug: c.slug,
-    name: c.name,
-    price: c.price,
-    description: c.description ?? null,
-  }))
+  return (data?.case_types ?? []).map((c) => {
+    const forms = [
+      ...new Set<string>(
+        (Array.isArray(c.devices) ? c.devices : [])
+          .map((d: any) => (typeof d?.family === "string" ? formForFamily(d.family) : null))
+          .filter((f: string | null): f is string => !!f)
+      ),
+    ]
+    return {
+      slug: c.slug,
+      name: c.name,
+      price: c.price,
+      description: c.description ?? null,
+      forms,
+    }
+  })
 }
 
 /**

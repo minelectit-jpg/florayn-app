@@ -99,7 +99,7 @@ test("warm requests remain sequential and spaced after body completion, with exi
     assert.equal(entry.options.signal.timeoutMs, 10_000)
   }
   assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/example-phone-iphone-17-pro-max/?case=signature")))
-  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/example-airpods-airpods-pro/?case=signature")))
+  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/example-airpods-airpods-pro/?case=signature-earbuds")))
   assert.match(warmer.logs.at(-1), /processed=11\/11 remaining=0/)
 })
 

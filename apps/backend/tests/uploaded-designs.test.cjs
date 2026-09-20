@@ -189,6 +189,44 @@ test("a newly uploaded non-manifest design is indexed before success and enters 
   }])
 })
 
+test("AirPods take the Signature Earbuds construction at its own price, phones keep Signature", async () => {
+  const h = uploadHarness()
+  // Sell this design in Signature on an AirPods model too. AirPods must become a
+  // distinct "Signature Earbuds" case type at 750, never the phone Signature.
+  h.pairs.signature["airpods-pro-3"] = ["https://images.invalid/sig-airpods-ULID.webp"]
+  await h.publish()
+
+  const phone = h.rows.find((row) => row.metadata.form === "phone")
+  const airpods = h.rows.find((row) => row.metadata.form === "airpods")
+
+  // Phone keeps Signature at the admin's persisted 1500; never renamed.
+  assert.deepEqual(phone.metadata.case_type_slugs, ["signature", "alcantara"])
+  assert.equal(phone.metadata.card.pairs["iPhone 17 Pro Max|Signature"].price, 1500)
+  assert.equal(phone.metadata.card.pairs["iPhone 17 Pro Max|Signature Earbuds"], undefined)
+
+  // AirPods carry Signature Earbuds at 750 (the seed price), plus Alcantara at
+  // its per-device group price - and never the phone Signature.
+  assert.deepEqual(airpods.metadata.case_type_slugs, ["signature-earbuds", "alcantara"])
+  assert.equal(airpods.metadata.card.pairs["AirPods Pro 3|Signature Earbuds"].price, 750)
+  assert.equal(airpods.metadata.card.pairs["AirPods Pro 3|Signature"], undefined)
+  assert.equal(airpods.metadata.card.pairs["AirPods Pro 3|Alcantara"].price, 2100)
+  const caseOption = airpods.options.find((option) => option.title === "Case Type")
+  assert.ok(caseOption.values.includes("Signature Earbuds"))
+  assert.ok(!caseOption.values.includes("Signature"))
+
+  // The AirPods blank is labelled Signature Earbuds so the stock map keys match.
+  const earbudsVariant = airpods.variants.find((variant) =>
+    variant.options.some((option) => option.value === "Signature Earbuds")
+  )
+  assert.ok(earbudsVariant, "an AirPods Signature Earbuds variant exists")
+
+  // The device-scoped catalogue reports the AirPods design under signature-earbuds.
+  const airpodsCatalog = await h.storefrontCatalog("airpods-pro-3")
+  const entry = airpodsCatalog.designs.find((design) => design.slug === "future-canvas")
+  assert.ok(entry.caseTypes.includes("signature-earbuds"))
+  assert.ok(!entry.caseTypes.includes("signature"))
+})
+
 test("device-filtered shop catalogue respects sparse uploaded pairs across models and forms before pagination", async () => {
   const h = uploadHarness()
   delete h.pairs.signature["iphone-16-pro-max"]

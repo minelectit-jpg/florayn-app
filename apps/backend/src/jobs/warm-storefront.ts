@@ -48,17 +48,22 @@ export default async function warmStorefront(container: MedusaContainer) {
       { select: ["handle", "metadata"], take: 10000, order: { handle: "ASC" } }
     )
 
+    // AirPods sell the "Signature Earbuds" construction, not the phone Signature,
+    // so their shop and product URLs carry that case slug — warm the exact URL a
+    // real AirPods visitor lands on, or it renders cold on the first hit.
     const urls = [
       "/",
       "/shop/iphone-17-pro-max/signature/",
       "/shop/iphone-16-pro-max/signature/",
-      "/shop/airpods-pro-3/signature/",
+      "/shop/airpods-pro-3/signature-earbuds/",
     ]
     for (const p of products) {
       const meta = (p.metadata ?? {}) as Record<string, any>
-      const devs = DEVICES_BY_FORM[String(meta.form ?? "")]
+      const form = String(meta.form ?? "")
+      const devs = DEVICES_BY_FORM[form]
       if (!devs || !p.handle) continue
-      for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=signature`)
+      const caseParam = form === "airpods" ? "signature-earbuds" : "signature"
+      for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=${caseParam}`)
     }
 
     nextUrlIndex %= urls.length

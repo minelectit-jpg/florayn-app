@@ -91,14 +91,30 @@ export default async function ShopView({
   const device = devices.find((d) => d.slug === deviceSlug) ?? null
   const targetForm = device ? formForFamily(device.family) : "phone"
 
-  // The case type in view: the chosen one, else the first that the catalogue
-  // actually uses (so a bare /shop still shows real cards and prices).
+  // Case types that fit this view's FORM. A construction sold only on AirPods
+  // (Signature Earbuds) must never show on an iPhone, or its 750 price and empty
+  // grid would leak onto the phone shop. forms is derived from the case type's
+  // linked devices; treat an empty/unknown forms list as "fits" (fail open) so a
+  // backend that has not populated it yet keeps the full picker.
+  const fitsForm = (c: CaseTypeRecord) =>
+    !Array.isArray(c.forms) || c.forms.length === 0 || c.forms.includes(targetForm)
+
+  // The case type in view: the chosen one (when it fits this form), else the
+  // first that the catalogue actually uses (so a bare /shop still shows real
+  // cards and prices).
   const usedCaseSlugs = new Set<string>()
   for (const d of catalog) for (const c of d.caseTypes) usedCaseSlugs.add(c)
-  const shownCaseTypes = caseTypes.filter((c) => usedCaseSlugs.has(c.slug))
+  const shownCaseTypes = caseTypes.filter(
+    (c) => usedCaseSlugs.has(c.slug) && fitsForm(c)
+  )
+  const chosenCaseType =
+    caseTypeSlug != null
+      ? caseTypes.find((c) => c.slug === caseTypeSlug)
+      : undefined
   const caseType: CaseTypeRecord | null =
-    (caseTypeSlug && caseTypes.find((c) => c.slug === caseTypeSlug)) ||
+    (chosenCaseType && fitsForm(chosenCaseType) ? chosenCaseType : null) ||
     shownCaseTypes[0] ||
+    caseTypes.find(fitsForm) ||
     caseTypes[0] ||
     null
   const caseSlug = caseType?.slug ?? ""
