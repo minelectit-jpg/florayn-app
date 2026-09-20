@@ -346,3 +346,19 @@ test("a payment-time cart mutation reprices bundle discounts before returning a 
   assert.ok(!h.calls.includes("complete"))
   assert.equal((await h.quote()).body.quote.version, response.body.quote.version)
 })
+
+test("isolated bypass assertions match serialized workflow messages and reject unrelated failures", () => {
+  const { isExpectedWorkflowFailure: matches } = load("scripts/verify-checkout-isolated.ts", {
+    "node:assert/strict": require("node:assert/strict"), "@medusajs/framework/utils": utils,
+    "@medusajs/medusa/core-flows": {}, "../workflows/checkout": {},
+  })
+  const expected = "CHECKOUT_QUOTE_REQUIRED"
+  assert.equal(matches(new Error(expected), expected), true)
+  assert.equal(matches({ message: expected, type: "invalid_data" }, expected), true)
+  assert.equal(matches({ errors: [{ error: { message: expected } }] }, expected), true)
+  assert.equal(matches({ cause: { message: expected } }, expected), true)
+  assert.equal(matches({ message: "database unavailable" }, expected), false)
+  assert.equal(matches({ message: "CHECKOUT_QUOTE_CHANGED" }, expected), false)
+  const cyclic = {}; cyclic.cause = cyclic
+  assert.equal(matches(cyclic, expected), false)
+})

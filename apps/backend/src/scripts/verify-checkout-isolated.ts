@@ -10,6 +10,24 @@ import {
 } from "@medusajs/medusa/core-flows"
 import { checkoutWorkflow } from "../workflows/checkout"
 
+// Medusa serializes step errors before workflow-export throws errors[0].error.
+// These can be plain objects, so assert.rejects' Error-to-string regex loses
+// their message. Match the exact expected failure across documented wrappers.
+export function isExpectedWorkflowFailure(error: unknown, message: string): boolean {
+  const pending: unknown[] = [error]
+  const seen = new Set<unknown>()
+  while (pending.length && seen.size < 20) {
+    const value = pending.shift()
+    if (!value || typeof value !== "object" || seen.has(value)) continue
+    seen.add(value)
+    const failure = value as Record<string, unknown>
+    if (failure.message === message) return true
+    pending.push(failure.error, failure.cause)
+    if (Array.isArray(failure.errors)) pending.push(...failure.errors)
+  }
+  return false
+}
+
 /** Only for a disposable database, never the application database. */
 export default async function verifyCheckoutIsolated({ container }: ExecArgs) {
   const database = new URL(process.env.DATABASE_URL ?? "postgres://invalid/invalid")
@@ -98,15 +116,18 @@ export default async function verifyCheckoutIsolated({ container }: ExecArgs) {
     payment_collection_id: paymentCollection.id, provider_id: "pp_system_default", data: { method: "cash_on_delivery" },
   } })
   await initiatePayment()
-  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }), /CHECKOUT_QUOTE_REQUIRED/)
+  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }),
+    (error: unknown) => isExpectedWorkflowFailure(error, "CHECKOUT_QUOTE_REQUIRED"))
   await updateCartWorkflow(container).run({ input: { id: cart.id, metadata: { checkout_quote_version: "a".repeat(64) } } })
-  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }), /CHECKOUT_QUOTE_CHANGED/)
+  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }),
+    (error: unknown) => isExpectedWorkflowFailure(error, "CHECKOUT_QUOTE_CHANGED"))
   await updateCartWorkflow(container).run({ input: { id: cart.id, metadata: { checkout_quote_version: first.body.quote.version } } })
   await updateLineItemInCartWorkflow(container).run({ input: {
     cart_id: cart.id, item_id: first.body.quote.items[0].id, update: { quantity: 2 },
   } })
   await initiatePayment()
-  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }), /CHECKOUT_QUOTE_CHANGED/)
+  await assert.rejects(completeCartWorkflow(container).run({ input: { id: cart.id } }),
+    (error: unknown) => isExpectedWorkflowFailure(error, "CHECKOUT_QUOTE_CHANGED"))
   const { data: bypassOrders } = await query.graph({ entity: "order", fields: ["id"] })
   assert.equal(bypassOrders.length, 0, "No unsigned, forged or stale quote may create an order")
   const changed = await run(true, { quote_version: first.body.quote.version })
