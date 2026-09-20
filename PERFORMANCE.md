@@ -184,6 +184,37 @@ or change `florayn.com` as part of this deployment.
 
 ## Optimized image CDN cache
 
+Shop grids preload the first eight main images with high fetch priority, covering
+two desktop rows. Remaining main images are native lazy/low priority; the browser
+may start nearby rows early. Keep URLs in server HTML, avoiding a hydration gate
+or waiting for every leading image before allowing a scrolled-to image to load.
+The bounded eight also covers mobile/tablet without a viewport effect delaying
+initial discovery. Card sizes must match the 2/3/4-column CSS, padding and gaps,
+including the 1024px breakpoint and 1470px page-width cap. Do not revert to an
+uncapped 25vw on large screens. SSR regression tests verify preload/loading
+attributes with the real Next Image component and responsive size boundaries.
+
+The new-site storefront requires its app-specific persistent volume at exactly
+`/app/.next/cache/images`. Never mount the whole `.next` directory: route output
+and chunks must remain build-specific. Redis does not persist optimized image
+files, and the HTML warmer does not request image variants. Preserve existing
+image files when first enabling the volume, then verify its mount and an origin
+cache HIT after replacement. Next's image cache is bounded to 1 GiB with LRU
+eviction; new or evicted variants still need first-time processing. Long TTLs
+alone cannot protect an ephemeral container filesystem.
+
+On a shop route, opt-in `#perf` reports `shopImagesReadyMs`: the actual first two
+CSS rows (4, 6 or 8 images, or fewer when the result has fewer cards), successfully
+decoded and followed by two animation frames. It is an observed upper bound,
+not a claim about an empty browser/CDN cache. `shopImageCount` and
+`shopImagesLoaded` show progress; `shopImageResourceCount`, `shopImageTransferKB`
+and `shopImageMaxResponseMs` summarize matching resource timings without exposing
+URLs. Cached/prefetched resources may have missing or zero timings/transfer size.
+A server-supplied `data-shop-path` marker prevents
+old grid content completing a new navigation reading. Normal visits still have
+no diagnostic observers or telemetry. Test direct loads, navigation, mobile,
+desktop, scroll and sorting after changing image-loading behavior.
+
 The Cloudflare cache rule for exactly `new.florayn.com` and `/_next/image`
 or `/_next/image/` caches successful image responses using the origin TTL.
 It respects browser cache directives, bypasses responses without cache control,

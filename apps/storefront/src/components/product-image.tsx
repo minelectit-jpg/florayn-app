@@ -22,6 +22,7 @@ export default function ProductImage({
   label,
   sizes,
   priority,
+  fetchPriority,
   className = "",
   fillMode = "cover",
 }: {
@@ -31,6 +32,7 @@ export default function ProductImage({
   label?: string
   sizes?: string
   priority?: boolean
+  fetchPriority?: "high" | "low" | "auto"
   className?: string
   fillMode?: "cover" | "absolute"
 }) {
@@ -79,6 +81,7 @@ export default function ProductImage({
       fill
       sizes={sizes}
       priority={priority}
+      fetchPriority={fetchPriority}
       className={owned ? className : `object-cover ${className}`}
       onError={() => setFailed(true)}
     />

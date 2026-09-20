@@ -75,10 +75,12 @@ export default async function ShopView({
   deviceSlug,
   caseTypeSlug,
   page = 1,
+  routePath = "/shop/",
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
   page?: number
+  routePath?: string
 }) {
   const [devices, caseTypes, catalog] = await Promise.all([
     getDeviceCatalog(),
@@ -222,6 +224,7 @@ export default async function ShopView({
           totalCount={matching.length}
           currentPage={current}
           totalPages={totalPages}
+          routePath={routePath}
         />
       ) : (
         <div className="py-12">

@@ -43,6 +43,7 @@ export default function ShopGrid({
   totalCount,
   currentPage = 1,
   totalPages = 1,
+  routePath,
 }: {
   products: StoreProduct[]
   device?: string | null
@@ -53,6 +54,8 @@ export default function ShopGrid({
   totalCount?: number
   currentPage?: number
   totalPages?: number
+  /** Server-rendered route identity for opt-in image-readiness diagnostics. */
+  routePath: string
 }) {
   const [sort, setSort] = useState<SortKey>("featured")
   const [open, setOpen] = useState(false)
@@ -152,7 +155,7 @@ export default function ShopGrid({
         </div>
       </div>
 
-      <div className="fl-grid">
+      <div className="fl-grid" data-shop-path={routePath}>
         {sorted.map((product, i) => (
           <ProductCard
             key={product.id}
@@ -161,8 +164,10 @@ export default function ShopGrid({
             deviceSlug={deviceSlug ?? null}
             caseType={caseType ?? null}
             caseTypeSlug={caseTypeSlug ?? null}
-            // The first two rows are above the fold; load their images eagerly.
-            priority={i < 6}
+            // Two desktop rows (four columns) get early requests. Keep this
+            // bounded on mobile too, without waiting for viewport hydration.
+            priority={i < 8}
+            fetchPriority={i < 8 ? "high" : "low"}
           />
         ))}
       </div>

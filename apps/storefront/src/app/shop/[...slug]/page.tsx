@@ -69,6 +69,7 @@ export default async function ShopFilterPage({ params }: Params) {
       deviceSlug={parsed.deviceSlug}
       caseTypeSlug={parsed.caseTypeSlug}
       page={parsed.page}
+      routePath={`/shop/${slug.join("/")}/`}
     />
   )
 }

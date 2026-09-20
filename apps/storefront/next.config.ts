@@ -65,17 +65,16 @@ const nextConfig: NextConfig = {
   images: {
     /*
      * Next's on-demand image optimizer IS used (it turns the 1200px ~37KB R2
-     * source into ~6-15KB responsive variants). The full-size unoptimized source
-     * was making a shop page download ~2.4MB of images = 5-7s on a Bangladesh
-     * connection - the dominant real-world slowness. The optimizer's "blank cards"
-     * cold-start that we saw earlier was caused by CF cache PURGES wiping the edge
-     * copies; we no longer purge, so the optimized `/_next/image` outputs stay
-     * cached at the Dhaka PoP across deploys and are served small + fast. New/
-     * un-warmed images optimize once at origin then edge-cache; warm the active
-     * shops after enabling this so the common views are already at the edge.
-     * minimumCacheTTL keeps the origin optimizer copy long-lived too.
+     * source into small responsive variants). Keep the app-specific persistent
+     * volume mounted at /app/.next/cache/images so origin transformations survive
+     * deployment; Redis's route/data cache does not store these files. The HTML
+     * warmer does not warm images, and a CDN miss can still reach the optimizer.
+     * First-time images need processing once; never purge the shared CDN zone.
+     * Bound disk use as the catalog grows instead of Next's default half of the
+     * available filesystem. Keep replacement-image URLs versioned.
      */
     minimumCacheTTL: 2678400, // 31 days
+    maximumDiskCacheSize: 1024 * 1024 * 1024, // 1 GiB, evict least recently used images
     remotePatterns: [
       { protocol: "https", hostname: "**.r2.dev" },
       { protocol: "https", hostname: "img.florayn.com" },

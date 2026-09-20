@@ -28,13 +28,26 @@ function root(pathname, img = image(), hydrated = "true") {
   }
 }
 
-function harness({ roots = [], withObserver = true } = {}) {
+function shop(pathname, images = Array.from({ length: 8 }, () => image()), columns = 4) {
+  return {
+    dataset: { shopPath: pathname },
+    isConnected: true,
+    columns,
+    children: images.map((img) => ({
+      img,
+      matches: (selector) => selector === ".fl-card",
+      querySelector() { return this.img },
+    })),
+  }
+}
+
+function harness({ roots = [], shops = [], withObserver = true, pathname = "/product/first/", resources } = {}) {
   const readings = [], events = new Map(), frames = new Map()
   let now = 100, nextFrame = 0, mutation, lcp
-  const location = { pathname: "/product/first/", origin: "https://fixture.test" }
+  const location = { pathname, origin: "https://fixture.test" }
   const document = {
     body: {},
-    querySelectorAll: () => roots,
+    querySelectorAll: (selector) => selector === "[data-shop-path]" ? shops : roots,
     querySelector: () => ({}),
     addEventListener: (name, callback) => events.set(name, callback),
     removeEventListener: (name) => events.delete(name),
@@ -46,8 +59,9 @@ function harness({ roots = [], withObserver = true } = {}) {
     document,
     performance: {
       now: () => now,
-      getEntriesByType: (type) => type === "navigation" ? [{ responseStart: 50 }] : [{ startTime: 0, transferSize: 2048 }],
+      getEntriesByType: (type) => type === "navigation" ? [{ responseStart: 50 }] : resources ?? [{ startTime: 0, transferSize: 2048 }],
     },
+    getComputedStyle: (grid) => ({ gridTemplateColumns: Array.from({ length: grid.columns }, () => "200px").join(" ") }),
     PerformanceObserver: withObserver ? class {
       constructor(callback) { lcp = callback }
       observe(options) { assert.equal(options.buffered, true) }
@@ -64,8 +78,10 @@ function harness({ roots = [], withObserver = true } = {}) {
   vm.runInNewContext(compiled, context)
   const stop = loaded.exports.startPerformanceAudit((reading) => readings.push(JSON.parse(JSON.stringify(reading))))
   return {
-    readings, location, roots, stop,
+    readings, location, roots, shops, stop,
     mutate: () => mutation(),
+    load: () => events.get("load")?.(),
+    resize: () => events.get("resize")?.(),
     setTime: (value) => { now = value },
     lcp: (time) => lcp({ getEntries: () => [{ startTime: time }] }),
     click(pathname, overrides = {}) {
@@ -73,13 +89,13 @@ function harness({ roots = [], withObserver = true } = {}) {
       events.get("click")?.({ button: 0, target: { closest: () => anchor }, ...overrides })
     },
     async paint() {
-      await Promise.resolve()
+      for (let i = 0; i < 4; i += 1) await Promise.resolve()
       for (let i = 0; i < 2; i += 1) {
         now += 16
         const callbacks = [...frames.values()]
         frames.clear()
         callbacks.forEach((callback) => callback())
-        await Promise.resolve()
+        for (let j = 0; j < 4; j += 1) await Promise.resolve()
       }
     },
   }
@@ -180,4 +196,153 @@ test("unmount stops pending image completions", async () => {
   decoding.resolve()
   await h.paint()
   assert.equal(h.readings.length, 1)
+})
+
+test("mobile shop readiness waits for four images and does not wait for the third row", async () => {
+  const grid = shop("/shop/iphone-17-pro/signature/", undefined, 2)
+  grid.children[4].img.complete = false
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  await h.paint()
+  const reading = h.readings.at(-1)
+  assert.equal(reading.shopImageCount, 4)
+  assert.equal(reading.shopImagesLoaded, 4)
+  assert.equal(reading.shopImagesReadyMs, 132)
+  assert.equal(reading.productReadyMs, undefined)
+  h.stop()
+})
+
+test("desktop first-two-row readiness waits for all eight current primary images", async () => {
+  const grid = shop("/shop/iphone-17-pro/signature/")
+  grid.children[7].img.complete = false
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImageCount, 8)
+  assert.equal(h.readings.at(-1).shopImagesLoaded, 7)
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  grid.children[7].img.complete = true
+  h.load()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, 164)
+  h.stop()
+})
+
+test("a missing shop image cannot be replaced in the count by a later row", async () => {
+  const grid = shop("/shop/iphone-17-pro/signature/", Array.from({ length: 12 }, () => image()))
+  grid.children[0].img = null
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImageCount, 8)
+  assert.equal(h.readings.at(-1).shopImagesLoaded, 7)
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  grid.children[0].img = image()
+  h.mutate()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, 164)
+  h.stop()
+})
+
+test("failed loads and failed decodes do not report shop readiness", async () => {
+  const grid = shop("/shop/iphone-17-pro/signature/")
+  grid.children[2].img.naturalWidth = 0
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  grid.children[2].img = image(() => Promise.reject(new Error("bad image")))
+  h.load()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  grid.children[2].img = image()
+  h.load()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, 196)
+  h.stop()
+})
+
+test("a retained old shop grid cannot complete the next shop route", async () => {
+  const decode = deferred()
+  const grid = shop("/shop/iphone-17-pro/signature/")
+  grid.children[0].img = image(() => decode.promise)
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  h.click("/shop/iphone-17-pro-max/signature/")
+  h.location.pathname = "/shop/iphone-17-pro-max/signature/"
+  h.mutate()
+  decode.resolve()
+  await h.paint()
+  assert.deepEqual(h.readings.at(-1), { path: h.location.pathname, kind: "navigation" })
+  grid.dataset.shopPath = h.location.pathname
+  h.mutate()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, 64)
+  h.stop()
+})
+
+test("replaced shop image and source must decode before two-frame readiness", async () => {
+  const first = deferred(), replacement = deferred(), changed = deferred()
+  const grid = shop("/shop/iphone-17-pro/signature/")
+  grid.children[0].img = image(() => first.promise)
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  let decodes = 0
+  grid.children[0].img = image(() => ++decodes === 1 ? replacement.promise : changed.promise)
+  first.resolve()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  grid.children[0].img.currentSrc = "different-case.webp"
+  replacement.resolve()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+  assert.equal(decodes, 2)
+  changed.resolve()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, 196)
+  h.stop()
+})
+
+test("a pending shop measurement follows a resize from four to three columns", async () => {
+  const decode = deferred()
+  const grid = shop("/shop/iphone-17-pro/signature/")
+  grid.children[0].img = image(() => decode.promise)
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath })
+  grid.columns = 3
+  h.resize()
+  decode.resolve()
+  await h.paint()
+  // The first decode retries with six selected images after the layout changes.
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImageCount, 6)
+  assert.equal(typeof h.readings.at(-1).shopImagesReadyMs, "number")
+  h.stop()
+})
+
+test("image resource summaries expose numbers without source URLs", async () => {
+  const grid = shop("/shop/iphone-17-pro/signature/", [image(), image()])
+  const h = harness({ shops: [grid], pathname: grid.dataset.shopPath, resources: [
+    { name: "hero.webp", startTime: 0, transferSize: 8192, duration: 123.4 },
+    { name: "other.webp", startTime: 0, transferSize: 16384, duration: 999 },
+  ] })
+  await h.paint()
+  const reading = h.readings.at(-1)
+  assert.equal(reading.shopImageCount, 2)
+  assert.equal(reading.shopImageResourceCount, 1)
+  assert.equal(reading.shopImageTransferKB, 8)
+  assert.equal(reading.shopImageMaxResponseMs, 123)
+  assert.equal(reading.resourceKB, 24)
+  assert.equal(JSON.stringify(reading).includes("webp"), false)
+  h.stop()
+})
+
+test("an empty shop, unresolved layout or stopped decode cannot report readiness", async () => {
+  for (const grid of [shop("/shop/", []), shop("/shop/", undefined, 0)]) {
+    const h = harness({ shops: [grid], pathname: "/shop/" })
+    await h.paint()
+    assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
+    h.stop()
+  }
+  const decode = deferred()
+  const grid = shop("/shop/")
+  grid.children[0].img = image(() => decode.promise)
+  const h = harness({ shops: [grid], pathname: "/shop/" })
+  h.stop()
+  decode.resolve()
+  await h.paint()
+  assert.equal(h.readings.at(-1).shopImagesReadyMs, undefined)
 })

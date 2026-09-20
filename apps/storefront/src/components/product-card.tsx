@@ -9,6 +9,13 @@ import { buildMetaLine, splitProductTitle } from "@/lib/product-title"
 
 export type CardBadge = { label: string; tone: "hot" | "soldout" | "sale" }
 
+// All card callers use .fl-grid inside the layout's 1470px container. Account
+// for its padding and grid gaps instead of downloading 25vw on wide monitors.
+const CARD_IMAGE_SIZES =
+  "(max-width: 767px) calc(50vw - 20px), " +
+  "(max-width: 1024px) calc(33.333vw - 28px), " +
+  "(max-width: 1470px) calc(25vw - 27px), 341px"
+
 /** Variants whose options include every given value (device and/or case type). */
 function scopeVariants(
   variants: StoreVariant[],
@@ -29,6 +36,7 @@ export default function ProductCard({
   caseTypeSlug,
   badges,
   priority,
+  fetchPriority,
 }: {
   product: StoreProduct
   /** Selected device from the filter bar; drives the link, image and price. */
@@ -42,6 +50,8 @@ export default function ProductCard({
   badges?: CardBadge[]
   /** Above-the-fold cards: load the main image eagerly so it is not lazy. */
   priority?: boolean
+  /** Optional request ordering; shop grids keep later rows behind early cards. */
+  fetchPriority?: "high" | "low" | "auto"
 }) {
   const metadata = product.metadata ?? {}
   const designName =
@@ -104,8 +114,9 @@ export default function ProductCard({
           src={image}
           alt={product.title}
           label={designName}
-          sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+          sizes={CARD_IMAGE_SIZES}
           priority={priority}
+          fetchPriority={fetchPriority}
           className={`fl-card__img transition-opacity duration-300 ${
             hoverImage ? "group-hover:opacity-0" : ""
           }`}
@@ -116,7 +127,7 @@ export default function ProductCard({
             src={hoverImage}
             alt=""
             label={designName}
-            sizes="(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+            sizes={CARD_IMAGE_SIZES}
             className="fl-card__img opacity-0 transition-opacity duration-300 group-hover:opacity-100"
             fillMode="absolute"
           />
