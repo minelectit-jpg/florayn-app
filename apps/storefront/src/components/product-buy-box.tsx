@@ -299,14 +299,50 @@ export default function ProductBuyBox({
 
       {moreDesigns}
 
-      {/* CASE TYPE tiles (image + name + price). In simple mode these are the
-          product's own option values (e.g. StickPad colours) under the option
-          label, and they wrap so eight swatches flow onto two rows. A case type
-          not sold for the selected device is disabled rather than hidden. */}
-      {matrix.caseTypes.length > 1 ? (
+      {/* Option selector. A simple product (StickPad) shows a compact,
+          horizontally scrollable slider of small swatches - no big thumbnails -
+          with the current value beside the label. */}
+      {simple ? (
+        matrix.caseTypes.length > 1 ? (
+          <section className="mt-6">
+            <p className="fl-pdp-label">
+              {(optionLabel ?? "Options").toUpperCase()}
+              <span className="ml-2 font-normal normal-case tracking-normal text-ink-muted">
+                {caseType}
+              </span>
+            </p>
+            <ul className="mt-2 flex gap-[10px] overflow-x-auto pb-1">
+              {matrix.caseTypes.map((ct) => {
+                const isCurrent = ct === caseType
+                return (
+                  <li key={ct} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onSelectCaseType(ct)}
+                      aria-pressed={isCurrent}
+                      aria-label={ct}
+                      title={ct}
+                      className={[
+                        "block size-[54px] overflow-hidden rounded-[12px] border-2 bg-surface transition-colors",
+                        isCurrent ? "border-purple" : "border-[#e2e2e2] hover:border-purple",
+                      ].join(" ")}
+                    >
+                      <span className="relative block size-full">
+                        <ProductImage src={imageForCaseType(ct)} alt={ct} label={ct} sizes="54px" />
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        ) : null
+      ) : /* CASE TYPE tiles (image + name + price) for a real case product. A
+             case type not sold for the selected device is disabled, not hidden. */
+      matrix.caseTypes.length > 1 ? (
         <section className="mt-6">
-          <p className="fl-pdp-label">{simple ? (optionLabel ?? "Options").toUpperCase() : "CASE TYPE"}</p>
-          <ul className={simple ? "flex flex-wrap gap-[8px] md:gap-[10px]" : "flex gap-[8px] md:gap-[10px]"}>
+          <p className="fl-pdp-label">CASE TYPE</p>
+          <ul className="flex gap-[8px] md:gap-[10px]">
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -314,7 +350,7 @@ export default function ProductBuyBox({
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
-                <li key={ct} className={simple ? "min-w-[84px] flex-[1_1_84px]" : "min-w-0 flex-1"}>
+                <li key={ct} className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => onSelectCaseType(ct)}

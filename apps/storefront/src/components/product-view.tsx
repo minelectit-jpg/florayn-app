@@ -182,8 +182,10 @@ export default function ProductView({
   // device when it fits, otherwise at the case type's own first device.
   function variantForCaseType(ct: string): StoreVariant | undefined {
     const devs = matrix.devicesByCaseType[ct] ?? []
+    // Simple products use one sentinel device "" (falsy), so guard on the list
+    // being empty, not on the device string being truthy.
+    if (!devs.length) return undefined
     const dev = devs.includes(device) ? device : devs[0]
-    if (!dev) return undefined
     const id = matrix.variantIdByPair[pairKey(ct, dev)]
     return id ? variantById.get(id) : undefined
   }
