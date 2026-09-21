@@ -1,6 +1,26 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
+import { getDesignDetail } from "../../../../lib/design-admin"
+
+/**
+ * GET /admin/designs/:slug - one design's full shape (products, options and
+ * variants) for the Design Manager editor.
+ */
+export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
+  const { slug } = req.params
+  if (!slug) {
+    res.status(400).json({ message: "slug is required." })
+    return
+  }
+  const detail = await getDesignDetail(req.scope, slug)
+  if (!detail) {
+    res.status(404).json({ message: `No design found for "${slug}".` })
+    return
+  }
+  res.json({ design: detail })
+}
+
 /**
  * DELETE /admin/designs/:slug - remove a design from the store: delete every
  * product tied to it (phone case, AirPods, etc.). Uses productModule.deleteProducts
