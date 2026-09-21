@@ -55,7 +55,7 @@ export function MoreDesigns({
             <div
               title={currentName}
               aria-current="true"
-              className="block size-[108px] overflow-hidden rounded-[10px] border-2 border-purple"
+              className="block size-[108px] overflow-hidden rounded-[10px] border border-purple"
             >
               <span className="relative block size-full">
                 <ProductImage
@@ -90,7 +90,7 @@ export function MoreDesigns({
               <Link
                 href={href}
                 title={item.label}
-                className="block size-[108px] overflow-hidden rounded-[10px] border border-[#ececec] transition-colors hover:border-purple"
+                className="block size-[108px] overflow-hidden rounded-[10px] border border-[#e2e2e2] transition-colors hover:border-purple"
                 prefetch={false}
               >
                 <span className="relative block size-full">
