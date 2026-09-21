@@ -367,7 +367,7 @@ function CourierSettings({ onClose }: { onClose: () => void }) {
 }
 
 export const config = defineRouteConfig({
-  label: "Orders",
+  label: "Order Manager",
   icon: ShoppingBag,
 })
 
