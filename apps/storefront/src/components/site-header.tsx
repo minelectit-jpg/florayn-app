@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft, LockKeyhole } from "lucide-react"
+import { ArrowLeft, LockKeyhole, UserRound } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
@@ -103,6 +103,13 @@ export default function SiteHeader({
         </Link>
 
         <div className="flex shrink-0 items-center gap-4">
+          <Link
+            href="/account"
+            aria-label="My account"
+            className="grid size-9 place-items-center rounded-full text-ink transition-colors hover:text-purple"
+          >
+            <UserRound size={18} strokeWidth={1.6} aria-hidden="true" />
+          </Link>
           <button
             type="button"
             onClick={openDrawer}

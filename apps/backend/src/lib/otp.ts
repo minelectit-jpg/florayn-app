@@ -45,6 +45,12 @@ function newPassword(): string {
 }
 
 const EMAILPASS = "emailpass"
+/**
+ * How long a customer stays signed in. Independent of the admin's shorter
+ * jwtExpiresIn: re-login always requires a fresh emailed code, so a 30-day
+ * session is a convenience, not a weaker gate.
+ */
+const CUSTOMER_SESSION_TTL = "30d"
 
 /** Find the existing emailpass auth identity for an email (or undefined). */
 async function findEmailpassIdentity(
@@ -101,7 +107,7 @@ function mintCustomerToken(
     },
     {
       secret: http.jwtSecret,
-      expiresIn: http.jwtExpiresIn ?? "1d",
+      expiresIn: CUSTOMER_SESSION_TTL,
       jwtOptions: http.jwtOptions,
     }
   )

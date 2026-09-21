@@ -1,4 +1,4 @@
-import { defineMiddlewares } from "@medusajs/framework/http"
+import { authenticate, defineMiddlewares } from "@medusajs/framework/http"
 import type {
   MedusaNextFunction,
   MedusaRequest,
@@ -57,6 +57,19 @@ export default defineMiddlewares({
       matcher: "/admin/r2/upload",
       method: ["POST"],
       bodyParser: { sizeLimit: "200mb" },
+    },
+
+    /**
+     * Populate req.auth_context on the custom checkout route from a customer
+     * session (Bearer token), so a signed-in shopper's order is linked to their
+     * account. allowUnauthenticated keeps guest checkout working unchanged.
+     */
+    {
+      matcher: "/store/checkout",
+      method: ["POST"],
+      middlewares: [
+        authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true }),
+      ],
     },
 
     // Auto-refresh the storefront after storefront-visible writes.

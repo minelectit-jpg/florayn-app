@@ -140,6 +140,7 @@ test("cart subtotal remains the goods subtotal after checkout attaches delivery"
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }), delete: (name) => deleted.push(name) }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 100, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
     "./checkout": { placeOrder: async () => ({ ok: false, errors: { form: "Try again" } }), fetchCheckoutQuote: async () => ({ ok: false, errors: { form: "Try again" } }) },
     "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: { retrieve: async (id, options) => {
       retrieveCalls.push({ id, options: plain(options) })
@@ -174,6 +175,7 @@ test("successful checkout retains recovery capability and the next add starts a 
     }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
     "./checkout": {
       placeOrder: async (input) => { completionCalls.push(plain(input)); return { ok: true, order: { id: "order_same_fixture", total: 1460, currency_code: "bdt" } } },
       fetchCheckoutQuote: async () => assert.fail("Recovery must not depend on a quote for the completed cart"),
@@ -208,4 +210,47 @@ test("successful checkout retains recovery capability and the next add starts a 
   assert.equal(added.added.variantTitle, "Signature Earbuds / AirPods Pro 3")
   await cart.addToCart("variant_new_earbuds", 1)
   assert.equal(creationCalls.length, 1, "the new open cart is reused for later additions")
+})
+
+test("a signed-in shopper's checkout forwards the customer token so the order links to the account", async () => {
+  const placeOrderArgs = []
+  const cart = load("cart.ts", {
+    "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
+    "next/cache": { revalidatePath: () => {} },
+    "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => "customer.jwt.token" },
+    "./checkout": {
+      placeOrder: async (input, token) => {
+        placeOrderArgs.push({ input: plain(input), token })
+        return { ok: true, order: { id: "order_linked", total: 1460, currency_code: "bdt" } }
+      },
+      fetchCheckoutQuote: async () => ({ ok: false, errors: { form: "n/a" } }),
+    },
+    "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: {} } } },
+  })
+  const result = await cart.submitOrder({ ...validFields, quote_version: "v" })
+  assert.equal(result.ok, true)
+  assert.equal(placeOrderArgs.length, 1)
+  assert.equal(placeOrderArgs[0].token, "customer.jwt.token", "the session token must reach placeOrder")
+  assert.equal(placeOrderArgs[0].input.cart_id, "cart_fixture")
+})
+
+test("a guest checkout forwards no customer token", async () => {
+  const placeOrderArgs = []
+  const cart = load("cart.ts", {
+    "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
+    "next/cache": { revalidatePath: () => {} },
+    "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
+    "./checkout": {
+      placeOrder: async (input, token) => {
+        placeOrderArgs.push({ input: plain(input), token })
+        return { ok: true, order: { id: "order_guest", total: 1460, currency_code: "bdt" } }
+      },
+      fetchCheckoutQuote: async () => ({ ok: false, errors: { form: "n/a" } }),
+    },
+    "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: {} } } },
+  })
+  await cart.submitOrder({ ...validFields, quote_version: "v" })
+  assert.equal(placeOrderArgs[0].token, undefined)
 })

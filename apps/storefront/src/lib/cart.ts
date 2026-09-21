@@ -9,6 +9,7 @@ import {
   fetchCheckoutQuote,
   type CheckoutInput,
 } from "./checkout"
+import { getCustomerToken } from "./customer"
 import { getRegionId, sdk } from "./medusa"
 
 const CART_COOKIE = "florayn_cart_id"
@@ -272,7 +273,10 @@ export async function submitOrder(
     return { ok: false, errors: { form: "Your cart is empty." } }
   }
 
-  const result = await placeOrder({ ...input, cart_id: cartId })
+  // Pass the customer session token when signed in, so the order links to the
+  // account and shows up under "My orders" (guests send none, unchanged).
+  const customerToken = await getCustomerToken()
+  const result = await placeOrder({ ...input, cart_id: cartId }, customerToken)
 
   if (result.ok) {
     revalidatePath("/cart")

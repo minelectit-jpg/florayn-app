@@ -107,10 +107,11 @@ export type OrderSummary = {
   }
 }
 
-function headers(): Record<string, string> {
+function headers(token?: string): Record<string, string> {
   return {
     "content-type": "application/json",
     "x-publishable-api-key": MEDUSA_PUBLISHABLE_KEY,
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
   }
 }
 
@@ -212,7 +213,8 @@ export async function getOrderSummary(
  * name, so the form can put each message next to the input it belongs to.
  */
 export async function placeOrder(
-  input: CheckoutInput
+  input: CheckoutInput,
+  customerToken?: string
 ): Promise<
   { ok: true; order: PlacedOrder } | CheckoutFailure
 > {
@@ -221,7 +223,7 @@ export async function placeOrder(
       method: "POST",
       cache: "no-store",
       signal: AbortSignal.timeout(45_000),
-      headers: headers(),
+      headers: headers(customerToken),
       body: JSON.stringify(input),
     })
 

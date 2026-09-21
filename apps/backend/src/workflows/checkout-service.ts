@@ -159,7 +159,7 @@ async function prepareQuote(scope: any, query: any, fields: CheckoutFields, cart
 }
 
 /** Quote/complete share one source of truth and serialize retries for this cart. */
-export async function runCheckout(scope: any, body: unknown, complete: boolean): Promise<CheckoutResult> {
+export async function runCheckout(scope: any, body: unknown, complete: boolean, customerId?: string): Promise<CheckoutResult> {
   const { fields, errors } = validateCheckoutBody(body, complete)
   if (Object.keys(errors).length) return { status: 400, body: { errors } }
   const query = scope.resolve(ContainerRegistrationKeys.QUERY)
@@ -214,6 +214,9 @@ export async function runCheckout(scope: any, body: unknown, complete: boolean):
         } }
       }
       await scope.resolve(Modules.CART).updateCarts(fields.cart_id, {
+        // Link the order to the signed-in customer (guests stay null). Set right
+        // before completion so the created order inherits the customer id.
+        ...(customerId && !latestCart.customer_id ? { customer_id: customerId } : {}),
         metadata: { ...latestCart.metadata, checkout_quote_version: quote.version, free_shipping: quote.free_shipping,
           // Replace any public-cart metadata with the server's selected images.
           // Core completion copies this compact snapshot onto the order.
