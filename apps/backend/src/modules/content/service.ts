@@ -1,6 +1,7 @@
 import { MedusaService } from "@medusajs/framework/utils"
 
 import CheckoutSetting from "./models/checkout-setting"
+import ContactSetting from "./models/contact-setting"
 import CollectionPage from "./models/collection-page"
 import FeatureBlock from "./models/feature-block"
 import FeaturedPick from "./models/featured-pick"
@@ -13,6 +14,7 @@ import SeoSetting from "./models/seo-setting"
 
 class ContentModuleService extends MedusaService({
   CheckoutSetting,
+  ContactSetting,
   HomeSection,
   MenuSection,
   MenuItem,

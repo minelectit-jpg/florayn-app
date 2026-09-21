@@ -97,6 +97,9 @@ Read `CHECKOUT.md` before changing checkout, cart, payment or checkout-admin
 settings. Preserve authoritative quotes, safe order retries and the isolated
 Medusa integration checks.
 
+Read `CONTACT.md` before changing the Contact page, its admin editor or FAQ
+content. Keep Contact cache invalidation scoped and preserve editable blanks.
+
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
 ```bash

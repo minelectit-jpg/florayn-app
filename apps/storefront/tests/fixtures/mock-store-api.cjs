@@ -50,6 +50,19 @@ const checkoutSettings = {
   heading: "Checkout", description: "Enter your delivery details to place your order.",
   delivery_note: "", support_phone: "+8801310007055", support_label: "Need help?", show_order_note: true,
 }
+const contactSettings = {
+  eyebrow: "Contact", title: "Talk to us",
+  description: "Questions about an order, a device we do not list yet, or an exchange - the fastest answer is a phone call.",
+  phone_label: "Phone", phone: "+8801700000000", phone_note: "Saturday to Thursday, 10am - 8pm",
+  email_label: "Email", email: "support@example.invalid", email_note: "We reply within one working day",
+  address_label: "Address", address: "12 Fixture Road\nDhaka, Bangladesh", address_note: "",
+  faq_eyebrow: "FAQs", faq_title: "Common questions", faq_description: "A few helpful answers before you get in touch.",
+  help_title: "Still have a question?", help_description: "Call or email us about your order, device compatibility or an exchange.",
+  faqs: [
+    { id: "delivery", question: "How long does delivery take?", answer: "Three to five days across Bangladesh." },
+    { id: "payment", question: "How do I pay?", answer: "Cash on delivery. You pay the courier when the parcel reaches you." },
+  ],
+}
 const checkoutControl = { price_delta: 0, fail_quote_once: false, fail_complete_once: false, lose_complete_response_once: false }
 
 // Static confirmation previews do not insert orders or need checkout/payment.
@@ -125,6 +138,7 @@ function quoteCart(cart, district) {
 const metrics = []
 let revision = 0
 let stockRevision = 0
+let contactRevision = 0
 function filters(url, key) { return [...url.searchParams].filter(([k]) => k === key || k.startsWith(`${key}[`)).map(([, value]) => value) }
 function send(res, body, status = 200) {
   res.writeHead(status, { "content-type": "application/json", "access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-publishable-api-key" })
@@ -136,7 +150,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/__audit/health") return send(res, { fixture: true })
   if (url.pathname === "/__audit/metrics") return send(res, metrics)
   if (url.pathname === "/__test/status") return send(res, {
-    revision, stockRevision, orderCount: orders.size,
+    revision, stockRevision, contactRevision, orderCount: orders.size,
     requests: metrics.reduce((counts, item) => {
       counts[item.path] = (counts[item.path] ?? 0) + 1
       return counts
@@ -206,12 +220,14 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === "/__test/revision" && req.method === "POST") {
     if (!Number.isInteger(data.revision) || data.revision < 0 ||
-        (data.stockRevision !== undefined && (!Number.isInteger(data.stockRevision) || data.stockRevision < 0))) {
-      return send(res, { message: "Expected nonnegative integer revision and optional stockRevision" }, 400)
+        (data.stockRevision !== undefined && (!Number.isInteger(data.stockRevision) || data.stockRevision < 0)) ||
+        (data.contactRevision !== undefined && (!Number.isInteger(data.contactRevision) || data.contactRevision < 0))) {
+      return send(res, { message: "Expected nonnegative integer revision and optional stockRevision/contactRevision" }, 400)
     }
     revision = data.revision
     if (data.stockRevision !== undefined) stockRevision = data.stockRevision
-    return send(res, { revision, stockRevision })
+    if (data.contactRevision !== undefined) contactRevision = data.contactRevision
+    return send(res, { revision, stockRevision, contactRevision })
   }
   switch (url.pathname) {
     case "/store/regions": return send(res, { regions: [{ id: "reg_test", currency_code: "bdt", name: "Bangladesh" }] })
@@ -222,6 +238,7 @@ const server = http.createServer(async (req, res) => {
     case "/store/bundles": return send(res, bundle)
     case "/store/districts": return send(res, { districts, count: districts.length, inside_dhaka: ["Dhaka"], shipping: { inside_dhaka: 60, outside_dhaka: 100 } })
     case "/store/checkout-settings": return send(res, { settings: checkoutSettings })
+    case "/store/contact-settings": return send(res, { settings: { ...contactSettings, ...(contactRevision ? { title: `Contact revision ${contactRevision}` } : {}) } })
     case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"] })
     case "/store/content/gallery-videos": return send(res, { videos: {} })
     case "/store/seo": return send(res, { templates: { title: "{design} {device} Case", description: "{design} test case for {device}", heading: "{design} {device} Case", fit_copy_enabled: true }, overrides: [] })

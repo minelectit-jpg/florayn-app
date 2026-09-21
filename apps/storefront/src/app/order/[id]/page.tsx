@@ -72,7 +72,7 @@ export default async function OrderPage({ params }: Params) {
         </div>
         <section className="order-help" aria-labelledby="order-help-heading"><span className="order-help-icon"><Phone size={18} aria-hidden="true" /></span><div><h2 id="order-help-heading">{settings.support_label || "Need help with your order?"}</h2><p>Have your order number handy when you get in touch.</p></div><Link href="/contact/">Contact us <ArrowRight size={15} aria-hidden="true" /></Link></section>
         {settings.support_phone ? <a className="order-call" href={`tel:${settings.support_phone}`}>Call {settings.support_phone}</a> : null}
-        <div className="order-actions"><Link href="/shop/" className="order-shop-button">Continue shopping <ArrowRight size={17} aria-hidden="true" /></Link><span>Made to match your everyday.</span></div>
+        <div className="order-actions"><a href="https://florayn.com/" className="order-shop-button">Continue shopping <ArrowRight size={17} aria-hidden="true" /></a><span>Made to match your everyday.</span></div>
       </div>
       <aside className="order-summary" aria-labelledby="order-summary-heading">
         <div className="order-summary-header"><div><p className="order-eyebrow">YOUR SELECTION</p><h2 id="order-summary-heading">Order summary</h2></div><span><ShoppingBag size={14} aria-hidden="true" />{itemCount} {itemCount === 1 ? "item" : "items"}</span></div>

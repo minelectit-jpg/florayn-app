@@ -34,6 +34,7 @@ jobs:
           --health-retries 10
     env:
       CHECKOUT_ISOLATED_TEST: "1"
+      CONTACT_ISOLATED_TEST: "1"
       DATABASE_URL: postgres://test:test@127.0.0.1:5432/florayn_checkout_test_ci?sslmode=disable
       REDIS_URL: redis://127.0.0.1:6379/0
       NODE_ENV: test
@@ -67,6 +68,14 @@ jobs:
         run: |
           npx medusa exec ./src/scripts/migrate-checkout-settings.ts
           npx medusa exec ./src/scripts/migrate-checkout-settings.ts apply Migration20260920194733
+      - name: Verify persisted contact settings and ordered editable FAQs
+        working-directory: apps/backend
+        run: npx medusa exec ./src/scripts/verify-contact-isolated.ts
+      - name: Verify the scoped contact migration preflight and idempotence
+        working-directory: apps/backend
+        run: |
+          npx medusa exec ./src/scripts/migrate-contact-settings.ts
+          npx medusa exec ./src/scripts/migrate-contact-settings.ts apply Migration20260921064114
 
   regression:
     runs-on: ubuntu-latest

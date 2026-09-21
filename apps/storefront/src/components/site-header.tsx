@@ -60,7 +60,7 @@ export default function SiteHeader({
   if (pathname === "/checkout" || pathname === "/checkout/" || orderConfirmation) {
     return <header className="border-b border-line bg-paper">
       <div className="mx-auto grid max-w-[1240px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-[15px] py-5 md:px-[30px] md:py-6">
-        <Link href={orderConfirmation ? "/shop/" : "/cart/"} className="flex items-center gap-2 text-xs text-ink-muted"><ArrowLeft size={16} aria-hidden="true" /><span className="hidden sm:inline">{orderConfirmation ? "Back to shop" : "Back to bag"}</span><span className="sm:hidden">{orderConfirmation ? "Shop" : "Bag"}</span></Link>
+        <Link href={orderConfirmation ? "https://florayn.com/" : "/cart/"} className="flex items-center gap-2 text-xs text-ink-muted"><ArrowLeft size={16} aria-hidden="true" /><span className="hidden sm:inline">{orderConfirmation ? "Back to shop" : "Back to bag"}</span><span className="sm:hidden">{orderConfirmation ? "Shop" : "Bag"}</span></Link>
         <Link href="/" className="display text-[1.5rem] tracking-[0.12em]">FLORAYN</Link>
         <span className="flex items-center justify-end gap-1.5 text-[11px] text-ink-muted"><LockKeyhole size={14} aria-hidden="true" /><span className="hidden sm:inline">{orderConfirmation ? "Your order" : "Checkout"}</span></span>
       </div>

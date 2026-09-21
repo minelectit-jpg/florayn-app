@@ -1,106 +1,63 @@
 import type { Metadata } from "next"
+import { ArrowDown, ArrowUpRight, Mail, MapPin, MessageCircle, Phone, Plus } from "lucide-react"
 
-export const metadata: Metadata = {
-  title: "Contact us",
-  description:
-    "Reach Florayn by phone, email or at our Dhaka address. Delivery, exchanges and order questions.",
-  alternates: { canonical: "/contact/" },
+import { getContactSettings } from "@/lib/contact"
+import "./contact.css"
+
+export const revalidate = 60
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getContactSettings()
+  return { title: settings.title, description: settings.description, alternates: { canonical: "/contact/" } }
 }
 
-const DETAILS = [
-  {
-    label: "Phone",
-    value: "+880 1310-007055",
-    href: "tel:+8801310007055",
-    note: "Saturday to Thursday, 10am - 8pm",
-  },
-  {
-    label: "Email",
-    value: "info@florayn.com",
-    href: "mailto:info@florayn.com",
-    note: "We reply within one working day",
-  },
-]
+export default async function ContactPage() {
+  const settings = await getContactSettings()
+  const channels = [
+    { key: "phone", label: settings.phone_label, value: settings.phone, note: settings.phone_note, href: `tel:${settings.phone}`, icon: Phone },
+    { key: "email", label: settings.email_label, value: settings.email, note: settings.email_note, href: `mailto:${settings.email}`, icon: Mail },
+  ].filter((channel) => channel.value)
+  const hasFaqs = settings.faqs.length > 0
 
-const FAQ = [
-  {
-    q: "How long does delivery take?",
-    a: "Three to five days across Bangladesh. Delivery is 60৳ inside Dhaka and 100৳ outside, and free once your order reaches 3,400৳.",
-  },
-  {
-    q: "Can I exchange a case?",
-    a: "Yes - within three days of delivery, as long as the case is unused and in its packaging. Message us first so we can arrange the pickup.",
-  },
-  {
-    q: "How do I pay?",
-    a: "Cash on delivery. You pay the courier when the parcel reaches you.",
-  },
-  {
-    q: "My device is not listed.",
-    a: "Tell us which model you have. Not every design is cut for every body, but we can say what is available and when a new one is coming.",
-  },
-]
-
-/**
- * The live site sends "Contact Us" to its Facebook page. This is the real
- * page that replaces it, built from the contact details in the footer.
- */
-export default function ContactPage() {
-  return (
-    <div className="mx-auto max-w-3xl space-y-12 py-4">
-      <header className="space-y-3">
-        <p className="eyebrow">Contact</p>
-        <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
-          Talk to us
-        </h1>
-        <p className="max-w-prose text-ink-muted">
-          Questions about an order, a device we do not list yet, or an exchange
-          - the fastest answer is a phone call.
-        </p>
-      </header>
-
-      <section className="grid gap-4 sm:grid-cols-2">
-        {DETAILS.map((detail) => (
-          <div
-            key={detail.label}
-            className="rounded-[12px] border border-line bg-surface p-6"
-          >
-            <p className="eyebrow">{detail.label}</p>
-            <a
-              href={detail.href}
-              className="mt-2 block text-lg font-semibold transition-colors hover:text-purple"
-            >
-              {detail.value}
-            </a>
-            <p className="mt-1 text-[13px] text-ink-muted">{detail.note}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="rounded-[12px] border border-line bg-surface p-6">
-        <p className="eyebrow">Address</p>
-        <address className="mt-2 not-italic leading-relaxed text-ink-muted">
-          Plot #H-2 (1st Floor), Block-H, Sector-2, Avenue-10
-          <br />
-          Zahurul Islam City (Aftabnagar Eastern Housing Project)
-          <br />
-          Dhaka-1212, Bangladesh
-        </address>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="display text-2xl">Common questions</h2>
-        <dl className="divide-y divide-line border-y border-line">
-          {FAQ.map((item) => (
-            <div key={item.q} className="py-5">
-              <dt className="font-semibold">{item.q}</dt>
-              <dd className="mt-1.5 max-w-prose text-sm leading-relaxed text-ink-muted">
-                {item.a}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </div>
-  )
+  return <div className="contact-page" data-contact-page>
+    <header className="contact-hero">
+      <div className="contact-hero-copy">
+        {settings.eyebrow ? <p className="contact-eyebrow">{settings.eyebrow}</p> : null}
+        <h1>{settings.title}</h1>
+        {settings.description ? <p className="contact-description">{settings.description}</p> : null}
+      </div>
+      {hasFaqs ? <a href="#contact-faq" className="contact-faq-jump"><MessageCircle size={19} aria-hidden="true" /><span>{settings.faq_title}</span><ArrowDown size={16} aria-hidden="true" /></a> : null}
+    </header>
+    {channels.length ? <section className="contact-channels" aria-label="Contact options">
+      {channels.map(({ key, label, value, note, href, icon: Icon }) => <a key={key} href={href} className="contact-channel">
+        <div className="contact-channel-top"><span className="contact-icon"><Icon size={23} strokeWidth={1.6} aria-hidden="true" /></span><ArrowUpRight size={21} className="contact-link-arrow" aria-hidden="true" /></div>
+        <h2>{label}</h2><p className="contact-channel-value">{value}</p>
+        {note ? <p className="contact-channel-note">{note}</p> : null}
+      </a>)}
+    </section> : null}
+    {settings.address ? <section className="contact-address" aria-labelledby="contact-address-heading">
+      <span className="contact-icon"><MapPin size={23} strokeWidth={1.6} aria-hidden="true" /></span>
+      <div><h2 id="contact-address-heading">{settings.address_label}</h2><address>{settings.address}</address></div>
+      {settings.address_note ? <p>{settings.address_note}</p> : null}
+    </section> : null}
+    {hasFaqs ? <section className="contact-faq" id="contact-faq" aria-labelledby="contact-faq-heading">
+      <div className="contact-faq-intro">
+        {settings.faq_eyebrow ? <p className="contact-eyebrow">{settings.faq_eyebrow}</p> : null}
+        <h2 id="contact-faq-heading">{settings.faq_title}</h2>
+        {settings.faq_description ? <p>{settings.faq_description}</p> : null}
+        <span className="contact-faq-mark" aria-hidden="true"><MessageCircle size={32} strokeWidth={1.25} /></span>
+      </div>
+      <div className="contact-faq-list">
+        {settings.faqs.map((faq, index) => <details key={faq.id} name="contact-questions" open={index === 0} className="contact-faq-item">
+          <summary><span className="contact-faq-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h3>{faq.question}</h3><span className="contact-faq-toggle"><Plus size={18} aria-hidden="true" /></span></summary>
+          <div className="contact-faq-answer"><p>{faq.answer}</p></div>
+        </details>)}
+      </div>
+    </section> : null}
+    {channels.length > 0 && (settings.help_title || settings.help_description) ? <section className="contact-help" aria-label={settings.help_title || "Contact support"}>
+      <span className="contact-help-icon"><MessageCircle size={26} strokeWidth={1.5} aria-hidden="true" /></span>
+      <div>{settings.help_title ? <h2>{settings.help_title}</h2> : null}{settings.help_description ? <p>{settings.help_description}</p> : null}</div>
+      <div className="contact-help-actions">{channels.map(({ key, label, href, icon: Icon }) => <a key={key} href={href}><Icon size={15} aria-hidden="true" />{label}<ArrowUpRight size={14} aria-hidden="true" /></a>)}</div>
+    </section> : null}
+  </div>
 }

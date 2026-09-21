@@ -17,18 +17,18 @@ async function main() {
     throw new Error("Fixture requires an empty disposable Redis database")
   }
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "florayn-next-cache-"))
-  const state = { content: "v1", stock: "v1", plain: "v1" }
-  const counts = { content: 0, stock: 0, plain: 0 }
+  const state = { content: "v1", stock: "v1", plain: "v1", products: "v1", contact: "v1" }
+  const counts = { content: 0, stock: 0, plain: 0, products: 0, contact: 0 }
   const mock = http.createServer((req, res) => {
-    const kind = req.url.slice(1)
+    const kind = req.url === "/store/contact-settings" ? "contact" : req.url.slice(1)
     counts[kind] = (counts[kind] || 0) + 1
     res.writeHead(200, { "content-type": "application/json" })
-    res.end(JSON.stringify({ value: state[kind] || "missing" }))
+    res.end(JSON.stringify(kind === "contact" ? { settings: { title: state.contact } } : { value: state[kind] || "missing" }))
   })
   mock.listen(0, "127.0.0.1")
   await once(mock, "listening")
   const dataUrl = `http://127.0.0.1:${mock.address().port}`
-  const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", STOREFRONT_REDIS_URL: process.env.TEST_REDIS_URL, REVALIDATE_SECRET: "isolated-test-secret", FIXTURE_DATA_URL: dataUrl }
+  const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1", STOREFRONT_REDIS_URL: process.env.TEST_REDIS_URL, REVALIDATE_SECRET: "isolated-test-secret", FIXTURE_DATA_URL: dataUrl, NEXT_PUBLIC_MEDUSA_BACKEND_URL: dataUrl, NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: "pk_local_fixture_only" }
   const cli = require.resolve("next/dist/bin/next")
   let child
   let output = ""
@@ -57,7 +57,7 @@ async function main() {
   const sourceRoot = path.resolve(__dirname, "..")
   try {
     await fs.symlink(path.dirname(path.dirname(require.resolve("next/package.json"))), path.join(directory, "node_modules"), "dir")
-    for (const filename of ["cache-handler.js", "cache-codec.js", "src/lib/revalidation.ts", "src/app/api/revalidate/route.ts"]) {
+    for (const filename of ["cache-handler.js", "cache-codec.js", "src/lib/revalidation.ts", "src/lib/contact.ts", "src/app/api/revalidate/route.ts"]) {
       await write(filename, await fs.readFile(path.join(sourceRoot, filename)))
     }
     await write("package.json", JSON.stringify({ name: "florayn-next-cache-fixture", private: true, dependencies: { next: "15.5.25", react: "19.2.0", "react-dom": "19.2.0" } }))
@@ -65,6 +65,7 @@ async function main() {
     await write("tsconfig.json", JSON.stringify({ compilerOptions: { target: "ES2022", allowJs: true, skipLibCheck: true, esModuleInterop: true, module: "esnext", moduleResolution: "bundler", jsx: "preserve", paths: { "@/*": ["./src/*"] } }, include: ["**/*.ts", "**/*.tsx"] }))
     await write("src/app/layout.tsx", 'export default function Layout({children}) { return <html><body>{children}</body></html> }')
     await write("src/app/page.tsx", 'export default function Home() { return <main>ready</main> }')
+    await write("src/app/contact/page.tsx", 'import {getContactSettings} from "@/lib/contact"; export const revalidate=60; export async function generateMetadata(){const settings=await getContactSettings();return {title:settings.title}}; export default async function Page(){const settings=await getContactSettings();return <main data-value={settings.title}>{settings.title}</main>}')
     await write("src/app/[kind]/page.tsx", 'export const revalidate=3600; export function generateStaticParams(){return []}; export default async function Page({params}) { const {kind}=await params; const response=await fetch(process.env.FIXTURE_DATA_URL+"/"+kind,{next:{revalidate:3600,...(kind==="plain"?{}:{tags:[kind]})}}); const data=await response.json(); return <main data-value={data.value}>{kind+":"+data.value}</main> }')
     let timer = setTimeout(() => child?.kill("SIGKILL"), 150000)
     let result = await once(start(["build"]), "exit")
@@ -96,6 +97,20 @@ async function main() {
     assert.equal((await page("content")).value, "v1")
     assert.equal((await page("stock")).value, "v1")
     assert.equal((await page("plain")).value, "v1")
+    assert.equal((await page("products")).value, "v1")
+    assert.equal((await page("contact")).value, "v1")
+    const beforeContact = { ...counts }
+    state.contact = "v2"
+    assert.equal((await page("contact")).value, "v1")
+    assert.equal((await invalidate({ tags: ["content:contact"] })).status, 200)
+    const refreshedContact = await page("contact")
+    assert.equal(refreshedContact.value, "v2")
+    assert.equal((await page("content")).value, "v1")
+    assert.equal((await page("stock")).value, "v1")
+    assert.equal((await page("products")).value, "v1")
+    assert.equal(counts.contact, beforeContact.contact + 1, "metadata and page share one fresh contact read")
+    for (const kind of ["content", "stock", "products"]) assert.equal(counts[kind], beforeContact[kind], `${kind} remains cached after contact-only invalidation`)
+    console.log(JSON.stringify({ stage: "contact-scoped-cache", refreshed: refreshedContact, backendReads: counts, unrelatedDomainsRetained: true }))
     state.content = state.stock = state.plain = "v2"
     const warm = await page("content")
     assert.equal(warm.value, "v1")

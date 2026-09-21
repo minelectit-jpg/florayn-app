@@ -85,6 +85,16 @@ test("API acknowledges Redis first and targets only the requested domain", async
   assert.deepEqual(plain(events), [["redis", "content:product-sections"], ["tag", "content:product-sections"]])
 })
 
+test("contact-only updates retain catalog, product, checkout and shared site caches", async () => {
+  const { route, events, request } = routeHarness()
+  const response = await route.POST(request('{"tags":["content:contact"]}'))
+  assert.equal(response.status, 200)
+  assert.deepEqual(plain(events), [["redis", "content:contact"], ["tag", "content:contact"]])
+  const plan = plain(helpers.revalidationPlan({ tags: ["content:contact"] }))
+  assert.deepEqual(plan.cacheTags, ["content:contact"])
+  assert.deepEqual(plan.paths, [])
+})
+
 test("API returns retriable failure when Redis cannot acknowledge invalidation", async () => {
   const { route, events, request } = routeHarness({ fail: true })
   assert.equal((await route.POST(request('{"tags":["stock"]}'))).status, 503)
