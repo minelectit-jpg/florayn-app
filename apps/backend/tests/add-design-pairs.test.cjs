@@ -59,7 +59,7 @@ function makeContainer() {
     updateProducts: async (id, patch) => { calls.updateProducts.push({ id, patch }) },
   }
   const inventoryModule = { listInventoryItems: async () => [] } // no blanks yet -> created
-  const catalog = { listCaseTypes: async () => CASE_TYPES }
+  const catalog = { listCaseTypes: async () => CASE_TYPES, listDevices: async () => DEVICES }
   const query = {
     graph: async ({ entity }) => {
       if (entity === "product") return { data: [product] }

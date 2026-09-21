@@ -50,8 +50,18 @@ export async function addPairsToDesign(
   const inventoryModule = container.resolve(Modules.INVENTORY)
   const catalog: any = container.resolve(CATALOG_MODULE)
 
-  const caseTypeSeedBySlug = new Map(CASE_TYPES.map((c) => [c.slug, c]))
-  const deviceSeedBySlug = new Map(DEVICES.map((d) => [d.slug, d]))
+  // Start from the code seed, then overlay the DB catalog so admin-created case
+  // types / models (which only live in the DB) work too. The DB is the source of
+  // truth for price, sku_code and family; the seed is a defensive fallback.
+  const caseTypeSeedBySlug = new Map<string, CaseTypeSeed>(CASE_TYPES.map((c) => [c.slug, c]))
+  const deviceSeedBySlug = new Map<string, any>(DEVICES.map((d) => [d.slug, d]))
+  const [dbCaseTypes, dbDevices] = await Promise.all([catalog.listCaseTypes({}), catalog.listDevices({})])
+  for (const c of dbCaseTypes as any[]) {
+    caseTypeSeedBySlug.set(c.slug, { slug: c.slug, name: c.name, sku_code: c.sku_code, price: c.price, price_groups: (c.price_groups as any[] | null) ?? null } as any)
+  }
+  for (const d of dbDevices as any[]) {
+    deviceSeedBySlug.set(d.slug, { slug: d.slug, name: d.name, family: d.family, sku_code: d.sku_code, brand: d.brand ?? "" })
+  }
   const earbudsCt = caseTypeSeedBySlug.get("signature-earbuds")
   const remapCt = (seed: CaseTypeSeed, form: ProductForm): CaseTypeSeed =>
     form === "airpods" && seed.slug === "signature" && earbudsCt ? earbudsCt : seed
@@ -85,16 +95,12 @@ export async function addPairsToDesign(
   if (!mine.length) throw new Error(`No design found for "${slug}".`)
   const productByForm = new Map<ProductForm, any>(mine.map((p: any) => [(p.metadata?.form as ProductForm) ?? "phone", p]))
 
-  // Prices: DB case-type price (admin-editable) + seed Alcantara groups.
-  const dbCaseTypes = await catalog.listCaseTypes({})
-  const dbPriceBySlug = new Map<string, number>(dbCaseTypes.map((c: any) => [c.slug, c.price]))
-  const dbGroupsBySlug = new Map<string, any[] | null>(dbCaseTypes.map((c: any) => [c.slug, (c.price_groups as any[] | null) ?? null]))
+  // Price from the (DB-backed) case type: a per-device group override, else flat.
   const priceFor = (caseTypeSlug: string, deviceSlug: string): number => {
-    const seed = caseTypeSeedBySlug.get(caseTypeSlug)
-    const groups = dbGroupsBySlug.get(caseTypeSlug) ?? seed?.price_groups
-    const group = groups?.find((g: any) => g.devices.includes(deviceSlug))
+    const seed: any = caseTypeSeedBySlug.get(caseTypeSlug)
+    const group = seed?.price_groups?.find((g: any) => g.devices.includes(deviceSlug))
     if (group) return group.price
-    return dbPriceBySlug.get(caseTypeSlug) ?? seed?.price ?? 0
+    return seed?.price ?? 0
   }
 
   // --- Ensure shared blanks exist for the new pairs (reuse by SKU) ---

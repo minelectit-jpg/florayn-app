@@ -159,6 +159,9 @@ function DesignDetailView({ slug, onBack, onChanged }: { slug: string; onBack: (
   const [addCt, setAddCt] = useState("")
   const [addDev, setAddDev] = useState("")
   const [addFile, setAddFile] = useState<File | null>(null)
+  // Inline "create new case type / model".
+  const [newCt, setNewCt] = useState<{ name: string; price: string } | null>(null)
+  const [newDev, setNewDev] = useState<{ name: string; family: string } | null>(null)
 
   const loadDetail = useCallback(async () => {
     try {
@@ -212,6 +215,16 @@ function DesignDetailView({ slug, onBack, onChanged }: { slug: string; onBack: (
     else toast.error("That case type + model already exists.")
     setAddFile(null); await loadDetail(); onChanged()
   })
+  const createCaseType = () => run("Create case type", async () => {
+    const r = await api("/admin/case-types", { method: "POST", body: JSON.stringify({ name: newCt?.name, price: Number(newCt?.price) }) })
+    toast.success(`Created "${r.case_type?.name}"`)
+    await loadCatalog(); setAddCt(r.case_type?.slug ?? ""); setNewCt(null)
+  })
+  const createDevice = () => run("Create model", async () => {
+    const r = await api("/admin/devices", { method: "POST", body: JSON.stringify({ name: newDev?.name, family: newDev?.family }) })
+    toast.success(`Created "${r.device?.name}"`)
+    await loadCatalog(); setAddDev(r.device?.slug ?? ""); setNewDev(null)
+  })
 
   return (
     <Container className="p-0 divide-y">
@@ -261,14 +274,49 @@ function DesignDetailView({ slug, onBack, onChanged }: { slug: string; onBack: (
               <Text size="small" weight="plus">Add a case type / model</Text>
               <Text size="xsmall" className="text-ui-fg-muted">Pick the case type + model, drop an image.</Text>
               <div className="mt-2 grid gap-2">
-                <select value={addCt} onChange={(e) => setAddCt(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
-                  <option value="">Case type…</option>
-                  {caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                </select>
-                <select value={addDev} onChange={(e) => setAddDev(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
-                  <option value="">Model…</option>
-                  {devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}
-                </select>
+                <div>
+                  <select value={addCt} onChange={(e) => setAddCt(e.target.value)} className="w-full rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                    <option value="">Case type…</option>
+                    {caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                  </select>
+                  {newCt ? (
+                    <div className="mt-1.5 grid gap-1.5 rounded-md border border-ui-border-base p-2">
+                      <Input size="small" placeholder="New case type name" value={newCt.name} onChange={(e) => setNewCt({ ...newCt, name: e.target.value })} />
+                      <Input size="small" type="number" placeholder="Price (BDT)" value={newCt.price} onChange={(e) => setNewCt({ ...newCt, price: e.target.value })} />
+                      <div className="flex gap-2">
+                        <Button size="small" variant="secondary" onClick={createCaseType} disabled={busy || !newCt.name || !newCt.price}>Create</Button>
+                        <Button size="small" variant="transparent" onClick={() => setNewCt(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="mt-1 text-xs text-ui-fg-interactive hover:underline" onClick={() => setNewCt({ name: "", price: "" })}>+ New case type</button>
+                  )}
+                </div>
+                <div>
+                  <select value={addDev} onChange={(e) => setAddDev(e.target.value)} className="w-full rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                    <option value="">Model…</option>
+                    {devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}
+                  </select>
+                  {newDev ? (
+                    <div className="mt-1.5 grid gap-1.5 rounded-md border border-ui-border-base p-2">
+                      <Input size="small" placeholder="New model name" value={newDev.name} onChange={(e) => setNewDev({ ...newDev, name: e.target.value })} />
+                      <select value={newDev.family} onChange={(e) => setNewDev({ ...newDev, family: e.target.value })} className="w-full rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                        <option value="">Type…</option>
+                        <option value="iphone">iPhone</option>
+                        <option value="samsung">Samsung</option>
+                        <option value="airpods">AirPods</option>
+                        <option value="watch">Watch</option>
+                        <option value="wallet">Wallet</option>
+                      </select>
+                      <div className="flex gap-2">
+                        <Button size="small" variant="secondary" onClick={createDevice} disabled={busy || !newDev.name || !newDev.family}>Create</Button>
+                        <Button size="small" variant="transparent" onClick={() => setNewDev(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="mt-1 text-xs text-ui-fg-interactive hover:underline" onClick={() => setNewDev({ name: "", family: "" })}>+ New model</button>
+                  )}
+                </div>
                 <input type="file" accept="image/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} className="text-sm text-ui-fg-subtle" />
                 <div>
                   <Button size="small" onClick={addPair} disabled={busy || !addCt || !addDev || !addFile}>Add</Button>
