@@ -104,5 +104,8 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/auth-otp",
     },
+    {
+      resolve: "./src/modules/order-ops",
+    },
   ],
 })
