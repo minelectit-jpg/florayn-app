@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
 import { getDesignDetail } from "../../../../lib/design-admin"
+import { editDesignMeta } from "../../../../lib/edit-design"
 
 /**
  * GET /admin/designs/:slug - one design's full shape (products, options and
@@ -19,6 +20,39 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     return
   }
   res.json({ design: detail })
+}
+
+/**
+ * PATCH /admin/designs/:slug - edit a design's name / theme / publish status
+ * across all its products. Never changes price, variants, or the slug/URL.
+ */
+export const PATCH = async (req: MedusaRequest, res: MedusaResponse) => {
+  const { slug } = req.params
+  if (!slug) {
+    res.status(400).json({ message: "slug is required." })
+    return
+  }
+  const body = (req.body ?? {}) as {
+    name?: unknown
+    theme?: unknown
+    status?: unknown
+  }
+  const patch: { name?: string; theme?: string; status?: "published" | "draft" } = {}
+  if (typeof body.name === "string") patch.name = body.name
+  if (typeof body.theme === "string") patch.theme = body.theme
+  if (body.status === "published" || body.status === "draft") patch.status = body.status
+  if (!Object.keys(patch).length) {
+    res.status(400).json({ message: "Nothing to update." })
+    return
+  }
+
+  try {
+    const result = await editDesignMeta(req.scope, slug, patch)
+    res.json(result)
+  } catch (error: any) {
+    req.scope.resolve("logger").error(`[edit-design ${slug}] ${error?.message ?? error}`)
+    res.status(400).json({ ok: false, message: error?.message ?? String(error) })
+  }
 }
 
 /**
