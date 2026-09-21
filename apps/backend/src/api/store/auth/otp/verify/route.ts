@@ -4,9 +4,9 @@ import { verifyOtp } from "../../../../../lib/otp"
 
 /**
  * POST /store/auth/otp/verify { email, code } - verify the code and, on
- * success, return the ephemeral emailpass credential the STOREFRONT SERVER uses
- * (server-to-server) to complete a native Medusa customer login. The browser
- * never receives this; only the resulting session cookie.
+ * success, return a native Medusa CUSTOMER session token. The storefront server
+ * stores it in an httpOnly cookie and sends it as a Bearer token on the
+ * customer's behalf. No password is ever set or exposed.
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const body = (req.body ?? {}) as { email?: unknown; code?: unknown }
@@ -15,5 +15,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     res.status(400).json({ success: false, message: result.error })
     return
   }
-  res.json({ success: true, email: result.email, password: result.password })
+  res.json({
+    success: true,
+    email: result.email,
+    token: result.token,
+    customer_id: result.customerId,
+  })
 }

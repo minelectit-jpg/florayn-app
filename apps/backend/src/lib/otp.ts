@@ -1,5 +1,9 @@
 import crypto from "node:crypto"
-import { Modules } from "@medusajs/framework/utils"
+import {
+  ContainerRegistrationKeys,
+  Modules,
+  generateJwtToken,
+} from "@medusajs/framework/utils"
 import { createCustomerAccountWorkflow } from "@medusajs/medusa/core-flows"
 
 import { AUTH_OTP_MODULE } from "../modules/auth-otp"
@@ -8,10 +12,12 @@ import { sendEmail } from "./send-email"
 /**
  * Passwordless email login codes. A 6-digit code is emailed; the plaintext is
  * never stored (only an HMAC), a code is single-use, expires fast, and locks
- * after too many attempts. On success we ensure the caller has a real Medusa
- * emailpass auth identity linked to their customer, with a FRESH random
- * password, and hand that password back so the storefront logs in natively
- * (server-to-server) - the browser only ever receives the resulting session.
+ * after too many attempts. On success we mint a native Medusa CUSTOMER session
+ * token directly from the auth identity and hand THAT back - we never set or
+ * rotate an emailpass password. This matters because one email (the owner's)
+ * can be BOTH an admin user and a customer sharing a single emailpass identity;
+ * rewriting its password to log a customer in would lock the admin out. So the
+ * flow below only ever mints a signed customer JWT and links the customer.
  */
 const CODE_TTL_MS = 10 * 60 * 1000
 const COOLDOWN_MS = 45 * 1000
@@ -28,9 +34,77 @@ function newCode(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
 }
 
-/** A strong, ephemeral password the customer never sees (rotated each login). */
+/**
+ * A strong random password used ONCE when we have to create a brand-new
+ * emailpass identity (Medusa requires one). It is never returned to anyone and
+ * never rotated afterwards - customers authenticate with the emailed code, not
+ * this password, so it stays inert for the life of the identity.
+ */
 function newPassword(): string {
   return crypto.randomBytes(24).toString("base64url") + "Aa1!"
+}
+
+const EMAILPASS = "emailpass"
+
+/** Find the existing emailpass auth identity for an email (or undefined). */
+async function findEmailpassIdentity(
+  authModule: any,
+  email: string
+): Promise<any | undefined> {
+  const list = await authModule.listAuthIdentities(
+    { provider_identities: { entity_id: email, provider: EMAILPASS } },
+    { relations: ["provider_identities"] }
+  )
+  return Array.isArray(list) ? list[0] : undefined
+}
+
+/** Re-read an identity with its provider identities (or undefined on failure). */
+async function retrieveIdentity(
+  authModule: any,
+  id: string
+): Promise<any | undefined> {
+  try {
+    return await authModule.retrieveAuthIdentity(id, {
+      relations: ["provider_identities"],
+    })
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Mint a native Medusa customer session JWT for an auth identity, identical in
+ * shape to what Medusa's own login issues (verified by the auth middleware as a
+ * Bearer token). No password is involved.
+ */
+function mintCustomerToken(
+  container: any,
+  authIdentity: any,
+  customerId: string
+): string {
+  const config: any = container.resolve(ContainerRegistrationKeys.CONFIG_MODULE)
+  const http = config?.projectConfig?.http ?? {}
+  const providerIdentity = (authIdentity.provider_identities ?? []).find(
+    (pi: any) => pi.provider === EMAILPASS
+  )
+  return generateJwtToken(
+    {
+      actor_id: customerId,
+      actor_type: "customer",
+      auth_identity_id: authIdentity.id,
+      auth_provider: EMAILPASS,
+      app_metadata: {
+        ...(authIdentity.app_metadata ?? {}),
+        customer_id: customerId,
+      },
+      user_metadata: providerIdentity?.user_metadata ?? {},
+    },
+    {
+      secret: http.jwtSecret,
+      expiresIn: http.jwtExpiresIn ?? "1d",
+      jwtOptions: http.jwtOptions,
+    }
+  )
 }
 
 function safeEqualHex(a: string, b: string): boolean {
@@ -65,7 +139,7 @@ function otpEmailHtml(code: string): string {
 
 export type OtpRequestResult = { ok: boolean; error?: string }
 export type OtpVerifyResult =
-  | { ok: true; email: string; password: string }
+  | { ok: true; email: string; token: string; customerId: string }
   | { ok: false; error: string }
 
 /** Issue a fresh code for an email and send it. Always safe to call for any
@@ -119,7 +193,7 @@ export async function requestOtp(container: any, rawEmail: unknown): Promise<Otp
   return { ok: true }
 }
 
-/** Verify a code, then ensure a native customer session credential. */
+/** Verify a code, then mint a native customer session token (no password). */
 export async function verifyOtp(
   container: any,
   rawEmail: unknown,
@@ -151,38 +225,66 @@ export async function verifyOtp(
   }
   await otp.updateOtpCodes({ id: active.id, consumed_at: new Date() })
 
-  // --- Ensure a real emailpass identity + customer, with a fresh password ---
+  // --- Passwordless customer session (NEVER touches any emailpass password) ---
   const authModule: any = container.resolve(Modules.AUTH)
   const customerModule: any = container.resolve(Modules.CUSTOMER)
-  const password = newPassword()
 
-  // updateProvider resets the password if an emailpass identity already exists.
-  let authIdentityId: string | undefined
-  try {
-    const upd = await authModule.updateProvider("emailpass", { entity_id: email, password })
-    if (upd?.success) authIdentityId = upd.authIdentity?.id
-  } catch {
-    // no existing identity - fall through to register
+  // 1) Use the existing emailpass identity if there is one. We do NOT create a
+  //    password here; a shared admin+customer identity is left byte-for-byte
+  //    intact, which is the whole point of this rewrite.
+  let authIdentity = await findEmailpassIdentity(authModule, email)
+
+  // 2) Only when none exists do we create one, with a one-time inert password.
+  //    register() refuses (without modifying anything) if an identity is already
+  //    claimed, so this can never overwrite an admin's password.
+  if (!authIdentity) {
+    try {
+      const reg = await authModule.register(EMAILPASS, {
+        body: { email, password: newPassword() },
+      })
+      if (reg?.authIdentity?.id) {
+        authIdentity = await retrieveIdentity(authModule, reg.authIdentity.id)
+      }
+    } catch {
+      // race or already-exists - fall through to a re-lookup
+    }
+    if (!authIdentity) authIdentity = await findEmailpassIdentity(authModule, email)
   }
-  if (!authIdentityId) {
-    const reg = await authModule.register("emailpass", { body: { email, password } })
-    if (reg?.success && reg.authIdentity) authIdentityId = reg.authIdentity.id
-  }
-  if (!authIdentityId) {
+  if (!authIdentity?.id) {
     return { ok: false, error: "Could not set up sign-in. Try again." }
   }
 
-  const [existing] = await customerModule.listCustomers({ email }, { take: 1 })
-  if (existing) {
-    // Link the identity to the existing customer (imported customers had none).
-    await authModule.updateAuthIdentities([
-      { id: authIdentityId, app_metadata: { customer_id: existing.id } },
-    ])
-  } else {
-    await createCustomerAccountWorkflow(container).run({
-      input: { authIdentityId, customerData: { email } },
-    })
+  // 3) Make sure the identity is linked to a customer. If it already is (e.g.
+  //    the owner's shared identity), we leave it untouched entirely.
+  let customerId: string | undefined = authIdentity.app_metadata?.customer_id
+  if (!customerId) {
+    const [existing] = await customerModule.listCustomers({ email }, { take: 1 })
+    if (existing) {
+      // Imported customers exist without an auth identity - link them.
+      await authModule.updateAuthIdentities([
+        {
+          id: authIdentity.id,
+          app_metadata: {
+            ...(authIdentity.app_metadata ?? {}),
+            customer_id: existing.id,
+          },
+        },
+      ])
+      customerId = existing.id
+    } else {
+      // Brand-new signup: create the customer and link it to the identity.
+      await createCustomerAccountWorkflow(container).run({
+        input: { authIdentityId: authIdentity.id, customerData: { email } },
+      })
+    }
+    authIdentity = (await retrieveIdentity(authModule, authIdentity.id)) ?? authIdentity
+    customerId = authIdentity.app_metadata?.customer_id ?? customerId
+  }
+  if (!customerId) {
+    return { ok: false, error: "Could not set up your account. Try again." }
   }
 
-  return { ok: true, email, password }
+  // 4) Mint a signed customer session token directly - no password anywhere.
+  const token = mintCustomerToken(container, authIdentity, customerId)
+  return { ok: true, email, token, customerId }
 }
