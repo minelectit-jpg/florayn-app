@@ -1,10 +1,9 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { Swatch } from "@medusajs/icons"
+import { Swatch, ArrowLeft } from "@medusajs/icons"
 import {
   Badge,
   Button,
   Container,
-  Drawer,
   Heading,
   Input,
   Label,
@@ -13,7 +12,7 @@ import {
   toast,
 } from "@medusajs/ui"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
 type Status = "published" | "draft" | "mixed"
 type DesignSummary = {
@@ -45,18 +44,10 @@ type DesignDetail = {
   collection: { id: string; title: string } | null
   products: ProductDetail[]
 }
+type Option = { slug: string; name: string }
 
-const STATUS_COLOR: Record<Status, "green" | "grey" | "orange"> = {
-  published: "green",
-  draft: "grey",
-  mixed: "orange",
-}
-const FORM_LABEL: Record<string, string> = {
-  phone: "Phone",
-  airpods: "AirPods",
-  watch: "Watch",
-  wallet: "Wallet",
-}
+const STATUS_COLOR: Record<Status, "green" | "grey" | "orange"> = { published: "green", draft: "grey", mixed: "orange" }
+const FORM_LABEL: Record<string, string> = { phone: "Phone", airpods: "AirPods", watch: "Watch", wallet: "Wallet" }
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, { credentials: "include", headers: { "content-type": "application/json" }, ...init })
@@ -65,11 +56,21 @@ async function api(path: string, init?: RequestInit) {
   return data
 }
 
+async function readFileBase64(file: File): Promise<{ contentBase64: string; mimeType: string; filename: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve({ contentBase64: String(reader.result).split(",")[1] ?? "", mimeType: file.type || "image/webp", filename: file.name })
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 const ProductManagerPage = () => {
+  const [params, setParams] = useSearchParams()
+  const slug = params.get("slug")
   const [designs, setDesigns] = useState<DesignSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [openSlug, setOpenSlug] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -92,6 +93,10 @@ const ProductManagerPage = () => {
     return designs.filter((d) => d.name.toLowerCase().includes(q) || (d.theme ?? "").toLowerCase().includes(q))
   }, [designs, search])
 
+  if (slug) {
+    return <DesignDetailView slug={slug} onBack={() => setParams({})} onChanged={load} />
+  }
+
   return (
     <Container className="p-0 divide-y">
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
@@ -103,11 +108,9 @@ const ProductManagerPage = () => {
           <Button size="small" variant="secondary">Upload / new design</Button>
         </Link>
       </div>
-
       <div className="px-6 py-3">
         <Input size="small" placeholder="Search by name or theme…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
       </div>
-
       <div className="px-6 py-5">
         {loading ? (
           <div className="py-16 text-center text-ui-fg-subtle">Loading…</div>
@@ -119,7 +122,7 @@ const ProductManagerPage = () => {
               <li key={d.slug}>
                 <button
                   type="button"
-                  onClick={() => setOpenSlug(d.slug)}
+                  onClick={() => setParams({ slug: d.slug })}
                   className="block w-full overflow-hidden rounded-xl border border-ui-border-base bg-ui-bg-base text-left transition-shadow hover:shadow-elevation-card-hover"
                 >
                   <span className="block aspect-square overflow-hidden bg-ui-bg-subtle">
@@ -131,9 +134,7 @@ const ProductManagerPage = () => {
                       <StatusBadge color={STATUS_COLOR[d.status]}>{d.status}</StatusBadge>
                     </span>
                     <span className="mt-1 flex flex-wrap items-center gap-1">
-                      {d.forms.map((f) => (
-                        <Badge key={f} size="2xsmall">{FORM_LABEL[f] ?? f}</Badge>
-                      ))}
+                      {d.forms.map((f) => <Badge key={f} size="2xsmall">{FORM_LABEL[f] ?? f}</Badge>)}
                       <span className="text-xs text-ui-fg-muted">· {d.variantCount} variant{d.variantCount === 1 ? "" : "s"}</span>
                     </span>
                   </span>
@@ -143,35 +144,16 @@ const ProductManagerPage = () => {
           </ul>
         )}
       </div>
-
-      {openSlug ? (
-        <DesignDrawer slug={openSlug} onClose={() => setOpenSlug(null)} onChanged={load} />
-      ) : null}
     </Container>
   )
 }
 
-async function readFileBase64(file: File): Promise<{ contentBase64: string; mimeType: string; filename: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result)
-      resolve({ contentBase64: result.split(",")[1] ?? "", mimeType: file.type || "image/webp", filename: file.name })
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-type Option = { slug: string; name: string }
-
-function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () => void; onChanged: () => void }) {
+function DesignDetailView({ slug, onBack, onChanged }: { slug: string; onBack: () => void; onChanged: () => void }) {
   const [d, setD] = useState<DesignDetail | null>(null)
   const [name, setName] = useState("")
   const [theme, setTheme] = useState("")
   const [busy, setBusy] = useState(false)
 
-  // Add case type / model form.
   const [caseTypes, setCaseTypes] = useState<Option[]>([])
   const [devices, setDevices] = useState<Option[]>([])
   const [addCt, setAddCt] = useState("")
@@ -188,171 +170,140 @@ function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () 
       toast.error(e?.message || "Could not load the design.")
     }
   }, [slug])
-  useEffect(() => {
-    loadDetail()
-  }, [loadDetail])
-  useEffect(() => {
-    Promise.all([api("/admin/case-types"), api("/admin/devices")])
-      .then(([ct, dv]) => {
-        setCaseTypes((ct.case_types ?? []).map((c: any) => ({ slug: c.slug, name: c.name })))
-        setDevices((dv.devices ?? []).map((v: any) => ({ slug: v.slug, name: v.name })))
-      })
-      .catch(() => {})
+  const loadCatalog = useCallback(async () => {
+    try {
+      const [ct, dv] = await Promise.all([api("/admin/case-types"), api("/admin/devices")])
+      setCaseTypes((ct.case_types ?? []).map((c: any) => ({ slug: c.slug, name: c.name })))
+      setDevices((dv.devices ?? []).map((v: any) => ({ slug: v.slug, name: v.name })))
+    } catch {
+      /* leave selectors empty */
+    }
   }, [])
+  useEffect(() => { loadDetail() }, [loadDetail])
+  useEffect(() => { loadCatalog() }, [loadCatalog])
 
   const isPublished = d?.products.every((p) => p.status === "published") ?? false
 
   async function run(label: string, fn: () => Promise<void>) {
     setBusy(true)
-    try {
-      await fn()
-    } catch (e: any) {
-      toast.error(e?.message || `${label} failed.`)
-    } finally {
-      setBusy(false)
-    }
+    try { await fn() } catch (e: any) { toast.error(e?.message || `${label} failed.`) } finally { setBusy(false) }
   }
 
-  const saveMeta = () =>
-    run("Save", async () => {
-      await api(`/admin/designs/${slug}`, { method: "PATCH", body: JSON.stringify({ name, theme }) })
-      toast.success("Saved")
-      await loadDetail()
-      onChanged()
-    })
-
-  const setStatus = (status: "published" | "draft") =>
-    run("Status", async () => {
-      await api(`/admin/designs/${slug}`, { method: "PATCH", body: JSON.stringify({ status }) })
-      toast.success(status === "published" ? "Published" : "Unpublished")
-      await loadDetail()
-      onChanged()
-    })
-
-  const remove = () =>
-    run("Delete", async () => {
-      if (!window.confirm(`Delete "${d?.name}" and all its products? This cannot be undone.`)) return
-      await api(`/admin/designs/${slug}`, { method: "DELETE" })
-      toast.success("Deleted")
-      onChanged()
-      onClose()
-    })
-
-  const addPair = () =>
-    run("Add", async () => {
-      if (!addCt || !addDev || !addFile) {
-        toast.error("Pick a case type, a model and an image.")
-        return
-      }
-      const f = await readFileBase64(addFile)
-      const up = await api("/admin/designs/upload", {
-        method: "POST",
-        body: JSON.stringify({ designSlug: slug, caseTypeSlug: addCt, deviceSlug: addDev, index: 1, ...f }),
-      })
-      const r = await api(`/admin/designs/${slug}/pairs`, {
-        method: "POST",
-        body: JSON.stringify({ pairs: { [addCt]: { [addDev]: [up.url] } } }),
-      })
-      if (r.variantsAdded) toast.success(`Added ${r.variantsAdded} variant`)
-      else if (r.skippedForms?.length) toast.error("This design has no product for that form yet — upload it first.")
-      else toast.error("That case type + model already exists.")
-      setAddFile(null)
-      await loadDetail()
-      onChanged()
-    })
+  const saveMeta = () => run("Save", async () => {
+    await api(`/admin/designs/${slug}`, { method: "PATCH", body: JSON.stringify({ name, theme }) })
+    toast.success("Saved"); await loadDetail(); onChanged()
+  })
+  const setStatus = (status: "published" | "draft") => run("Status", async () => {
+    await api(`/admin/designs/${slug}`, { method: "PATCH", body: JSON.stringify({ status }) })
+    toast.success(status === "published" ? "Published" : "Unpublished"); await loadDetail(); onChanged()
+  })
+  const remove = () => run("Delete", async () => {
+    if (!window.confirm(`Delete "${d?.name}" and all its products? This cannot be undone.`)) return
+    await api(`/admin/designs/${slug}`, { method: "DELETE" })
+    toast.success("Deleted"); onChanged(); onBack()
+  })
+  const addPair = () => run("Add", async () => {
+    if (!addCt || !addDev || !addFile) { toast.error("Pick a case type, a model and an image."); return }
+    const f = await readFileBase64(addFile)
+    const up = await api("/admin/designs/upload", { method: "POST", body: JSON.stringify({ designSlug: slug, caseTypeSlug: addCt, deviceSlug: addDev, index: 1, ...f }) })
+    const r = await api(`/admin/designs/${slug}/pairs`, { method: "POST", body: JSON.stringify({ pairs: { [addCt]: { [addDev]: [up.url] } } }) })
+    if (r.variantsAdded) toast.success(`Added ${r.variantsAdded} variant`)
+    else if (r.skippedForms?.length) toast.error("This design has no product for that form yet — upload it first.")
+    else toast.error("That case type + model already exists.")
+    setAddFile(null); await loadDetail(); onChanged()
+  })
 
   return (
-    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
-      <Drawer.Content>
-        <Drawer.Header>
-          <Drawer.Title>{d?.name ?? "Design"}</Drawer.Title>
-        </Drawer.Header>
-        <Drawer.Body className="flex flex-col gap-5 overflow-y-auto">
-          {!d ? (
-            <Text size="small" className="text-ui-fg-subtle">Loading…</Text>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <StatusBadge color={isPublished ? "green" : "grey"}>{isPublished ? "Published" : "Draft"}</StatusBadge>
-                <Text size="xsmall" className="text-ui-fg-muted">/{slug}</Text>
-              </div>
+    <Container className="p-0 divide-y">
+      <div className="flex items-center justify-between gap-3 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Button size="small" variant="transparent" onClick={onBack}><ArrowLeft className="mr-1" /> Back</Button>
+          <div>
+            <Heading level="h1">{d?.name ?? "Design"}</Heading>
+            <Text size="xsmall" className="text-ui-fg-muted">/{slug}</Text>
+          </div>
+        </div>
+        {d ? (
+          <div className="flex items-center gap-2">
+            {isPublished
+              ? <Button size="small" variant="secondary" onClick={() => setStatus("draft")} disabled={busy}>Unpublish</Button>
+              : <Button size="small" variant="primary" onClick={() => setStatus("published")} disabled={busy}>Publish</Button>}
+            <Button size="small" variant="danger" onClick={remove} disabled={busy}>Delete</Button>
+          </div>
+        ) : null}
+      </div>
 
-              <div className="grid gap-3">
-                <div className="grid gap-1.5">
-                  <Label size="small">Name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label size="small">Theme / collection</Label>
-                  <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="e.g. Cars" />
-                </div>
-                <div>
-                  <Button size="small" onClick={saveMeta} disabled={busy}>Save</Button>
-                  <Text size="xsmall" className="mt-1 text-ui-fg-muted">Price is set in the Case Types screen, not here.</Text>
-                </div>
-              </div>
-
-              {d.products.map((p) => (
-                <div key={p.id} className="rounded-lg border border-ui-border-base">
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <Text size="small" weight="plus">{FORM_LABEL[p.form] ?? p.form} · {p.variants.length} variants</Text>
-                    <Badge size="2xsmall" color={p.status === "published" ? "green" : "grey"}>{p.status}</Badge>
-                  </div>
-                  <ul className="divide-y divide-ui-border-base">
-                    {p.variants.map((v) => (
-                      <li key={v.id} className="flex items-center gap-3 px-3 py-2">
-                        <span className="size-9 shrink-0 overflow-hidden rounded bg-ui-bg-subtle">
-                          {v.image ? <img src={v.image} alt="" className="size-full object-cover" /> : null}
-                        </span>
-                        <span className="min-w-0 flex-1 text-sm">
-                          <span className="text-ui-fg-base">{v.caseType ?? "—"}</span>
-                          <span className="text-ui-fg-muted"> · {v.device ?? "—"}</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-
-              {/* Add a new case type / model to this design. */}
-              <div className="rounded-lg border border-dashed border-ui-border-base p-3">
-                <Text size="small" weight="plus">Add a case type / model</Text>
-                <Text size="xsmall" className="text-ui-fg-muted">Pick the case type and model, drop an image. Price comes from the Case Types screen.</Text>
-                <div className="mt-2 grid gap-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <select value={addCt} onChange={(e) => setAddCt(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
-                      <option value="">Case type…</option>
-                      {caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                    </select>
-                    <select value={addDev} onChange={(e) => setAddDev(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
-                      <option value="">Model…</option>
-                      {devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}
-                    </select>
-                  </div>
-                  <input type="file" accept="image/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} className="text-sm text-ui-fg-subtle" />
-                  <div>
-                    <Button size="small" onClick={addPair} disabled={busy || !addCt || !addDev || !addFile}>Add</Button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </Drawer.Body>
-        <Drawer.Footer>
-          {d ? (
-            <div className="flex w-full items-center gap-2">
-              {isPublished ? (
-                <Button size="small" variant="secondary" onClick={() => setStatus("draft")} disabled={busy}>Unpublish</Button>
-              ) : (
-                <Button size="small" variant="primary" onClick={() => setStatus("published")} disabled={busy}>Publish</Button>
-              )}
-              <div className="grow" />
-              <Button size="small" variant="danger" onClick={remove} disabled={busy}>Delete</Button>
+      {!d ? (
+        <div className="px-6 py-16 text-center text-ui-fg-subtle">Loading…</div>
+      ) : (
+        <div className="grid gap-6 px-6 py-6 lg:grid-cols-[320px_1fr]">
+          {/* Left: meta + add */}
+          <div className="flex flex-col gap-5">
+            <div className="flex items-center gap-2">
+              <StatusBadge color={isPublished ? "green" : "grey"}>{isPublished ? "Published" : "Draft"}</StatusBadge>
             </div>
-          ) : null}
-        </Drawer.Footer>
-      </Drawer.Content>
-    </Drawer>
+            <div className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label size="small">Name</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="grid gap-1.5">
+                <Label size="small">Theme / collection</Label>
+                <Input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="e.g. Cars" />
+              </div>
+              <div>
+                <Button size="small" onClick={saveMeta} disabled={busy}>Save</Button>
+                <Text size="xsmall" className="mt-1 text-ui-fg-muted">Price is set in the Case Types screen, not here.</Text>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-dashed border-ui-border-base p-3">
+              <Text size="small" weight="plus">Add a case type / model</Text>
+              <Text size="xsmall" className="text-ui-fg-muted">Pick the case type + model, drop an image.</Text>
+              <div className="mt-2 grid gap-2">
+                <select value={addCt} onChange={(e) => setAddCt(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                  <option value="">Case type…</option>
+                  {caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                </select>
+                <select value={addDev} onChange={(e) => setAddDev(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                  <option value="">Model…</option>
+                  {devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}
+                </select>
+                <input type="file" accept="image/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} className="text-sm text-ui-fg-subtle" />
+                <div>
+                  <Button size="small" onClick={addPair} disabled={busy || !addCt || !addDev || !addFile}>Add</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: products + variants */}
+          <div className="flex flex-col gap-4">
+            {d.products.map((p) => (
+              <div key={p.id} className="rounded-lg border border-ui-border-base">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <Text size="small" weight="plus">{FORM_LABEL[p.form] ?? p.form} · {p.variants.length} variants</Text>
+                  <Badge size="2xsmall" color={p.status === "published" ? "green" : "grey"}>{p.status}</Badge>
+                </div>
+                <ul className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-3">
+                  {p.variants.map((v) => (
+                    <li key={v.id} className="flex items-center gap-2 rounded-md border border-ui-border-base px-2 py-1.5">
+                      <span className="size-9 shrink-0 overflow-hidden rounded bg-ui-bg-subtle">
+                        {v.image ? <img src={v.image} alt="" className="size-full object-cover" /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1 text-xs">
+                        <span className="block truncate text-ui-fg-base">{v.caseType ?? "—"}</span>
+                        <span className="block truncate text-ui-fg-muted">{v.device ?? "—"}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Container>
   )
 }
 
