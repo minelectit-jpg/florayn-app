@@ -37,6 +37,7 @@ export type OrderOpRow = {
   steadfast_status: string | null
   steadfast_synced_at: string | null
   label_printed_at: string | null
+  courier_meta: Record<string, any> | null
   note: string | null
 }
 
@@ -192,6 +193,8 @@ export function projectManagedOrder(order: any, op: OrderOpRow | undefined) {
     steadfast_consignment_id: op?.steadfast_consignment_id ?? null,
     steadfast_tracking_code: op?.steadfast_tracking_code ?? null,
     steadfast_status: op?.steadfast_status ?? null,
+    steadfast_charge: op?.courier_meta?.charge ?? null,
+    tracking_message: op?.courier_meta?.tracking_message ?? null,
     label_printed_at: op?.label_printed_at ?? null,
     note: op?.note ?? null,
   }

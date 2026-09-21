@@ -85,6 +85,8 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       steadfast_tracking_code: op?.steadfast_tracking_code ?? null,
       steadfast_status: op?.steadfast_status ?? null,
       steadfast_synced_at: op?.steadfast_synced_at ?? null,
+      steadfast_charge: (op as any)?.courier_meta?.charge ?? null,
+      tracking_message: (op as any)?.courier_meta?.tracking_message ?? null,
       label_printed_at: op?.label_printed_at ?? null,
     },
   })

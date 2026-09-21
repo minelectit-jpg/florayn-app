@@ -66,6 +66,8 @@ type ManagedOrder = {
   steadfast_consignment_id: string | null
   steadfast_tracking_code: string | null
   steadfast_status: string | null
+  steadfast_charge: number | null
+  tracking_message: string | null
   label_printed_at: string | null
 }
 
@@ -315,7 +317,12 @@ const OrderManagerPage = () => {
                       <div className="text-sm text-ui-fg-base">{date.d}</div>
                       <div className="text-xs text-ui-fg-muted">{date.t}</div>
                     </div>
-                    <div className="hidden text-right font-medium tabular-nums text-ui-fg-base md:block">{bdt(o.total)}</div>
+                    <div className="hidden text-right md:block">
+                      <div className="font-medium tabular-nums text-ui-fg-base">{bdt(o.total)}</div>
+                      {o.steadfast_charge != null ? (
+                        <div className="text-[11px] tabular-nums text-ui-fg-muted">charge {bdt(o.steadfast_charge)}</div>
+                      ) : null}
+                    </div>
                     <div className="hidden md:block">
                       <StatusBadge color={COLORS[o.workflow_status]}>{LABELS[o.workflow_status]}</StatusBadge>
                       {o.steadfast_status && o.workflow_status === "shipped" ? (
@@ -435,6 +442,8 @@ type OrderDetail = {
   steadfast_tracking_code: string | null
   steadfast_status: string | null
   steadfast_synced_at: string | null
+  steadfast_charge: number | null
+  tracking_message: string | null
   label_printed_at: string | null
 }
 
@@ -481,7 +490,11 @@ function OrderDetailDrawer({
                 <Section title="Courier">
                   <Row k="Tracking"><span className="font-mono">{d.steadfast_tracking_code}</span> <Copy content={d.steadfast_tracking_code} /></Row>
                   {d.steadfast_consignment_id ? <Row k="Consignment">{d.steadfast_consignment_id}</Row> : null}
+                  {d.steadfast_charge != null ? <Row k="Delivery charge">{bdt(d.steadfast_charge)}</Row> : null}
                   {d.steadfast_synced_at ? <Row k="Last synced">{fmtDate(d.steadfast_synced_at).d} {fmtDate(d.steadfast_synced_at).t}</Row> : null}
+                  {d.tracking_message ? (
+                    <Text size="xsmall" className="mt-1 text-ui-fg-subtle">{d.tracking_message}</Text>
+                  ) : null}
                 </Section>
               ) : null}
 

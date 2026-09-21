@@ -27,6 +27,12 @@ const OrderOp = model
     steadfast_synced_at: model.dateTime().nullable(),
     /** When a shipping label was last printed for this order. */
     label_printed_at: model.dateTime().nullable(),
+    /**
+     * Extra courier facts the webhook pushes but the create/status API does not:
+     * { charge, tracking_message, cod_amount, updated_at, event }. Stored as
+     * JSON so new webhook fields need no schema change.
+     */
+    courier_meta: model.json().nullable(),
     /** Internal merchant note on the order (not shown to the customer). */
     note: model.text().nullable(),
   })

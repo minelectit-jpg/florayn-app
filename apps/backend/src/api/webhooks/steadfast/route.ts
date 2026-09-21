@@ -89,10 +89,22 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   if (op) {
     const workflow = mapSteadfastStatus(rawStatus)
+    const charge = pick(data, ["delivery_charge"]) ?? pick(body, ["delivery_charge"])
+    const codAmount = pick(data, ["cod_amount"]) ?? pick(body, ["cod_amount"])
+    const trackingMessage = pick(data, ["tracking_message"]) ?? pick(body, ["tracking_message"])
+    const updatedAt = pick(data, ["updated_at"]) ?? pick(body, ["updated_at"])
     const update: any = {
       id: op.id,
       steadfast_status: rawStatus,
       steadfast_synced_at: new Date(),
+      courier_meta: {
+        ...(op.courier_meta ?? {}),
+        ...(charge != null ? { charge: Number(charge) } : {}),
+        ...(codAmount != null ? { cod_amount: Number(codAmount) } : {}),
+        ...(typeof trackingMessage === "string" ? { tracking_message: trackingMessage } : {}),
+        ...(updatedAt != null ? { updated_at: String(updatedAt) } : {}),
+        event: notificationType ?? "delivery_status",
+      },
     }
     // Advance only off `shipped`, so a manual refund/cancel is never overridden.
     if (op.workflow_status === "shipped" && workflow !== "shipped") {
