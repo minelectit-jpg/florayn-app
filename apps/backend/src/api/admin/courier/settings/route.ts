@@ -41,6 +41,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   if (typeof body.api_key === "string" && body.api_key.trim()) patch.api_key = body.api_key.trim()
   if (typeof body.secret_key === "string" && body.secret_key.trim()) patch.secret_key = body.secret_key.trim()
   if (typeof body.base_url === "string" && body.base_url.trim()) patch.base_url = body.base_url.trim()
+  // Steadfast's token charset is letters, digits and - _ . = only.
+  if (typeof body.webhook_token === "string" && /^[A-Za-z0-9._=-]{8,128}$/.test(body.webhook_token.trim())) {
+    patch.webhook_token = body.webhook_token.trim()
+  }
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled
   if (body.default_delivery_type != null && Number.isFinite(Number(body.default_delivery_type))) {
     patch.default_delivery_type = Number(body.default_delivery_type) === 1 ? 1 : 0

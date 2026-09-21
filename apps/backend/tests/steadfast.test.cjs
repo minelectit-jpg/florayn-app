@@ -35,11 +35,11 @@ function load(file, dependencies = {}, globals = {}) {
   return exports
 }
 
-// steadfast.ts only imports ./order-ops (for opsService + the WorkflowStatus type).
+// steadfast.ts imports node:crypto (webhook token) + ./order-ops (opsService).
 function loadSteadfast(fetchImpl) {
   return load(
     "lib/steadfast.ts",
-    { "./order-ops": { opsService: (c) => c.__ops } },
+    { "node:crypto": crypto, "./order-ops": { opsService: (c) => c.__ops } },
     { fetch: fetchImpl }
   )
 }
@@ -90,7 +90,7 @@ test("createBulkConsignments posts {data: JSON.stringify([...])} and parses per-
     }
   })
   const container = {
-    __ops: { listCourierSettings: async () => [{ id: "c1", enabled: true, api_key: "k", secret_key: "sec", base_url: "https://portal.packzy.com/api/v1", default_delivery_type: 0 }] },
+    __ops: { listCourierSettings: async () => [{ id: "c1", enabled: true, api_key: "k", secret_key: "sec", base_url: "https://portal.packzy.com/api/v1", default_delivery_type: 0, webhook_token: "wht" }] },
   }
 
   const out = await s.createBulkConsignments(container, [
@@ -121,7 +121,7 @@ test("createBulkConsignments posts {data: JSON.stringify([...])} and parses per-
 test("courier calls fail cleanly when disabled or unconfigured", async () => {
   const s = loadSteadfast(async () => { throw new Error("should not be called") })
   const container = {
-    __ops: { listCourierSettings: async () => [{ id: "c1", enabled: false, api_key: "k", secret_key: "s", base_url: "x" }] },
+    __ops: { listCourierSettings: async () => [{ id: "c1", enabled: false, api_key: "k", secret_key: "s", base_url: "x", webhook_token: "wht" }] },
   }
   const out = await s.createBulkConsignments(container, [
     { invoice: "1", recipient_name: "A", recipient_phone: "01700000000", recipient_address: "D", cod_amount: 1 },

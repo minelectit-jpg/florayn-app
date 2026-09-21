@@ -1,21 +1,28 @@
 import crypto from "node:crypto"
 
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 import { opsService } from "../../../lib/order-ops"
 import { getCourierSettings, mapSteadfastStatus } from "../../../lib/steadfast"
 
 /**
  * POST /webhooks/steadfast - Steadfast pushes a delivery-status change here.
- * Public route (not under /admin or /store, so no session auth); secured by a
- * shared Bearer token the owner registers in the Steadfast portal alongside
- * this URL. Payload: { consignment_id, invoice, status, cod_amount, updated_at }.
- * Idempotent, returns 200 fast (Steadfast only retries twice).
+ * Public route (not under /admin or /store, so no session auth); secured by the
+ * shared token the owner registers in the Steadfast portal, sent as
+ * `Authorization: Bearer <token>` (Steadfast also sends an X-Signature HMAC of
+ * the raw body, but the Bearer token alone is sufficient auth here).
+ *
+ * Steadfast wraps the parcel event as `{ notification_type: "delivery_status",
+ * consignment_id, invoice, status, cod_amount, updated_at }`. We parse
+ * defensively (flat or nested, several field spellings), only act on
+ * delivery_status events, and always answer 200 fast (Steadfast retries 3x on a
+ * 5xx and gives up; a 4xx is not retried). Idempotent by design.
  */
 function tokenOk(header: unknown, expected: string | null): boolean {
   if (!expected) return false
   const raw = typeof header === "string" ? header : ""
-  const provided = raw.startsWith("Bearer ") ? raw.slice(7) : raw
+  const provided = raw.startsWith("Bearer ") ? raw.slice(7).trim() : raw.trim()
   const a = Buffer.from(provided)
   const b = Buffer.from(expected)
   if (a.length !== b.length) return false
@@ -26,27 +33,60 @@ function tokenOk(header: unknown, expected: string | null): boolean {
   }
 }
 
+function pick(obj: any, keys: string[]): unknown {
+  for (const k of keys) {
+    if (obj && obj[k] != null && obj[k] !== "") return obj[k]
+  }
+  return undefined
+}
+
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const settings = await getCourierSettings(req.scope)
   if (!tokenOk(req.headers.authorization, settings.webhook_token)) {
     return res.status(401).json({ message: "Unauthorized" })
   }
 
-  const body = (req.body ?? {}) as {
-    consignment_id?: unknown
-    invoice?: unknown
-    status?: unknown
-    delivery_status?: unknown
+  const body = (req.body ?? {}) as any
+  const data = body?.data && typeof body.data === "object" ? body.data : body
+  const notificationType = pick(body, ["notification_type"]) ?? pick(data, ["notification_type"])
+
+  // Only delivery-status events touch an order. Ack everything else (e.g.
+  // balance/account notifications) so Steadfast does not retry.
+  if (notificationType && notificationType !== "delivery_status") {
+    return res.status(200).json({ received: true })
   }
-  const consignmentId = body.consignment_id != null ? String(body.consignment_id) : ""
-  const rawStatus = body.status ?? body.delivery_status
-  if (!consignmentId || typeof rawStatus !== "string") {
-    // Ack anything malformed so Steadfast does not retry a payload we can't use.
+
+  const consignmentRaw = pick(data, ["consignment_id", "consignmentId"]) ?? pick(body, ["consignment_id"])
+  const consignmentId = consignmentRaw != null ? String(consignmentRaw) : ""
+  const rawStatus = pick(data, ["status", "delivery_status", "status_type"]) ?? pick(body, ["status", "delivery_status"])
+  const invoiceRaw = pick(data, ["invoice"]) ?? pick(body, ["invoice"])
+
+  if (typeof rawStatus !== "string" || (!consignmentId && invoiceRaw == null)) {
     return res.status(200).json({ received: true })
   }
 
   const svc = opsService(req.scope)
-  const [op] = await svc.listOrderOps({ steadfast_consignment_id: consignmentId }, { take: 1 })
+
+  // Find the op row by consignment id, falling back to the invoice (= order
+  // display id) so a push works even if only the invoice is present.
+  let op: any = null
+  if (consignmentId) {
+    ;[op] = await svc.listOrderOps({ steadfast_consignment_id: consignmentId }, { take: 1 })
+  }
+  if (!op && invoiceRaw != null) {
+    const displayId = Number(String(invoiceRaw).replace(/\D/g, ""))
+    if (Number.isFinite(displayId) && displayId > 0) {
+      const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+      const { data: orders } = await query.graph({
+        entity: "order",
+        fields: ["id"],
+        filters: { display_id: displayId } as any,
+      })
+      const orderId = orders?.[0]?.id
+      if (orderId) [op] = await svc.listOrderOps({ order_id: orderId }, { take: 1 })
+    }
+  }
+
   if (op) {
     const workflow = mapSteadfastStatus(rawStatus)
     const update: any = {
