@@ -19,6 +19,13 @@ const CourierSettings = model.define("courier_settings", {
   enabled: model.boolean().default(false),
   /** Steadfast delivery_type default: 0 = home delivery, 1 = point/hub. */
   default_delivery_type: model.number().default(0),
+  /**
+   * Shared secret for the Steadfast status webhook. We generate it, the owner
+   * registers it (with the callback URL) in the Steadfast portal, and the
+   * webhook route accepts a push only when `Authorization: Bearer <token>`
+   * matches. Meant to be shown in admin (it is the key the owner must copy).
+   */
+  webhook_token: model.text().nullable(),
 })
 
 export default CourierSettings

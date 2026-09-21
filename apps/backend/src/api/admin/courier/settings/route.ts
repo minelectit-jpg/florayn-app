@@ -16,6 +16,10 @@ function present(s: any) {
     secret_key_masked: mask(s.secret_key ?? null),
     api_key_set: Boolean(s.api_key),
     secret_key_set: Boolean(s.secret_key),
+    // The webhook token is meant to be copied into the Steadfast portal, so it
+    // is returned in full (it only authorizes inbound status pushes).
+    webhook_token: s.webhook_token ?? "",
+    webhook_path: "/webhooks/steadfast",
   }
 }
 

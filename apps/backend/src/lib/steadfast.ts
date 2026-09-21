@@ -1,3 +1,5 @@
+import crypto from "node:crypto"
+
 import { opsService, type WorkflowStatus } from "./order-ops"
 
 /**
@@ -52,14 +54,23 @@ export type CourierSettings = {
   base_url: string
   enabled: boolean
   default_delivery_type: number
+  webhook_token: string | null
 }
 
-/** Read the single courier settings row, seeding it on first access. */
+/**
+ * Read the single courier settings row, seeding it (and a webhook token) on
+ * first access so the status webhook always has a shared secret to verify.
+ */
 export async function getCourierSettings(container: any): Promise<CourierSettings> {
   const svc = opsService(container)
   const existing = await svc.listCourierSettings({}, { take: 1 })
-  if (existing?.[0]) return existing[0]
-  return svc.createCourierSettings({})
+  let row = existing?.[0]
+  if (!row) row = await svc.createCourierSettings({})
+  if (!row.webhook_token) {
+    const token = crypto.randomBytes(24).toString("base64url")
+    row = await svc.updateCourierSettings({ id: row.id, webhook_token: token })
+  }
+  return row
 }
 
 export type SteadfastReady =

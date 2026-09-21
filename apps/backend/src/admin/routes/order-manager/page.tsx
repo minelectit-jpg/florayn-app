@@ -567,12 +567,19 @@ function CourierSettingsDrawer({ onClose }: { onClose: () => void }) {
   const [secretKey, setSecretKey] = useState("")
   const [enabled, setEnabled] = useState(false)
   const [info, setInfo] = useState<{ api_key_masked: string; secret_key_masked: string } | null>(null)
+  const [webhook, setWebhook] = useState<{ url: string; token: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     api("/admin/courier/settings").then((d) => {
       setEnabled(Boolean(d.settings?.enabled))
       setInfo({ api_key_masked: d.settings?.api_key_masked ?? "", secret_key_masked: d.settings?.secret_key_masked ?? "" })
+      if (d.settings?.webhook_token) {
+        setWebhook({
+          url: `${window.location.origin}${d.settings.webhook_path ?? "/webhooks/steadfast"}`,
+          token: d.settings.webhook_token,
+        })
+      }
     }).catch(() => {})
   }, [])
 
@@ -613,6 +620,31 @@ function CourierSettingsDrawer({ onClose }: { onClose: () => void }) {
           <Text size="xsmall" className="text-ui-fg-muted">
             Keys are stored in the database and never shown again in full. Get them from the Steadfast merchant portal → API.
           </Text>
+
+          {webhook ? (
+            <div className="mt-2 rounded-lg border border-ui-border-base bg-ui-bg-subtle p-3">
+              <Text size="small" weight="plus">Auto-update statuses (webhook)</Text>
+              <Text size="xsmall" className="text-ui-fg-muted">
+                In the Steadfast portal → API → “Update Webhook Info”, set the Callback URL and Bearer token below. Delivered / returned statuses will then update here automatically.
+              </Text>
+              <div className="mt-2 grid gap-2">
+                <div className="grid gap-1">
+                  <Label size="small">Callback URL</Label>
+                  <div className="flex items-center gap-1.5 rounded-md border border-ui-border-base bg-ui-bg-base px-2 py-1.5">
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-ui-fg-base">{webhook.url}</span>
+                    <Copy content={webhook.url} />
+                  </div>
+                </div>
+                <div className="grid gap-1">
+                  <Label size="small">Bearer token</Label>
+                  <div className="flex items-center gap-1.5 rounded-md border border-ui-border-base bg-ui-bg-base px-2 py-1.5">
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs text-ui-fg-base">{webhook.token}</span>
+                    <Copy content={webhook.token} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </Drawer.Body>
         <Drawer.Footer>
           <Button size="small" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
