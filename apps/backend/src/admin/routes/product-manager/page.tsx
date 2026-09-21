@@ -151,11 +151,32 @@ const ProductManagerPage = () => {
   )
 }
 
+async function readFileBase64(file: File): Promise<{ contentBase64: string; mimeType: string; filename: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result)
+      resolve({ contentBase64: result.split(",")[1] ?? "", mimeType: file.type || "image/webp", filename: file.name })
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+type Option = { slug: string; name: string }
+
 function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () => void; onChanged: () => void }) {
   const [d, setD] = useState<DesignDetail | null>(null)
   const [name, setName] = useState("")
   const [theme, setTheme] = useState("")
   const [busy, setBusy] = useState(false)
+
+  // Add case type / model form.
+  const [caseTypes, setCaseTypes] = useState<Option[]>([])
+  const [devices, setDevices] = useState<Option[]>([])
+  const [addCt, setAddCt] = useState("")
+  const [addDev, setAddDev] = useState("")
+  const [addFile, setAddFile] = useState<File | null>(null)
 
   const loadDetail = useCallback(async () => {
     try {
@@ -170,6 +191,14 @@ function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () 
   useEffect(() => {
     loadDetail()
   }, [loadDetail])
+  useEffect(() => {
+    Promise.all([api("/admin/case-types"), api("/admin/devices")])
+      .then(([ct, dv]) => {
+        setCaseTypes((ct.case_types ?? []).map((c: any) => ({ slug: c.slug, name: c.name })))
+        setDevices((dv.devices ?? []).map((v: any) => ({ slug: v.slug, name: v.name })))
+      })
+      .catch(() => {})
+  }, [])
 
   const isPublished = d?.products.every((p) => p.status === "published") ?? false
 
@@ -207,6 +236,29 @@ function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () 
       toast.success("Deleted")
       onChanged()
       onClose()
+    })
+
+  const addPair = () =>
+    run("Add", async () => {
+      if (!addCt || !addDev || !addFile) {
+        toast.error("Pick a case type, a model and an image.")
+        return
+      }
+      const f = await readFileBase64(addFile)
+      const up = await api("/admin/designs/upload", {
+        method: "POST",
+        body: JSON.stringify({ designSlug: slug, caseTypeSlug: addCt, deviceSlug: addDev, index: 1, ...f }),
+      })
+      const r = await api(`/admin/designs/${slug}/pairs`, {
+        method: "POST",
+        body: JSON.stringify({ pairs: { [addCt]: { [addDev]: [up.url] } } }),
+      })
+      if (r.variantsAdded) toast.success(`Added ${r.variantsAdded} variant`)
+      else if (r.skippedForms?.length) toast.error("This design has no product for that form yet — upload it first.")
+      else toast.error("That case type + model already exists.")
+      setAddFile(null)
+      await loadDetail()
+      onChanged()
     })
 
   return (
@@ -261,6 +313,28 @@ function DesignDrawer({ slug, onClose, onChanged }: { slug: string; onClose: () 
                   </ul>
                 </div>
               ))}
+
+              {/* Add a new case type / model to this design. */}
+              <div className="rounded-lg border border-dashed border-ui-border-base p-3">
+                <Text size="small" weight="plus">Add a case type / model</Text>
+                <Text size="xsmall" className="text-ui-fg-muted">Pick the case type and model, drop an image. Price comes from the Case Types screen.</Text>
+                <div className="mt-2 grid gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={addCt} onChange={(e) => setAddCt(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                      <option value="">Case type…</option>
+                      {caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                    </select>
+                    <select value={addDev} onChange={(e) => setAddDev(e.target.value)} className="rounded-md border border-ui-border-base bg-ui-bg-field px-2 py-1.5 text-sm">
+                      <option value="">Model…</option>
+                      {devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}
+                    </select>
+                  </div>
+                  <input type="file" accept="image/*" onChange={(e) => setAddFile(e.target.files?.[0] ?? null)} className="text-sm text-ui-fg-subtle" />
+                  <div>
+                    <Button size="small" onClick={addPair} disabled={busy || !addCt || !addDev || !addFile}>Add</Button>
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </Drawer.Body>
