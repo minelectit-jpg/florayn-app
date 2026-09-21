@@ -72,12 +72,17 @@ export type PlacedOrder = {
 export type OrderSummary = {
   id: string
   display_id: number | null
+  status: string
   created_at: string
   currency_code: string
   subtotal: number
+  discount_total: number
+  tax_total: number
   shipping_total: number
+  shipping_subtotal: number
   total: number
   payment_method: string
+  payment_status: string
   free_shipping: boolean
   shipping_method: string | null
   items: {
@@ -87,6 +92,10 @@ export type OrderSummary = {
     sku: string | null
     quantity: number
     unit_price: number
+    subtotal: number
+    discount_total: number
+    tax_total: number
+    total: number
     thumbnail: string | null
   }[]
   delivery: {

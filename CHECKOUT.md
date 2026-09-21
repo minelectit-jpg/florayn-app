@@ -113,6 +113,59 @@ notice without reloading, so the explanation is reachable from the fixed bar.
 An in-flight order must finish before a reload action is offered. Other routes
 retain their automatic once-per-build refresh behavior.
 
+## Order confirmation
+
+`/order/[id]/` reads the saved order through the narrow
+`GET /store/checkout/:id` summary through `orderSummaryWorkflow`. Keep it dynamic, private/no-store and
+`noindex,nofollow`; the URL contains an opaque order ID, not the sequential
+display number. Do not include raw order metadata, email, payment records,
+full customer objects or an unmasked phone in the public summary. The existing
+delivery name/address remain. An opaque link is a guest access capability, not customer
+authentication: do not widen what it exposes or put it in analytics/share links.
+
+Confirmation amounts must come from the saved order, never current catalog
+prices or browser multiplication. `subtotal` is the goods subtotal;
+`discount_total` is the goods discount excluding the tax saved by that discount;
+`tax_total` is goods tax after discounts and `shipping_total` already includes shipping tax.
+Render each line's actual `total` and preserve the identity
+`subtotal - discount_total + tax_total + shipping_total = total`. The broader
+Medusa order subtotal can include delivery and must not replace `item_subtotal`.
+Its broader discount total can also include delivery; using it for goods
+savings would double-count the free-shipping discount.
+
+Successful custom checkout overwrites `checkout_item_images` metadata with one
+server-selected image per ordered variant before core completion copies it to
+the order. This saved image takes precedence over later catalog edits. Legacy
+orders without saved images may use a bounded query for only their selected
+variants' imagery, then their stored thumbnail; no legacy orders are rewritten.
+An explicit null snapshot remains empty. Never use current product data to
+rewrite historical titles, prices or quantities. No full catalog matrix
+crosses the confirmation payload.
+
+Read order `status` and actual `payment_status`. COD authorization does not mean
+payment was captured. A canceled or refunded order must not invite payment on
+delivery; preserve its historical order amount and distinguish it from an
+amount currently due. Do not invent shipment tracking, delivery dates, refunds,
+sent confirmation messages or guaranteed staff calls. Support contact comes
+from the same admin Checkout settings as the checkout itself.
+
+For local UI QA, the disposable fixture exposes these read-only previews:
+
+- `/order/order_test_preview/`: two items, goods 1,750 plus delivery 100, total
+  1,850; pending COD with authorization, contrasting selected-item images.
+- `/order/order_test_discount/`: goods 4,550 less savings 200, free delivery,
+  total 4,350; includes a quantity greater than one and discounted line total.
+- `/order/order_test_cancelled/`: canceled order/payment, original total 1,850.
+
+These fixture URLs require no cart or order creation and exist only in the
+local mock API. Keep them out of deployed application data. Preserve the fixture
+tests for monetary reconciliation, narrow fields, masked phone, deterministic
+responses and zero stored orders after viewing previews.
+The render tests exercise the actual confirmation page's COD/paid/refunded/
+canceled/closed states, saved monetary breakdown, optional support details and
+noindex/no-referrer metadata. The isolated integration also verifies stored
+totals, masked contact details and image persistence after a catalog image update.
+
 ## Admin settings and freshness
 
 The Medusa sidebar **Checkout** page uses `GET`/`POST

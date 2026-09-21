@@ -350,7 +350,7 @@ test("a payment-time cart mutation reprices bundle discounts before returning a 
 test("isolated bypass assertions match serialized workflow messages and reject unrelated failures", () => {
   const { isExpectedWorkflowFailure: matches } = load("scripts/verify-checkout-isolated.ts", {
     "node:assert/strict": require("node:assert/strict"), "@medusajs/framework/utils": utils,
-    "@medusajs/medusa/core-flows": {}, "../workflows/checkout": {},
+    "@medusajs/medusa/core-flows": {}, "../workflows/checkout": {}, "../workflows/order-summary": {},
   })
   const expected = "CHECKOUT_QUOTE_REQUIRED"
   assert.equal(matches(new Error(expected), expected), true)
@@ -361,4 +361,16 @@ test("isolated bypass assertions match serialized workflow messages and reject u
   assert.equal(matches({ message: "CHECKOUT_QUOTE_CHANGED" }, expected), false)
   const cyclic = {}; cyclic.cause = cyclic
   assert.equal(matches(cyclic, expected), false)
+})
+
+test("completion replaces public image metadata with a compact selected-variant snapshot", async () => {
+  const h = harness()
+  h.cart.metadata.checkout_item_images = { variant_a: "https://untrusted.invalid/wrong.webp", other: "not ordered" }
+  h.cart.items[0].thumbnail = "https://example.invalid/generic.webp"
+  h.cart.items[0].variant = { metadata: { images: ["https://example.invalid/selected.webp"], private: "omit" } }
+  const q = (await h.quote()).body.quote
+  assert.equal((await h.complete(q.version)).status, 200)
+  assert.deepEqual(plain(h.cart.metadata.checkout_item_images), { variant_a: "https://example.invalid/selected.webp" })
+  assert.equal((await h.complete(q.version)).body.order.id, "order_one")
+  assert.equal(h.orders.length, 1)
 })

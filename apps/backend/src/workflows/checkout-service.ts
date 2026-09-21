@@ -214,7 +214,12 @@ export async function runCheckout(scope: any, body: unknown, complete: boolean):
         } }
       }
       await scope.resolve(Modules.CART).updateCarts(fields.cart_id, {
-        metadata: { ...latestCart.metadata, checkout_quote_version: quote.version, free_shipping: quote.free_shipping },
+        metadata: { ...latestCart.metadata, checkout_quote_version: quote.version, free_shipping: quote.free_shipping,
+          // Replace any public-cart metadata with the server's selected images.
+          // Core completion copies this compact snapshot onto the order.
+          checkout_item_images: Object.fromEntries((latestCart.items ?? []).filter((item: any) => item.variant_id)
+            .map((item: any) => [item.variant_id, latest.items.find((line) => line.id === item.id)?.thumbnail ?? null])),
+        },
       })
       await completeCartWorkflow(scope).run({ input: { id: fields.cart_id } })
       const order = await recoverOrder(query, fields.cart_id)

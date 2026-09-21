@@ -52,6 +52,36 @@ const checkoutSettings = {
 }
 const checkoutControl = { price_delta: 0, fail_quote_once: false, fail_complete_once: false, lose_complete_response_once: false }
 
+// Static confirmation previews do not insert orders or need checkout/payment.
+const previewCaseImage = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="540"><rect width="540" height="540" fill="#f8f1f1"/><rect x="153" y="48" width="234" height="444" rx="45" fill="#bc6880"/><rect x="171" y="66" width="104" height="112" rx="25" fill="#e9c2cd"/><g fill="#29242c"><circle cx="198" cy="94" r="18"/><circle cx="246" cy="98" r="18"/><circle cx="207" cy="145" r="18"/></g><path d="M193 300 Q270 180 345 300 Q270 415 193 300" fill="#f0d8b0"/><text x="270" y="444" text-anchor="middle" fill="#fff" font-size="18">FLORAYN</text></svg>')
+const previewStrapImage = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="540"><rect width="540" height="540" fill="#f2f0ec"/><path d="M235 392 C70 147 200 62 270 138 C340 62 470 147 305 392" fill="none" stroke="#b59778" stroke-width="44"/><rect x="230" y="360" width="80" height="95" rx="18" fill="#d1b38f"/><circle cx="270" cy="451" r="29" fill="none" stroke="#b2a690" stroke-width="13"/></svg>')
+
+function previewOrder(id) {
+  const order = {
+    id, display_id: id === "order_test_discount" ? 2049 : id === "order_test_cancelled" ? 2050 : 2048,
+    created_at: "2026-09-21T08:30:00.000Z", currency_code: "bdt", status: "pending", payment_status: "authorized",
+    subtotal: 1750, discount_total: 0, tax_total: 0, shipping_subtotal: 100, shipping_total: 100, total: 1850,
+    payment_method: "Cash on Delivery", free_shipping: false, shipping_method: "Outside Dhaka",
+    items: [
+      { id: "item_preview_case", title: "Blush Bloom", variant_title: "Signature / iPhone 17 Pro Max", sku: null,
+        quantity: 1, unit_price: 1400, subtotal: 1400, discount_total: 0, tax_total: 0, total: 1400, thumbnail: previewCaseImage },
+      { id: "item_preview_strap", title: "Everyday Wrist Strap", variant_title: "Sand / One size", sku: null,
+        quantity: 1, unit_price: 350, subtotal: 350, discount_total: 0, tax_total: 0, total: 350, thumbnail: previewStrapImage },
+    ],
+    delivery: { name: "Sample Customer", address: "12 Sample Road", area: "Sample Area", district: "Gazipur", phone: "017*****678" },
+  }
+  if (id === "order_test_discount") {
+    order.items[0] = { ...order.items[0], quantity: 3, subtotal: 4200, discount_total: 200, total: 4000 }
+    order.subtotal = 4550
+    order.discount_total = 200
+    order.shipping_total = 0
+    order.total = 4350
+    order.free_shipping = true
+  }
+  if (id === "order_test_cancelled") { order.status = "canceled"; order.payment_status = "canceled" }
+  return order
+}
+
 function recalculateCart(cart) {
   for (const item of cart.items) item.unit_price = item.fixture_base_price + checkoutControl.price_delta
   cart.item_subtotal = cart.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
@@ -150,11 +180,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, { errors: { form: "Your order total has changed. Please review the updated total and place your order again." }, quote }, 409)
     }
     const order = { id: `order_test_${orders.size + 1}`, display_id: 1001 + orders.size,
-      created_at: new Date().toISOString(), currency_code: "bdt", subtotal: quote.subtotal,
-      shipping_total: quote.shipping_total, total: quote.total, payment_method: "Cash on delivery",
+      created_at: new Date().toISOString(), currency_code: "bdt", status: "pending", payment_status: "authorized", subtotal: quote.subtotal,
+      discount_total: quote.discount_total, tax_total: quote.tax_total, shipping_subtotal: quote.shipping_subtotal,
+      shipping_total: quote.shipping_total, total: quote.total, payment_method: "Cash on Delivery",
       free_shipping: quote.free_shipping, shipping_method: quote.shipping_label,
-      items: quote.items.map((item) => ({ ...item, sku: null })),
-      delivery: { name: data.full_name, address: data.address, area: data.area, district: data.district, phone: data.phone } }
+      items: quote.items.map((item) => ({ ...item, discount_total: Math.round((item.subtotal - item.total) * 100) / 100, tax_total: 0, sku: null })),
+      delivery: { name: data.full_name, address: data.address, area: data.area, district: data.district,
+        phone: `${data.phone.slice(0, 3)}${"*".repeat(Math.max(0, data.phone.length - 6))}${data.phone.slice(-3)}` } }
     orders.set(order.id, order)
     cart.fixture_order_id = order.id
     cart.completed_at = order.created_at
@@ -165,6 +197,8 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, { order })
   }
+  const previewMatch = url.pathname.match(/^\/store\/checkout\/(order_test_(?:preview|discount|cancelled))$/)
+  if (previewMatch && req.method === "GET") return send(res, { order: previewOrder(previewMatch[1]) })
   const orderMatch = url.pathname.match(/^\/store\/checkout\/(order_test_\d+)$/)
   if (orderMatch && req.method === "GET") {
     const order = orders.get(orderMatch[1])

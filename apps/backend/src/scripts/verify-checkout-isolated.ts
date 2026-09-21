@@ -7,8 +7,10 @@ import {
   createTaxRegionsWorkflow, linkSalesChannelsToStockLocationWorkflow,
   updateLineItemInCartWorkflow, updateCartWorkflow, completeCartWorkflow,
   createPaymentCollectionForCartWorkflow, createPaymentSessionsWorkflow,
+  updateProductVariantsWorkflow,
 } from "@medusajs/medusa/core-flows"
 import { checkoutWorkflow } from "../workflows/checkout"
+import { orderSummaryWorkflow } from "../workflows/order-summary"
 
 // Medusa serializes step errors before workflow-export throws errors[0].error.
 // These can be plain objects, so assert.rejects' Error-to-string regex loses
@@ -79,6 +81,7 @@ export default async function verifyCheckoutIsolated({ container }: ExecArgs) {
     sales_channels: [{ id: channels[0].id }],
     options: [{ title: "Case Type", values: ["Signature"] }, { title: "Model", values: ["iPhone 17 Pro"] }],
     variants: [{ title: "Signature / iPhone 17 Pro", sku: "CHECKOUT-ONLY", manage_inventory: false,
+      metadata: { images: ["https://example.invalid/selected-case.webp"] },
       options: { "Case Type": "Signature", Model: "iPhone 17 Pro" },
       prices: [{ currency_code: "bdt", amount: unitPrice }],
     }],
@@ -147,5 +150,23 @@ export default async function verifyCheckoutIsolated({ container }: ExecArgs) {
   for (const retry of retries) assert.equal(retry.body.order.id, ordered.body.order.id)
   const { data: orders } = await query.graph({ entity: "order", fields: ["id", "total"] })
   assert.equal(orders.length, 1)
+  // Verify the real order graph's computed fields, payment aggregation and
+  // immutable selected image snapshot without reading any application orders.
+  const readSummary = async () => (await orderSummaryWorkflow(container).run({ input: { id: ordered.body.order.id } })).result!
+  const summary = await readSummary()
+  assert.equal(summary.subtotal, 2800)
+  assert.equal(summary.discount_total, 300)
+  assert.equal(summary.shipping_total, 73)
+  assert.equal(summary.tax_total, 0)
+  assert.equal(summary.total, 2573)
+  assert.equal(summary.items[0].total, 2500)
+  assert.equal(summary.items[0].thumbnail, "https://example.invalid/selected-case.webp")
+  assert.equal(summary.payment_status, "authorized")
+  assert.equal(summary.delivery.phone, "017*****678")
+  assert.ok(!("metadata" in summary) && !("email" in summary))
+  await updateProductVariantsWorkflow(container).run({ input: { product_variants: [{
+    id: products[0].variants![0].id, metadata: { images: ["https://example.invalid/changed-after-order.webp"] },
+  }] } })
+  assert.equal((await readSummary()).items[0].thumbnail, "https://example.invalid/selected-case.webp")
   logger.info("CHECKOUT_INTEGRATION_PASS: real pricing, both delivery zones, current bundle, signed quote bypass prevention, edited cart, COD completion and concurrent safe retries")
 }
