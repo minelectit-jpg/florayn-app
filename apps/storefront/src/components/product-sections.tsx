@@ -32,17 +32,42 @@ export function MoreDesigns({
   items,
   device,
   caseType,
+  currentName,
+  currentImage,
 }: {
   items: RelatedProduct[]
   device?: string
   caseType?: string
+  /** The design being viewed, shown first as the selected tile (like CASE TYPE). */
+  currentName?: string
+  currentImage?: string | null
 }) {
-  if (!items.length) return null
+  if (!items.length && !currentName) return null
 
   return (
     <section className="mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
       <DragScroll className="flex gap-[12px] overflow-x-auto pb-2">
+        {currentName ? (
+          <li className="shrink-0">
+            {/* The current design, highlighted like the selected CASE TYPE tile.
+                Not a link — the customer is already on it. */}
+            <div
+              title={currentName}
+              aria-current="true"
+              className="block size-[108px] overflow-hidden rounded-[10px] border-2 border-purple"
+            >
+              <span className="relative block size-full">
+                <ProductImage
+                  src={currentImage ?? null}
+                  alt={currentName}
+                  label={currentName}
+                  sizes="108px"
+                />
+              </span>
+            </div>
+          </li>
+        ) : null}
         {items.map((item) => {
           const src =
             (device && caseType

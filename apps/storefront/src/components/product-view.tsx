@@ -258,6 +258,12 @@ export default function ProductView({
                   items={moreDesignItems}
                   device={device}
                   caseType={caseType}
+                  currentName={designName}
+                  currentImage={
+                    (selected?.metadata?.images as string[] | undefined)?.[0] ??
+                    fallbackImages[0] ??
+                    null
+                  }
                 />
               ) : null
             }
