@@ -5,6 +5,29 @@ import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
 import QuickAdd from "@/components/quick-add"
 
+/** NAME -> URL slug ("iPhone 17 Pro Max" -> "iphone-17-pro-max"), as in MoreDesigns. */
+const slugify = (s?: string) =>
+  s ? s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : ""
+
+/**
+ * The product link for a "you'll love" card. Carries the customer's current
+ * model + case type so the design opens on what the card is showing (e.g. Elite
+ * Clear ৳1,600), not the product's default (iPhone 17 Pro Max / Signature). The
+ * device is only appended when this design actually sells it; ?case is honoured
+ * client-side if the design offers it, else the page snaps to a valid pair.
+ */
+export function youWillLoveHref(
+  item: Pick<YouWillLoveItem, "handle" | "imageByDevice">,
+  device?: string,
+  caseType?: string
+): string {
+  const dev = device && item.imageByDevice[device] ? slugify(device) : ""
+  const ct = slugify(caseType)
+  return dev
+    ? `/product/${item.handle}-${dev}/${ct ? `?case=${ct}` : ""}`
+    : `/product/${item.handle}/${ct ? `?case=${ct}` : ""}`
+}
+
 export type YouWillLoveItem = {
   id: string
   /** Design name shown on the card. */
@@ -64,6 +87,7 @@ export default function YouWillLove({
             device && caseType
               ? `${device} Case · ${caseType}`
               : (caseType ?? device ?? "")
+          const href = youWillLoveHref(item, device, caseType)
           return (
             <li
               key={item.id}
@@ -104,7 +128,7 @@ export default function YouWillLove({
                 {/* Stretched-link overlay: keeps the card clickable without
                     nesting the QuickAdd button inside an <a>. */}
                 <Link
-                  href={`/product/${item.handle}/`}
+                  href={href}
                   aria-label={item.name}
                   className="absolute inset-0 z-[1]"
                   prefetch={false}
