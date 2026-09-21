@@ -4,17 +4,20 @@ import {
   Badge,
   Button,
   Checkbox,
-  Container,
+  Copy,
+  Drawer,
   Heading,
+  IconButton,
   Input,
   Label,
+  StatusBadge,
   Switch,
-  Table,
   Text,
   toast,
 } from "@medusajs/ui"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+type Tab = "all" | Status
 const STATUSES = [
   "processing",
   "confirmed",
@@ -25,8 +28,10 @@ const STATUSES = [
   "cancelled",
 ] as const
 type Status = (typeof STATUSES)[number]
+const TABS: Tab[] = ["all", ...STATUSES]
 
-const LABELS: Record<Status, string> = {
+const LABELS: Record<Tab, string> = {
+  all: "All",
   processing: "Processing",
   confirmed: "Confirmed",
   shipped: "Shipped",
@@ -35,7 +40,8 @@ const LABELS: Record<Status, string> = {
   refunded: "Refunded",
   cancelled: "Cancelled",
 }
-const COLORS: Record<Status, "grey" | "green" | "red" | "blue" | "orange" | "purple"> = {
+type BadgeColor = "grey" | "green" | "red" | "blue" | "orange" | "purple"
+const COLORS: Record<Status, BadgeColor> = {
   processing: "orange",
   confirmed: "blue",
   shipped: "purple",
@@ -50,7 +56,6 @@ type ManagedOrder = {
   display_id: number | null
   created_at: string
   total: number
-  currency_code: string
   customer_name: string
   phone: string
   address: string
@@ -62,14 +67,21 @@ type ManagedOrder = {
   steadfast_tracking_code: string | null
   steadfast_status: string | null
   label_printed_at: string | null
-  note: string | null
 }
 
+const PAGE = 30
 const bdt = (n: number) => `৳${Math.round(n).toLocaleString("en-US")}`
-const date = (iso: string) => {
+const fmtDate = (iso: string) => {
   const t = Date.parse(iso)
-  return Number.isNaN(t) ? "—" : new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  if (Number.isNaN(t)) return { d: "—", t: "" }
+  const dt = new Date(t)
+  return {
+    d: dt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    t: dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+  }
 }
+const prettyRaw = (s: string | null) =>
+  s ? s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : ""
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, { credentials: "include", headers: { "content-type": "application/json" }, ...init })
@@ -78,21 +90,26 @@ async function api(path: string, init?: RequestInit) {
   return data
 }
 
-const OrdersPage = () => {
-  const [tab, setTab] = useState<Status>("processing")
+const OrderManagerPage = () => {
+  const [tab, setTab] = useState<Tab>("all")
   const [orders, setOrders] = useState<ManagedOrder[]>([])
   const [counts, setCounts] = useState<Record<Status, number>>({} as Record<Status, number>)
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [detailId, setDetailId] = useState<string | null>(null)
 
-  const load = useCallback(async (status: Status) => {
+  const load = useCallback(async (t: Tab, off: number) => {
     setLoading(true)
     try {
-      const data = await api(`/admin/order-ops?status=${status}&limit=100`)
+      const data = await api(`/admin/order-ops?status=${t}&limit=${PAGE}&offset=${off}`)
       setOrders(data.orders ?? [])
       setCounts(data.counts ?? {})
+      setTotal(data.count ?? 0)
       setSelected(new Set())
     } catch (e: any) {
       toast.error(e?.message || "Could not load orders.")
@@ -102,14 +119,27 @@ const OrdersPage = () => {
   }, [])
 
   useEffect(() => {
-    load(tab)
-  }, [tab, load])
+    load(tab, offset)
+  }, [tab, offset, load])
 
-  const allSelected = orders.length > 0 && selected.size === orders.length
+  const allCount = useMemo(() => STATUSES.reduce((n, s) => n + (counts[s] ?? 0), 0), [counts])
+  const tabCount = (t: Tab) => (t === "all" ? allCount : counts[t as Status] ?? 0)
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return orders
+    return orders.filter((o) =>
+      [String(o.display_id ?? ""), o.customer_name, o.phone, o.steadfast_tracking_code, o.steadfast_consignment_id]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    )
+  }, [orders, search])
+
   const selectedIds = useMemo(() => [...selected], [selected])
+  const allSelected = visible.length > 0 && visible.every((o) => selected.has(o.order_id))
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(orders.map((o) => o.order_id)))
+    setSelected(allSelected ? new Set() : new Set(visible.map((o) => o.order_id)))
   }
   function toggle(id: string) {
     setSelected((cur) => {
@@ -130,181 +160,420 @@ const OrdersPage = () => {
     }
   }
 
-  const moveTo = (status: Status) =>
+  const moveTo = (ids: string[], status: Status) =>
     run("Status change", async () => {
-      await api("/admin/order-ops/status", {
-        method: "POST",
-        body: JSON.stringify({ order_ids: selectedIds, status }),
-      })
-      toast.success(`Moved ${selectedIds.length} to ${LABELS[status]}`)
-      await load(tab)
+      await api("/admin/order-ops/status", { method: "POST", body: JSON.stringify({ order_ids: ids, status }) })
+      toast.success(`Moved ${ids.length} to ${LABELS[status]}`)
+      await load(tab, offset)
     })
 
-  const sendToCourier = () =>
+  const sendToCourier = (ids: string[]) =>
     run("Send to courier", async () => {
-      const data = await api("/admin/courier/send", {
-        method: "POST",
-        body: JSON.stringify({ order_ids: selectedIds }),
-      })
+      const data = await api("/admin/courier/send", { method: "POST", body: JSON.stringify({ order_ids: ids }) })
       const failed = (data.results ?? []).filter((r: any) => !r.ok)
       toast.success(`Sent ${data.sent} to Steadfast${failed.length ? `, ${failed.length} failed` : ""}`)
       if (failed.length) toast.error(failed.map((r: any) => r.error).slice(0, 3).join(" · "))
-      await load(tab)
+      await load(tab, offset)
     })
 
-  const printLabels = () => {
-    if (!selectedIds.length) return
-    window.open(`/admin/courier/label?order_ids=${selectedIds.join(",")}`, "_blank")
+  const printLabels = (ids: string[]) => {
+    if (ids.length) window.open(`/admin/courier/label?order_ids=${ids.join(",")}`, "_blank")
   }
 
-  const syncCourier = () =>
+  const syncCourier = (ids?: string[]) =>
     run("Sync", async () => {
-      const data = await api("/admin/courier/sync", { method: "POST", body: JSON.stringify({}) })
+      const data = await api("/admin/courier/sync", { method: "POST", body: JSON.stringify(ids ? { order_ids: ids } : {}) })
       toast.success(`Checked ${data.checked}, ${data.changed} updated`)
-      await load(tab)
+      await load(tab, offset)
     })
 
   const backfill = () =>
     run("Import", async () => {
       const data = await api("/admin/order-ops/backfill", { method: "POST", body: "{}" })
       toast.success(`Imported ${data.created} order${data.created === 1 ? "" : "s"}`)
-      await load(tab)
+      await load(tab, offset)
     })
 
   return (
-    <Container className="p-0 divide-y">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-        <Heading level="h1">Orders</Heading>
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Heading level="h1">Order Manager</Heading>
+          <Text size="small" className="text-ui-fg-subtle">Every order and courier parcel, by status.</Text>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="small" variant="secondary" onClick={syncCourier} disabled={busy}>
-            Sync courier status
-          </Button>
-          <Button size="small" variant="secondary" onClick={backfill} disabled={busy}>
-            Import old orders
-          </Button>
-          <Button size="small" variant="secondary" onClick={() => setShowSettings((s) => !s)}>
-            Courier settings
-          </Button>
+          <CourierBalance />
+          <Button size="small" variant="secondary" onClick={() => syncCourier()} disabled={busy}>Sync status</Button>
+          <Button size="small" variant="secondary" onClick={backfill} disabled={busy}>Import old orders</Button>
+          <Button size="small" variant="secondary" onClick={() => setShowSettings(true)}>Courier settings</Button>
         </div>
       </div>
-
-      {showSettings ? <CourierSettings onClose={() => setShowSettings(false)} /> : null}
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-1 px-6 py-3">
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setTab(s)}
-            className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm transition-colors ${
-              tab === s ? "bg-ui-bg-base-pressed font-medium text-ui-fg-base shadow-borders-base" : "text-ui-fg-subtle hover:bg-ui-bg-subtle-hover"
-            }`}
-          >
-            {LABELS[s]}
-            <Badge size="2xsmall" color={COLORS[s]}>{counts[s] ?? 0}</Badge>
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-2">
+        {TABS.map((t) => {
+          const active = tab === t
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => { setTab(t); setOffset(0) }}
+              className={`flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+                active
+                  ? "border-ui-fg-base bg-ui-bg-base text-ui-fg-base shadow-elevation-card-rest"
+                  : "border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-subtle-hover"
+              }`}
+            >
+              {LABELS[t]}
+              <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-ui-bg-component text-ui-fg-base" : "text-ui-fg-muted"}`}>
+                {tabCount(t)}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Bulk toolbar */}
-      {selectedIds.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 bg-ui-bg-subtle px-6 py-3">
-          <Text size="small" weight="plus">{selectedIds.length} selected</Text>
-          <div className="mx-1 h-4 w-px bg-ui-border-base" />
-          <Button size="small" variant="primary" onClick={sendToCourier} disabled={busy}>
-            Send to Steadfast
-          </Button>
-          <Button size="small" variant="secondary" onClick={printLabels} disabled={busy}>
-            Print labels
-          </Button>
-          <div className="mx-1 h-4 w-px bg-ui-border-base" />
-          <Text size="small" className="text-ui-fg-subtle">Move to:</Text>
-          {STATUSES.filter((s) => s !== tab).map((s) => (
-            <Button key={s} size="small" variant="transparent" onClick={() => moveTo(s)} disabled={busy}>
-              {LABELS[s]}
-            </Button>
-          ))}
+      {/* Card */}
+      <div className="overflow-hidden rounded-xl border border-ui-border-base bg-ui-bg-base shadow-elevation-card-rest">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-ui-border-base px-4 py-3">
+          <Input
+            size="small"
+            placeholder="Search order #, name, phone, tracking…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-xs"
+          />
+          <div className="grow" />
+          {selectedIds.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Text size="small" weight="plus">{selectedIds.length} selected</Text>
+              <Button size="small" variant="primary" onClick={() => sendToCourier(selectedIds)} disabled={busy}>Send to Steadfast</Button>
+              <Button size="small" variant="secondary" onClick={() => printLabels(selectedIds)} disabled={busy}>Print labels</Button>
+              <StatusMenu onPick={(s) => moveTo(selectedIds, s)} exclude={tab === "all" ? undefined : (tab as Status)} disabled={busy} />
+            </div>
+          ) : (
+            <Text size="small" className="text-ui-fg-muted">{total} order{total === 1 ? "" : "s"}</Text>
+          )}
         </div>
-      ) : null}
 
-      {/* Table */}
-      <div className="px-2 py-2">
+        {/* Rows */}
         {loading ? (
-          <div className="px-4 py-10 text-center text-ui-fg-subtle">Loading…</div>
-        ) : orders.length === 0 ? (
-          <div className="px-4 py-10 text-center text-ui-fg-subtle">No orders in {LABELS[tab]}.</div>
+          <div className="px-4 py-16 text-center text-ui-fg-subtle">Loading…</div>
+        ) : visible.length === 0 ? (
+          <div className="px-4 py-16 text-center text-ui-fg-subtle">
+            {tab === "all" && total === 0 ? (
+              <div className="space-y-3">
+                <p>No orders yet. Import your existing orders to get started.</p>
+                <Button size="small" variant="secondary" onClick={backfill}>Import old orders</Button>
+              </div>
+            ) : (
+              <p>No orders in {LABELS[tab]}{search ? " matching your search" : ""}.</p>
+            )}
+          </div>
         ) : (
-          <Table>
-            <Table.Header>
-              <Table.Row>
-                <Table.HeaderCell className="w-8">
-                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
-                </Table.HeaderCell>
-                <Table.HeaderCell>Order</Table.HeaderCell>
-                <Table.HeaderCell>Customer</Table.HeaderCell>
-                <Table.HeaderCell>Items</Table.HeaderCell>
-                <Table.HeaderCell>Total</Table.HeaderCell>
-                <Table.HeaderCell>Courier</Table.HeaderCell>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {orders.map((o) => (
-                <Table.Row key={o.order_id}>
-                  <Table.Cell>
-                    <Checkbox checked={selected.has(o.order_id)} onCheckedChange={() => toggle(o.order_id)} />
-                  </Table.Cell>
-                  <Table.Cell>
-                    <div className="font-medium">#{o.display_id ?? "—"}</div>
-                    <div className="text-ui-fg-subtle text-xs">{date(o.created_at)}</div>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <div className="font-medium">{o.customer_name || "—"}</div>
-                    <div className="text-ui-fg-subtle text-xs">{o.phone}</div>
-                    <div className="text-ui-fg-muted text-xs max-w-[240px] truncate">{o.address}</div>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <div className="max-w-[220px] truncate text-sm">{o.items}</div>
-                    <div className="text-ui-fg-subtle text-xs">{o.item_count} item{o.item_count === 1 ? "" : "s"}</div>
-                  </Table.Cell>
-                  <Table.Cell className="whitespace-nowrap tabular-nums">{bdt(o.total)}</Table.Cell>
-                  <Table.Cell>
-                    {o.steadfast_tracking_code ? (
-                      <div className="text-xs">
-                        <div className="font-mono">{o.steadfast_tracking_code}</div>
-                        {o.steadfast_status ? (
-                          <div className="text-ui-fg-subtle">{o.steadfast_status}</div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <Badge size="2xsmall" color={COLORS[o.workflow_status]}>{LABELS[o.workflow_status]}</Badge>
-                    )}
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table>
+          <div>
+            {/* Column header */}
+            <div className="hidden grid-cols-[28px_120px_1fr_130px_90px_130px_28px] items-center gap-3 border-b border-ui-border-base px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-ui-fg-muted md:grid">
+              <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
+              <span>Order</span>
+              <span>Recipient</span>
+              <span>Date</span>
+              <span className="text-right">COD</span>
+              <span>Status</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-ui-border-base">
+              {visible.map((o) => {
+                const date = fmtDate(o.created_at)
+                return (
+                  <li
+                    key={o.order_id}
+                    className="grid cursor-pointer grid-cols-[28px_1fr_28px] items-center gap-3 px-4 py-3 transition-colors hover:bg-ui-bg-base-hover md:grid-cols-[28px_120px_1fr_130px_90px_130px_28px]"
+                    onClick={() => setDetailId(o.order_id)}
+                  >
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <Checkbox checked={selected.has(o.order_id)} onCheckedChange={() => toggle(o.order_id)} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-ui-fg-base">#{o.display_id ?? "—"}</div>
+                      {o.steadfast_tracking_code ? (
+                        <div className="flex items-center gap-1 text-xs text-ui-fg-subtle" onClick={(e) => e.stopPropagation()}>
+                          <span className="font-mono">{o.steadfast_tracking_code}</span>
+                          <Copy content={o.steadfast_tracking_code} className="text-ui-fg-muted" />
+                        </div>
+                      ) : (
+                        <div className="text-xs text-ui-fg-muted">Not sent</div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-ui-fg-base">{o.customer_name || "—"}</div>
+                      <div className="truncate text-xs text-ui-fg-subtle">{o.phone}{o.district ? ` · ${o.district}` : ""}</div>
+                    </div>
+                    <div className="hidden md:block">
+                      <div className="text-sm text-ui-fg-base">{date.d}</div>
+                      <div className="text-xs text-ui-fg-muted">{date.t}</div>
+                    </div>
+                    <div className="hidden text-right font-medium tabular-nums text-ui-fg-base md:block">{bdt(o.total)}</div>
+                    <div className="hidden md:block">
+                      <StatusBadge color={COLORS[o.workflow_status]}>{LABELS[o.workflow_status]}</StatusBadge>
+                      {o.steadfast_status && o.workflow_status === "shipped" ? (
+                        <div className="mt-0.5 text-[11px] text-ui-fg-muted">{prettyRaw(o.steadfast_status)}</div>
+                      ) : null}
+                    </div>
+                    <ChevronRight />
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         )}
+
+        {/* Pagination */}
+        {total > PAGE ? (
+          <div className="flex items-center justify-between border-t border-ui-border-base px-4 py-3">
+            <Text size="small" className="text-ui-fg-muted">
+              {offset + 1}–{Math.min(offset + PAGE, total)} of {total}
+            </Text>
+            <div className="flex gap-2">
+              <Button size="small" variant="secondary" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Prev</Button>
+              <Button size="small" variant="secondary" disabled={offset + PAGE >= total || loading} onClick={() => setOffset(offset + PAGE)}>Next</Button>
+            </div>
+          </div>
+        ) : null}
       </div>
-    </Container>
+
+      {showSettings ? <CourierSettingsDrawer onClose={() => setShowSettings(false)} /> : null}
+      {detailId ? (
+        <OrderDetailDrawer
+          orderId={detailId}
+          onClose={() => setDetailId(null)}
+          busy={busy}
+          onSend={(id) => sendToCourier([id])}
+          onLabel={(id) => printLabels([id])}
+          onSync={(id) => syncCourier([id])}
+          onMove={(id, s) => moveTo([id], s)}
+        />
+      ) : null}
+    </div>
   )
 }
 
-function CourierSettings({ onClose }: { onClose: () => void }) {
+function ChevronRight() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="justify-self-end text-ui-fg-muted">
+      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function StatusMenu({ onPick, exclude, disabled }: { onPick: (s: Status) => void; exclude?: Status; disabled?: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <Button size="small" variant="secondary" onClick={() => setOpen((o) => !o)} disabled={disabled}>Move to ▾</Button>
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-ui-border-base bg-ui-bg-base shadow-elevation-flyout">
+            {STATUSES.filter((s) => s !== exclude).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="block w-full px-3 py-2 text-left text-sm text-ui-fg-base hover:bg-ui-bg-base-hover"
+                onClick={() => { setOpen(false); onPick(s) }}
+              >
+                {LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function CourierBalance() {
+  const [balance, setBalance] = useState<string | null>(null)
+  const check = async () => {
+    try {
+      const d = await api("/admin/courier/balance")
+      setBalance(`৳${Number(d.balance ?? 0).toLocaleString("en-US")}`)
+    } catch {
+      setBalance(null)
+      toast.error("Courier not configured yet.")
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={check}
+      className="rounded-full border border-ui-border-base bg-ui-bg-subtle px-3 py-1.5 text-sm text-ui-fg-subtle hover:bg-ui-bg-subtle-hover"
+    >
+      {balance ? `Balance ${balance}` : "Check balance"}
+    </button>
+  )
+}
+
+type OrderDetail = {
+  order_id: string
+  display_id: number | null
+  created_at: string
+  total: number
+  subtotal: number
+  shipping_total: number
+  note: string | null
+  customer_name: string
+  phone: string
+  address_1: string
+  area: string
+  district: string
+  items: { title: string; variant_title: string | null; quantity: number; unit_price: number; thumbnail: string | null }[]
+  workflow_status: Status
+  steadfast_consignment_id: string | null
+  steadfast_tracking_code: string | null
+  steadfast_status: string | null
+  steadfast_synced_at: string | null
+  label_printed_at: string | null
+}
+
+function OrderDetailDrawer({
+  orderId,
+  onClose,
+  busy,
+  onSend,
+  onLabel,
+  onSync,
+  onMove,
+}: {
+  orderId: string
+  onClose: () => void
+  busy: boolean
+  onSend: (id: string) => void
+  onLabel: (id: string) => void
+  onSync: (id: string) => void
+  onMove: (id: string, s: Status) => void
+}) {
+  const [d, setD] = useState<OrderDetail | null>(null)
+  useEffect(() => {
+    api(`/admin/order-ops/${orderId}`).then((r) => setD(r.order)).catch(() => setD(null))
+  }, [orderId])
+
+  return (
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <Drawer.Content>
+        <Drawer.Header>
+          <Drawer.Title>Order #{d?.display_id ?? "…"}</Drawer.Title>
+        </Drawer.Header>
+        <Drawer.Body className="overflow-y-auto">
+          {!d ? (
+            <Text size="small" className="text-ui-fg-subtle">Loading…</Text>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div className="flex items-center gap-2">
+                <StatusBadge color={COLORS[d.workflow_status]}>{LABELS[d.workflow_status]}</StatusBadge>
+                {d.steadfast_status ? <Badge size="2xsmall">{prettyRaw(d.steadfast_status)}</Badge> : null}
+              </div>
+
+              {/* Courier */}
+              {d.steadfast_tracking_code ? (
+                <Section title="Courier">
+                  <Row k="Tracking"><span className="font-mono">{d.steadfast_tracking_code}</span> <Copy content={d.steadfast_tracking_code} /></Row>
+                  {d.steadfast_consignment_id ? <Row k="Consignment">{d.steadfast_consignment_id}</Row> : null}
+                  {d.steadfast_synced_at ? <Row k="Last synced">{fmtDate(d.steadfast_synced_at).d} {fmtDate(d.steadfast_synced_at).t}</Row> : null}
+                </Section>
+              ) : null}
+
+              {/* Recipient */}
+              <Section title="Deliver to">
+                <div className="text-sm">
+                  <div className="font-medium text-ui-fg-base">{d.customer_name || "—"}</div>
+                  <div className="text-ui-fg-subtle">{d.phone}</div>
+                  <div className="text-ui-fg-subtle">{[d.address_1, d.area, d.district].filter(Boolean).join(", ")}</div>
+                </div>
+              </Section>
+
+              {/* Items */}
+              <Section title={`Items (${d.items.reduce((n, i) => n + i.quantity, 0)})`}>
+                <ul className="flex flex-col gap-2">
+                  {d.items.map((i, idx) => (
+                    <li key={idx} className="flex items-center gap-3">
+                      <span className="size-10 shrink-0 overflow-hidden rounded-md bg-ui-bg-subtle">
+                        {i.thumbnail ? <img src={i.thumbnail} alt="" className="size-full object-cover" /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-ui-fg-base">{i.title}</span>
+                        {i.variant_title ? <span className="block truncate text-xs text-ui-fg-subtle">{i.variant_title}</span> : null}
+                      </span>
+                      <span className="text-sm text-ui-fg-subtle">×{i.quantity}</span>
+                      <span className="w-16 text-right text-sm tabular-nums text-ui-fg-base">{bdt(i.unit_price)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+
+              {/* Totals */}
+              <Section title="Payment (Cash on Delivery)">
+                <Row k="Subtotal">{bdt(d.subtotal)}</Row>
+                <Row k="Shipping">{d.shipping_total === 0 ? "Free" : bdt(d.shipping_total)}</Row>
+                <Row k="Total (COD)"><b>{bdt(d.total)}</b></Row>
+              </Section>
+
+              {d.note ? <Section title="Order note"><Text size="small" className="text-ui-fg-subtle">{d.note}</Text></Section> : null}
+            </div>
+          )}
+        </Drawer.Body>
+        <Drawer.Footer>
+          {d ? (
+            <div className="flex w-full flex-wrap items-center gap-2">
+              {d.steadfast_tracking_code ? (
+                <>
+                  <Button size="small" variant="secondary" onClick={() => onLabel(d.order_id)}>Print label</Button>
+                  <Button size="small" variant="secondary" onClick={() => onSync(d.order_id)} disabled={busy}>Sync status</Button>
+                </>
+              ) : (
+                <Button size="small" variant="primary" onClick={() => onSend(d.order_id)} disabled={busy}>Send to Steadfast</Button>
+              )}
+              <div className="grow" />
+              <StatusMenu onPick={(s) => onMove(d.order_id, s)} exclude={d.workflow_status} disabled={busy} />
+            </div>
+          ) : null}
+        </Drawer.Footer>
+      </Drawer.Content>
+    </Drawer>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Text size="xsmall" weight="plus" className="mb-1.5 uppercase tracking-wide text-ui-fg-muted">{title}</Text>
+      <div className="flex flex-col gap-1">{children}</div>
+    </div>
+  )
+}
+function Row({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-ui-fg-subtle">{k}</span>
+      <span className="flex items-center gap-1.5 text-ui-fg-base">{children}</span>
+    </div>
+  )
+}
+
+function CourierSettingsDrawer({ onClose }: { onClose: () => void }) {
   const [apiKey, setApiKey] = useState("")
   const [secretKey, setSecretKey] = useState("")
   const [enabled, setEnabled] = useState(false)
   const [info, setInfo] = useState<{ api_key_masked: string; secret_key_masked: string } | null>(null)
-  const [balance, setBalance] = useState<string>("")
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    api("/admin/courier/settings")
-      .then((d) => {
-        setEnabled(Boolean(d.settings?.enabled))
-        setInfo({ api_key_masked: d.settings?.api_key_masked ?? "", secret_key_masked: d.settings?.secret_key_masked ?? "" })
-      })
-      .catch(() => {})
+    api("/admin/courier/settings").then((d) => {
+      setEnabled(Boolean(d.settings?.enabled))
+      setInfo({ api_key_masked: d.settings?.api_key_masked ?? "", secret_key_masked: d.settings?.secret_key_masked ?? "" })
+    }).catch(() => {})
   }, [])
 
   async function save() {
@@ -315,8 +584,7 @@ function CourierSettings({ onClose }: { onClose: () => void }) {
       if (secretKey.trim()) body.secret_key = secretKey.trim()
       const d = await api("/admin/courier/settings", { method: "POST", body: JSON.stringify(body) })
       setInfo({ api_key_masked: d.settings?.api_key_masked ?? "", secret_key_masked: d.settings?.secret_key_masked ?? "" })
-      setApiKey("")
-      setSecretKey("")
+      setApiKey(""); setSecretKey("")
       toast.success("Courier settings saved")
     } catch (e: any) {
       toast.error(e?.message || "Could not save.")
@@ -325,44 +593,32 @@ function CourierSettings({ onClose }: { onClose: () => void }) {
     }
   }
 
-  async function checkBalance() {
-    try {
-      const d = await api("/admin/courier/balance")
-      setBalance(`৳${Number(d.balance ?? 0).toLocaleString("en-US")}`)
-    } catch (e: any) {
-      toast.error(e?.message || "Could not fetch balance.")
-    }
-  }
-
   return (
-    <div className="bg-ui-bg-subtle px-6 py-5">
-      <div className="flex items-center justify-between">
-        <Heading level="h2">Steadfast courier</Heading>
-        <Button size="small" variant="transparent" onClick={onClose}>Close</Button>
-      </div>
-      <div className="mt-3 grid max-w-xl gap-3">
-        <div className="grid gap-1.5">
-          <Label size="small">Api-Key {info?.api_key_masked ? <span className="text-ui-fg-muted">(saved {info.api_key_masked})</span> : null}</Label>
-          <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste to update" autoComplete="off" />
-        </div>
-        <div className="grid gap-1.5">
-          <Label size="small">Secret-Key {info?.secret_key_masked ? <span className="text-ui-fg-muted">(saved {info.secret_key_masked})</span> : null}</Label>
-          <Input type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder="Paste to update" autoComplete="off" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-          <Label size="small">Enable courier actions</Label>
-        </div>
-        <div className="flex items-center gap-2">
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <Drawer.Content>
+        <Drawer.Header><Drawer.Title>Steadfast courier</Drawer.Title></Drawer.Header>
+        <Drawer.Body className="flex flex-col gap-4">
+          <div className="grid gap-1.5">
+            <Label size="small">Api-Key {info?.api_key_masked ? <span className="text-ui-fg-muted">(saved {info.api_key_masked})</span> : null}</Label>
+            <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste to update" autoComplete="off" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label size="small">Secret-Key {info?.secret_key_masked ? <span className="text-ui-fg-muted">(saved {info.secret_key_masked})</span> : null}</Label>
+            <Input type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder="Paste to update" autoComplete="off" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={enabled} onCheckedChange={setEnabled} />
+            <Label size="small">Enable courier actions</Label>
+          </div>
+          <Text size="xsmall" className="text-ui-fg-muted">
+            Keys are stored in the database and never shown again in full. Get them from the Steadfast merchant portal → API.
+          </Text>
+        </Drawer.Body>
+        <Drawer.Footer>
           <Button size="small" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
-          <Button size="small" variant="secondary" onClick={checkBalance}>Check balance</Button>
-          {balance ? <Text size="small">Balance: {balance}</Text> : null}
-        </div>
-        <Text size="xsmall" className="text-ui-fg-muted">
-          Keys are stored in the database and never shown again in full. Get them from the Steadfast merchant portal → API.
-        </Text>
-      </div>
-    </div>
+        </Drawer.Footer>
+      </Drawer.Content>
+    </Drawer>
   )
 }
 
@@ -371,4 +627,4 @@ export const config = defineRouteConfig({
   icon: ShoppingBag,
 })
 
-export default OrdersPage
+export default OrderManagerPage

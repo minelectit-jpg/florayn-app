@@ -200,19 +200,20 @@ export function projectManagedOrder(order: any, op: OrderOpRow | undefined) {
 export type ManagedOrder = ReturnType<typeof projectManagedOrder>
 
 /**
- * List orders for one workflow tab, newest first, paginated. Reads the op rows
- * for that status (indexed), then hydrates the matching orders.
+ * List orders for one workflow tab (or "all"), newest first, paginated. Reads
+ * the op rows for that status (indexed), then hydrates the matching orders.
  */
 export async function listOrdersForStatus(
   container: any,
-  status: WorkflowStatus,
+  status: WorkflowStatus | "all",
   opts: { limit?: number; offset?: number } = {}
 ): Promise<{ orders: ManagedOrder[]; count: number }> {
   const svc = opsService(container)
   const take = Math.min(Math.max(1, opts.limit ?? 50), 200)
   const skip = Math.max(0, opts.offset ?? 0)
+  const filter = status === "all" ? {} : { workflow_status: status }
   const [ops, count]: [OrderOpRow[], number] = await svc.listAndCountOrderOps(
-    { workflow_status: status },
+    filter,
     { order: { created_at: "DESC" }, take, skip }
   )
   const ids = ops.map((op) => op.order_id)
