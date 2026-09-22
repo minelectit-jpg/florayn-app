@@ -17,14 +17,14 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     }
     const { data: products } = await query.graph({ entity: "product", filters: { handle, status: "published" }, fields: [
       "id", "variants.id", "variants.manage_inventory", "variants.allow_backorder",
-      "variants.inventory_items.required_quantity", "variants.inventory_items.inventory_item.location_levels.stocked_quantity",
-      "variants.inventory_items.inventory_item.location_levels.reserved_quantity",
+      "variants.inventory_items.required_quantity", "variants.inventory_items.inventory.location_levels.stocked_quantity",
+      "variants.inventory_items.inventory.location_levels.reserved_quantity",
     ] })
     const stock: Record<string, number> = {}
     for (const v of (products[0] as any)?.variants ?? []) {
       if (!v.manage_inventory || v.allow_backorder) continue
       const available = (v.inventory_items ?? []).map((item: any) => {
-        const total = (item.inventory_item?.location_levels ?? []).reduce((n: number, l: any) => n + Math.max(0, Number(l.stocked_quantity) - Number(l.reserved_quantity)), 0)
+        const total = (item.inventory?.location_levels ?? []).reduce((n: number, l: any) => n + Math.max(0, Number(l.stocked_quantity) - Number(l.reserved_quantity)), 0)
         return Math.floor(total / Math.max(1, Number(item.required_quantity ?? 1)))
       })
       stock[`variant:${v.id}`] = available.length ? Math.min(...available) : 0

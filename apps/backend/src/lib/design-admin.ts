@@ -170,10 +170,10 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
       "variants.sku",
       "variants.metadata",
       "variants.title", "variants.prices.amount", "variants.prices.currency_code", "variants.prices.rules_count", "variants.prices.price_list_id", "variants.prices.min_quantity", "variants.prices.max_quantity",
-      "variants.inventory_items.inventory_item.id", "variants.inventory_items.inventory_item.metadata",
-      "variants.inventory_items.inventory_item.location_levels.location_id",
-      "variants.inventory_items.inventory_item.location_levels.stocked_quantity",
-      "variants.inventory_items.inventory_item.location_levels.reserved_quantity",
+      "variants.inventory_items.inventory.id", "variants.inventory_items.inventory.metadata",
+      "variants.inventory_items.inventory.location_levels.location_id",
+      "variants.inventory_items.inventory.location_levels.stocked_quantity",
+      "variants.inventory_items.inventory.location_levels.reserved_quantity",
       "variants.options.option_id",
       "variants.options.value",
     ],
@@ -208,10 +208,10 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
         options: Object.fromEntries((v.options ?? []).map((o: any) => [optTitleById.get(o.option_id) ?? o.option_id, o.value])),
         caseTypeSlug: v.metadata?.case_type_slug ?? null,
         deviceSlug: v.metadata?.device_slug ?? null,
-        inventory: (v.inventory_items ?? []).flatMap((link: any) => link.inventory_item ? [{
-          id: link.inventory_item.id,
-          shared: Boolean(link.inventory_item.metadata?.is_blank),
-          levels: (link.inventory_item.location_levels ?? []).map((l: any) => ({ location_id: l.location_id, stocked: Number(l.stocked_quantity), reserved: Number(l.reserved_quantity) })),
+        inventory: (v.inventory_items ?? []).flatMap((link: any) => link.inventory ? [{
+          id: link.inventory.id,
+          shared: Boolean(link.inventory.metadata?.is_blank),
+          levels: (link.inventory.location_levels ?? []).map((l: any) => ({ location_id: l.location_id, stocked: Number(l.stocked_quantity), reserved: Number(l.reserved_quantity) })),
         }] : []),
       }
     })

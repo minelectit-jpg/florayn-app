@@ -83,7 +83,7 @@ test("regular inventory endpoint uses the selected published product and exact v
   let read, result
   const scope = { resolve: () => ({ graph: async (q) => { read = plain(q); return { data: [{ variants: [
     { id: "zero", manage_inventory: true, inventory_items: [] },
-    { id: "ready", manage_inventory: true, inventory_items: [{ required_quantity: 2, inventory_item: { location_levels: [{ stocked_quantity: 12, reserved_quantity: 4 }] } }] },
+    { id: "ready", manage_inventory: true, inventory_items: [{ required_quantity: 2, inventory: { location_levels: [{ stocked_quantity: 12, reserved_quantity: 4 }] } }] },
     { id: "untracked", manage_inventory: false },
   ] }] } } }) }
   await GET({ query: { handle: "regular-product" }, scope }, { json: (value) => { result = plain(value) } })
