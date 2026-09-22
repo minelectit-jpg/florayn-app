@@ -1,5 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
+import { readRecommendationSettings } from "../../../../lib/recommendation-settings"
+
 import { CONTENT_MODULE } from "../../../../modules/content"
 import { getFeatureBlocks, getFeaturedPicks } from "../../../../modules/content/config"
 
@@ -10,12 +12,14 @@ import { getFeatureBlocks, getFeaturedPicks } from "../../../../modules/content/
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)
-  const [blocks, picks] = await Promise.all([
+  const [blocks, picks, { settings: recommendationDefaults }] = await Promise.all([
     getFeatureBlocks(service),
     getFeaturedPicks(service),
+    readRecommendationSettings(req.scope),
   ])
 
   res.json({
+    recommendationDefaults,
     featureBlocks: blocks
       .filter((b: any) => b.is_visible)
       .map((b: any) => ({

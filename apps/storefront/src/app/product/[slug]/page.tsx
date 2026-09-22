@@ -4,7 +4,6 @@ import { notFound } from "next/navigation"
 import ProductView from "@/components/product-view"
 import {
   type RecommendedItem,
-  type RecommendedVariant,
 } from "@/components/recommended-for-you"
 import {
   PairsWellWith,
@@ -18,6 +17,7 @@ import {
   getCaseTypes,
   getDeviceCatalog,
   getDeviceFamilyMap,
+  getShopCatalog,
 } from "@/lib/catalog"
 import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { resolveProductPage } from "@/lib/device-page"
@@ -28,6 +28,7 @@ import {
   type StoreProduct,
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
+import { designHandle, productForm, recommendationItem, recommendationVariants } from "@/lib/product-recommendations"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
 import { buildSimpleMatrix, productViewDesigns, productViewMatrix, productViewVariants } from "@/lib/product-view-data"
 
@@ -147,24 +148,38 @@ export default async function ProductPage({ params }: Params) {
     if (!resolved?.matrix.caseTypes.length || !resolved.matrix.devices.length) {
       return [{ products: [] as StoreProduct[] }, {}] as const
     }
-    const collectionId = resolved?.product.collection?.id
-    const designSlug = resolved?.product.metadata?.design_slug as string | undefined
+    const designSlug = resolved.product.metadata?.design_slug as string | undefined
+    const form = productForm(resolved.product)
+    const collectionId = resolved.product.collection?.id
     return Promise.all([
       collectionId
         ? listProducts({ collection_id: [collectionId], limit: 100, fields: POOL_FIELDS }, { pricing: false })
-        : Promise.resolve({ products: [] as StoreProduct[] }),
+        : getShopCatalog().then(async (catalog) => {
+        const handles = catalog.filter((d) => d.forms.includes(form) && d.slug !== designSlug)
+          .slice(0, 12).map((d) => designHandle(d.slug, form))
+        return handles.length ? listProducts({ handle: handles, limit: handles.length, fields: POOL_FIELDS }, { pricing: false }) : { products: [] as StoreProduct[] }
+      }),
       getGalleryVideos(designSlug ?? ""),
     ])
   })
+  const matchingPromise = productPromise.then(async (resolved) => {
+    const design = resolved?.product.metadata?.design_slug
+    if (typeof design !== "string") return [] as StoreProduct[]
+    const form = productForm(resolved!.product)
+    const handles = ["phone", "airpods", "watch", "wallet"].filter((f) => f !== form).map((f) => designHandle(design, f))
+    const { products } = await listProducts({ handle: handles, limit: handles.length, fields: POOL_FIELDS }, { pricing: false })
+    return products.filter((p) => p.metadata?.design_slug === design && productForm(p) !== form)
+  })
   const picksPromise = Promise.all([sectionsPromise, productPromise]).then(async ([{ featuredPicks }, resolved]) => {
     if (!featuredPicks.length || !resolved?.matrix.caseTypes.length || !resolved.matrix.devices.length) return [] as StoreProduct[]
+    const handles = featuredPicks.slice(0, 32).map((handle) => designHandle(handle, productForm(resolved.product)))
     const { products } = await listProducts({
-      handle: featuredPicks,
-      limit: featuredPicks.length,
+      handle: handles,
+      limit: handles.length,
       fields: POOL_FIELDS,
     }, { pricing: false })
     const byHandle = new Map(products.map((p) => [p.handle, p]))
-    return featuredPicks
+    return handles
       .map((handle) => byHandle.get(handle))
       .filter((p): p is StoreProduct => Boolean(p))
   })
@@ -236,7 +251,7 @@ export default async function ProductPage({ params }: Params) {
           designData={productViewDesigns([], [])}
           bundleConfig={null}
           caseTypeRecords={[]}
-          bundleAirpods={null}
+          matchingProduct={null}
           shipping={<ShippingNote />}
           tabs={
             <ProductTabs
@@ -258,9 +273,10 @@ export default async function ProductPage({ params }: Params) {
     )
   }
 
-  const [[poolResult, galleryVideos], pickedProducts] = await Promise.all([
+  const [[poolResult, galleryVideos], pickedProducts, matchingProducts] = await Promise.all([
     relatedPromise,
     picksPromise,
+    matchingPromise,
   ])
 
   /*
@@ -327,137 +343,31 @@ export default async function ProductPage({ params }: Params) {
   // than showing ৳0 - an accepted trade for the handful of Alcantara designs.
   for (const p of pool) applyCaseTypePrices(p, priceByCaseType)
 
-  const otherPhoneDesigns = pool.filter(
-    (p) =>
-      p.metadata?.form === "phone" && p.metadata?.design_slug !== designSlug
-  )
-
-  // Picks also carry a precomputed card. Keep their existing pricing, then
-  // share each design's choices across the strips and the pack picker.
-  for (const p of pickedProducts) hydratePoolVariantsFromCard(p)
-  for (const p of pickedProducts) applyCaseTypePrices(p, priceByCaseType)
-  const designData = productViewDesigns(otherPhoneDesigns, pickedProducts)
-
-  // MATCHING SET (bundle): this design's AirPods case, its variants keyed by
-  // AirPods model, so the bundle panel can offer the model and price it.
-  const airpodsProduct = pool.find(
-    (p) =>
-      p.metadata?.design_slug === designSlug &&
-      p.metadata?.form === "airpods"
-  )
-  let bundleAirpods: {
-    name: string
-    handle: string
-    variants: Record<string, { variantId: string; price: number; image: string | null }>
-  } | null = null
-  if (airpodsProduct) {
-    const deviceOptId = airpodsProduct.options?.find(
-      (o) => o.title.toLowerCase() === "device"
-    )?.id
-    const variants: Record<
-      string,
-      { variantId: string; price: number; image: string | null }
-    > = {}
-    for (const v of airpodsProduct.variants ?? []) {
-      const dev = deviceOptId
-        ? v.options?.find((o) => o.option_id === deviceOptId)?.value
-        : undefined
-      const price = v.calculated_price?.calculated_amount
-      // Skip unpriced (Alcantara) so the bundle never offers/adds at ৳0.
-      if (!dev || !(typeof price === "number" && price > 0)) continue
-      // Keep the cheapest variant per AirPods model (its base construction).
-      if (variants[dev] && variants[dev].price <= price) continue
-      variants[dev] = {
-        variantId: v.id,
-        price,
-        image:
-          (v.metadata?.images as string[] | undefined)?.[0] ??
-          airpodsProduct.thumbnail ??
-          null,
-      }
-    }
-    if (Object.keys(variants).length) {
-      bundleAirpods = {
-        name: (airpodsProduct.metadata?.design_name as string) ?? designName,
-        handle: airpodsProduct.handle,
-        variants,
-      }
-    }
+  const form = productForm(product)
+  const sameFormDesigns = pool.filter((p) => productForm(p) === form && p.metadata?.design_slug !== designSlug)
+  for (const p of [...pickedProducts, ...matchingProducts]) {
+    hydratePoolVariantsFromCard(p)
+    applyCaseTypePrices(p, priceByCaseType)
   }
+  const designData = productViewDesigns(sameFormDesigns, pickedProducts.filter((p) => productForm(p) === form))
+  const preferences = productSections.recommendationDefaults
+  const companionForm = form === "airpods" ? "phone" : form === "phone" ? "airpods" : null
+  const companion = matchingProducts.find((p) => productForm(p) === companionForm)
+  const matchingVariants = companion ? recommendationVariants(companion, preferences) : []
+  const matchingProduct = companion && matchingVariants.length ? {
+    name: String(companion.metadata?.design_name ?? designName),
+    handle: companion.handle,
+    form: companionForm!,
+    defaultDevice: matchingVariants[0].label,
+    variants: Object.fromEntries(matchingVariants.map((v) => [v.label, { variantId: v.id, price: v.price!, image: v.image ?? null }])),
+  } : null
 
-  // PAIRS WELL WITH: the same design in another form (AirPods case, wallet...).
-  const pairsItems: RelatedProduct[] = pool
-    .filter(
-      (p) =>
-        p.metadata?.design_slug === designSlug && p.handle !== product.handle
-    )
-    .slice(0, 3)
-    .map((p) => ({
-      id: p.id,
-      title: (p.metadata?.design_name as string) ?? p.title,
-      handle: p.handle,
-      thumbnail: p.thumbnail,
-      label: p.subtitle ?? "",
-      price: minPrice(p),
-    }))
-
-  // RECOMMENDED FOR YOU: matching accessories — this same design in every other
-  // form it is printed on (AirPods case, card holder, ring holder…). Auto for
-  // now; admin curation lands later.
-  const formLabelFor = (form?: unknown): string => {
-    switch (String(form ?? "")) {
-      case "airpods":
-        return "AirPods Case"
-      case "wallet":
-        return "Wallet"
-      case "watch":
-        return "Watch Band"
-      case "card":
-        return "Card Holder"
-      default:
-        return "Accessory"
-    }
-  }
-  // Each accessory's selectable models (one entry per device, cheapest kept),
-  // so the card can offer a model picker before adding.
-  const recommendedVariants = (p: StoreProduct): RecommendedVariant[] => {
-    const devOptId = p.options?.find(
-      (o) => o.title.toLowerCase() === "device"
-    )?.id
-    const byLabel = new Map<string, RecommendedVariant>()
-    for (const v of p.variants ?? []) {
-      const label =
-        (devOptId
-          ? v.options?.find((o) => o.option_id === devOptId)?.value
-          : null) ??
-        v.title ??
-        "Default"
-      const price = v.calculated_price?.calculated_amount ?? null
-      const existing = byLabel.get(label)
-      if (
-        !existing ||
-        (price != null && (existing.price == null || price < existing.price))
-      ) {
-        byLabel.set(label, { id: v.id, label, price })
-      }
-    }
-    return [...byLabel.values()]
-  }
-  const recommendedItems: RecommendedItem[] = pool
-    .filter(
-      (p) =>
-        p.metadata?.design_slug === designSlug && p.handle !== product.handle
-    )
-    .slice(0, 8)
-    .map((p) => ({
-      id: p.id,
-      name: (p.metadata?.design_name as string) ?? designName,
-      handle: p.handle,
-      thumbnail: p.thumbnail ?? p.images?.[0]?.url ?? null,
-      formLabel: p.subtitle ?? formLabelFor(p.metadata?.form),
-      price: minPrice(p),
-      variants: recommendedVariants(p),
-    }))
+  const recommendedItems = matchingProducts.map((p) => recommendationItem(p, preferences))
+    .filter((item): item is RecommendedItem => item !== null).slice(0, 8)
+  const pairsItems: RelatedProduct[] = recommendedItems.slice(0, 3).map((item) => ({
+    id: item.id, title: item.name, handle: item.handle, thumbnail: item.thumbnail,
+    label: item.formLabel, price: item.price,
+  }))
 
   const fallbackImages = (product.images ?? []).map((i) => i.url)
 
@@ -503,7 +413,7 @@ export default async function ProductPage({ params }: Params) {
         designData={designData}
         bundleConfig={bundleConfig}
         caseTypeRecords={caseTypes}
-        bundleAirpods={bundleAirpods}
+        matchingProduct={matchingProduct}
         shipping={<ShippingNote />}
         tabs={
           <ProductTabs

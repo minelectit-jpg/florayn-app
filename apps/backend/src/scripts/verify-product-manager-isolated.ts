@@ -1,6 +1,9 @@
+import { GET as getRecommendations, POST as saveRecommendations } from "../api/admin/content/recommendations/route"
+import { GET as publicProductSections } from "../api/store/content/product-sections/route"
+import { RECOMMENDATION_KEY } from "../lib/recommendation-settings"
 import assert from "node:assert/strict"
 import type { ExecArgs } from "@medusajs/framework/types"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import { createSalesChannelsWorkflow, linkSalesChannelsToStockLocationWorkflow, createCartWorkflow } from "@medusajs/medusa/core-flows"
 import { createRegularProductWorkflow, addRegularVariantWorkflow, saveManagedVariantsWorkflow } from "../workflows/product-manager"
 import { createUploadedDesign } from "../lib/create-uploaded-design"
@@ -94,5 +97,28 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   const list = await listLiveDesigns(container, true)
   assert.ok(list.some((row) => row.slug === result.slug && row.kind === "regular"))
   assert.ok(list.some((row) => row.slug === "manager-one-pair" && row.variantCount === 3))
+  // Persist preferences through the real route and core store workflow. No schema change.
+  const stores = container.resolve(Modules.STORE)
+  const [store] = await stores.listStores({}, { take: 1 })
+  assert.ok(store)
+  await stores.updateStores(store.id, { metadata: { ...store.metadata, recommendation_fixture_keep: "preserved" } })
+  let response: any
+  let status = 200
+  const res: any = { json: (data: any) => { response = data; return res }, status: (code: number) => { status = code; return res } }
+  const settings = { phone_model: "Manager Model Two", phone_case_type: "Manager Shell", airpods_model: "Manager Earbuds", airpods_case_type: "Manager Shell" }
+  await saveRecommendations({ scope: container, body: settings } as any, res)
+  assert.equal(status, 200)
+  assert.deepEqual(response.settings, settings)
+  await getRecommendations({ scope: container } as any, res)
+  assert.deepEqual(response.settings, settings)
+  await publicProductSections({ scope: container } as any, res)
+  assert.deepEqual(response.recommendationDefaults, settings)
+  const updatedStore = await stores.retrieveStore(store.id)
+  assert.equal(updatedStore.metadata?.recommendation_fixture_keep, "preserved")
+  assert.deepEqual(updatedStore.metadata?.[RECOMMENDATION_KEY], settings)
+  await saveRecommendations({ scope: container, body: { ...settings, airpods_model: settings.phone_model } } as any, res)
+  assert.equal(status, 400)
+  assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[RECOMMENDATION_KEY], settings)
+  progress("persisted matching defaults, public projection, metadata preservation and family validation passed")
   container.resolve(ContainerRegistrationKeys.LOGGER).info("PRODUCT_MANAGER_INTEGRATION_PASS: regular create/edit/append, exact cart variant and price, draft, single phone pair, dynamic catalogs, missing forms, stable IDs and shared-stock duplicate")
 }

@@ -75,7 +75,7 @@ export default function YouWillLove({
       </div>
 
       <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
-        {items.map((item) => {
+        {items.filter((item) => !device || !caseType || !!item.variantByPair[`${device}|${caseType}`]).map((item) => {
           const pair = device && caseType ? `${device}|${caseType}` : ""
           const image =
             item.imageByPair[pair] ??

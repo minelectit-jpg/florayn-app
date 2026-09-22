@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
-import type { BundleAirpods } from "@/components/pack-selector"
+import type { MatchingProduct } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import LazyReveal from "@/components/lazy-reveal"
 import ProductBuyBox from "@/components/product-buy-box"
@@ -48,7 +48,7 @@ export default function ProductView({
   designData,
   bundleConfig,
   caseTypeRecords,
-  bundleAirpods,
+  matchingProduct,
   shipping,
   tabs,
   pairs,
@@ -85,7 +85,7 @@ export default function ProductView({
   /** Construction records for the pack picker's case-type popup. */
   caseTypeRecords?: CaseTypeRecord[]
   /** This design's AirPods case for the Matching Set bundle, or null. */
-  bundleAirpods?: BundleAirpods | null
+  matchingProduct?: MatchingProduct | null
   shipping?: ReactNode
   tabs: ReactNode
   pairs: ReactNode
@@ -244,7 +244,7 @@ export default function ProductView({
             bundleConfig={bundleConfig ?? null}
             packDesigns={packDesigns ?? []}
             caseTypeRecords={caseTypeRecords ?? []}
-            bundleAirpods={bundleAirpods ?? null}
+            matchingProduct={matchingProduct ?? null}
             thumbnail={items[0]?.url ?? null}
             caseType={caseType}
             device={device}

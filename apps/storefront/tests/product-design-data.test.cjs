@@ -85,7 +85,7 @@ test("every model/case choice keeps its image, price and exact cart variant", ()
     ["variant_0_0", 1200], ["variant_2_3", 2025],
   ])
   assert.equal(result.moreDesignItems[0].handle, "sunburst-phone-case")
-  assert.equal(result.packDesigns[0].handle, "sunburst")
+  assert.equal(result.packDesigns[0].handle, "sunburst-phone-case")
   assert.equal(JSON.stringify(source), before)
 })
 

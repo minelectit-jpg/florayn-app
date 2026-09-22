@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { Tag } from "@medusajs/icons"
 import {
@@ -344,19 +345,9 @@ const BundlesPage = () => {
             />
           </div>
           <div>
-            <Label size="small" htmlFor="ms-airpods">
-              Default AirPods model
-            </Label>
-            <Input
-              id="ms-airpods"
-              value={settings.matching_set_default_airpods}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  matching_set_default_airpods: e.target.value,
-                })
-              }
-            />
+            <Label size="small">Default matching models</Label>
+            <Text size="small" className="text-ui-fg-subtle">Phone and AirPods defaults are shared with Recommended for you.</Text>
+            <Link to="/recommendations" className="text-ui-fg-interactive underline">Edit matching recommendations</Link>
           </div>
         </div>
 

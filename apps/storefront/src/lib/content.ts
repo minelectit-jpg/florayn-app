@@ -1,3 +1,4 @@
+import { DEFAULT_RECOMMENDATIONS, type RecommendationSettings } from "./product-recommendations"
 /**
  * Home page sections, the header menu and the footer, all edited in the admin
  * rather than hardcoded here.
@@ -112,6 +113,7 @@ export type FeatureBlock = {
 }
 
 export type ProductSections = {
+  recommendationDefaults: RecommendationSettings
   /** The "Features" band blocks, in order. */
   featureBlocks: FeatureBlock[]
   /** Hand-picked design handles for "We think you'll love". */
@@ -129,14 +131,15 @@ export async function getProductSections(): Promise<ProductSections> {
       headers: { "x-publishable-api-key": KEY },
       next: { revalidate: 60, tags: ["content", "content:product-sections"] },
     })
-    if (!res.ok) return { featureBlocks: [], featuredPicks: [] }
+    if (!res.ok) return { featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
     const json = (await res.json()) as Partial<ProductSections>
     return {
+      recommendationDefaults: { ...DEFAULT_RECOMMENDATIONS, ...json.recommendationDefaults },
       featureBlocks: json.featureBlocks ?? [],
       featuredPicks: json.featuredPicks ?? [],
     }
   } catch {
-    return { featureBlocks: [], featuredPicks: [] }
+    return { featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
   }
 }
 

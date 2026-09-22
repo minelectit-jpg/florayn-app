@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { PackDesign } from "@/components/choose-design-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
-import PackSelector, { type BundleAirpods } from "@/components/pack-selector"
+import PackSelector, { type MatchingProduct } from "@/components/pack-selector"
 import ProductImage from "@/components/product-image"
 import ShareButton from "@/components/share-button"
 import WishlistButton from "@/components/wishlist-button"
@@ -64,7 +64,7 @@ export default function ProductBuyBox({
   bundleConfig,
   packDesigns,
   caseTypeRecords,
-  bundleAirpods,
+  matchingProduct,
   thumbnail,
   caseType,
   device,
@@ -96,7 +96,7 @@ export default function ProductBuyBox({
   /** Construction records for the pack picker's case-type popup. */
   caseTypeRecords: CaseTypeRecord[]
   /** This design's AirPods case for the Matching Set bundle, or null. */
-  bundleAirpods: BundleAirpods | null
+  matchingProduct: MatchingProduct | null
   thumbnail: string | null
   caseType: string
   device: string
@@ -121,7 +121,7 @@ export default function ProductBuyBox({
   const [openModel, setOpenModel] = useState(false)
   const [qty, setQty] = useState(1)
   const [packMode, setPackMode] = useState(false)
-  const hasOffers = !simple && !!bundleConfig?.settings.is_active && (bundleConfig.tiers.some((tier) => tier.quantity > 1) || ((bundleConfig.settings.matching_set_enabled ?? true) && Object.keys(bundleAirpods?.variants ?? {}).length > 0))
+  const hasOffers = !simple && !!bundleConfig?.settings.is_active && (bundleConfig.tiers.some((tier) => tier.quantity > 1) || ((bundleConfig.settings.matching_set_enabled ?? true) && Object.keys(matchingProduct?.variants ?? {}).length > 0))
   const bundleMode = hasOffers && packMode
   const [buying, setBuying] = useState(false)
   const [state, setState] = useState<AddState>("idle")
@@ -254,7 +254,7 @@ export default function ProductBuyBox({
         }}
         designs={packDesigns}
         caseTypes={caseTypeRecords}
-        bundleAirpods={bundleAirpods}
+        matchingProduct={matchingProduct}
         device={device}
         caseType={caseType}
       />

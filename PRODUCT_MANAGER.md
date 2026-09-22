@@ -95,3 +95,22 @@ Never run this against the deployed database or create customer orders for QA.
 
 Deploy only the new.florayn.com stack. This work does not authorize changes to
 the live florayn.com store. No schema migration is required for this feature.
+
+## Matching recommendations and AirPods
+
+Admin > Matching recommendations chooses the default phone/AirPods model and
+case type for both Recommended for you and Matching Set. Preferences are stored
+in the existing Medusa store metadata under florayn_recommendations, preserving
+other metadata through the core updateStoresWorkflow. No schema migration.
+Existing bundle AirPods defaults are used until these settings are saved.
+
+AirPods Max is a model of the airpods form, using Signature Earbuds; never split
+it into another product/form. More designs, quantity-pack choices and curated
+We think you'll love picks use the current product form. Matching Set switches
+to the other form (phone / airpods), using the same design. Recommended cards
+must update image, price, destination and exact variant ID together. When the
+configured model is unavailable, use an actual priced variant in that category.
+Do not fabricate models, prices or image URLs. Curated design handles resolve to
+the current form before fetching products. Keep the bounded collection query,
+compact shared choices, and exact pair filtering. Admin edits invalidate the
+content domain; recommendations require no new whole-catalog variant reads.

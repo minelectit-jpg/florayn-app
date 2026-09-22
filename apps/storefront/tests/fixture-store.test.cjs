@@ -27,7 +27,7 @@ test("local store fixture revises content and stock independently without alteri
   }
   assert.deepEqual(await get("/__audit/health"), { fixture: true })
   const initialProducts = await get("/store/products")
-  assert.equal(initialProducts.products.length, 3)
+  assert.equal(initialProducts.products.length, 4)
   assert.match(initialProducts.products[0].thumbnail, /^data:image\/svg\+xml,/)
   const initialStock = await get("/store/stock")
   const initialContact = await get("/store/contact-settings")

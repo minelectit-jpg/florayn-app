@@ -21,7 +21,9 @@ type BaseItem = {
   designName: string
   thumbnail: string | null
 }
-export type BundleAirpods = {
+export type MatchingProduct = {
+  form?: string
+  defaultDevice?: string
   name: string
   handle: string
   variants: Record<string, { variantId: string; price: number; image: string | null }>
@@ -33,7 +35,7 @@ export default function PackSelector({
   baseItem,
   designs,
   caseTypes,
-  bundleAirpods,
+  matchingProduct,
   device,
   caseType,
   bundleMode,
@@ -45,7 +47,7 @@ export default function PackSelector({
   baseItem: BaseItem
   designs: PackDesign[]
   caseTypes: CaseTypeRecord[]
-  bundleAirpods: BundleAirpods | null
+  matchingProduct: MatchingProduct | null
   device: string
   caseType: string
   bundleMode: boolean
@@ -56,8 +58,8 @@ export default function PackSelector({
   const groupId = useId()
   const [offer, setOffer] = useState("")
   const [picked, setPicked] = useState<PickedDesign[]>([])
-  const [airpodsOverride, setAirpodsOverride] = useState("")
-  const [openAirpods, setOpenAirpods] = useState(false)
+  const [matchingOverride, setMatchingOverride] = useState("")
+  const [openMatching, setOpenMatching] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState("")
@@ -96,16 +98,17 @@ export default function PackSelector({
     return caseTypes.filter((c) => have.has(c.name))
   }, [caseTypes, designs, caseType])
   const s = config?.settings
-  const airpodsOptions = Object.keys(bundleAirpods?.variants ?? {})
-  const matchingAvailable = (s?.matching_set_enabled ?? true) && airpodsOptions.length > 0
-  const airpodsDevice = airpodsOptions.includes(airpodsOverride)
-    ? airpodsOverride
-    : airpodsOptions.includes(s?.matching_set_default_airpods || "AirPods Pro 3")
-      ? s?.matching_set_default_airpods || "AirPods Pro 3"
-      : (airpodsOptions[0] ?? "")
-  const airpodsVariant = bundleAirpods?.variants[airpodsDevice]
+  const matchingOptions = Object.keys(matchingProduct?.variants ?? {})
+  const matchingAvailable = (s?.matching_set_enabled ?? true) && matchingOptions.length > 0
+  const defaultMatchingDevice = matchingProduct?.defaultDevice ?? s?.matching_set_default_airpods ?? "AirPods Pro 3"
+  const matchingDevice = matchingOptions.includes(matchingOverride)
+    ? matchingOverride
+    : matchingOptions.includes(defaultMatchingDevice)
+      ? defaultMatchingDevice
+      : (matchingOptions[0] ?? "")
+  const matchingVariant = matchingProduct?.variants[matchingDevice]
   const matchingTitle = s?.matching_set_title || "The Matching Set"
-  const matchingSubtotal = unitPrice + (airpodsVariant?.price ?? 0)
+  const matchingSubtotal = unitPrice + (matchingVariant?.price ?? 0)
   const matchingDiscount = Math.min(Math.max(0, s?.matching_set_discount ?? 250), matchingSubtotal)
   const matchingQuote = {
     subtotal: matchingSubtotal,
@@ -145,18 +148,18 @@ export default function PackSelector({
       setModalOpen(true)
       return
     }
-    if (matchingOn && !airpodsVariant) return
+    if (matchingOn && !matchingVariant) return
     addLock.current = true
     setAdding(true)
     setError("")
     try {
       const extra = matchingOn
-        ? [{ variantId: airpodsVariant!.variantId, quantity: 1 }]
+        ? [{ variantId: matchingVariant!.variantId, quantity: 1 }]
         : picked.map((p) => ({ variantId: p.variantId, quantity: 1 }))
       await addMany([{ variantId: baseItem.variantId, quantity: 1 }, ...extra], {
         productTitle: matchingOn ? matchingTitle : `${tier!.quantity}-pack`,
         variantTitle: matchingOn
-          ? `${baseItem.designName} phone + ${airpodsDevice}`
+          ? `${baseItem.designName}: ${device} + ${matchingDevice}`
           : [baseItem.designName, ...picked.map((p) => p.designName)].join(" + "),
         unitPrice: quote.total,
         thumbnail: baseItem.thumbnail,
@@ -300,27 +303,27 @@ export default function PackSelector({
                   <div className="fl-offer__items">
                     {baseRow}
                     <ItemRow
-                      image={airpodsVariant?.image ?? null}
-                      title={`${baseItem.designName} AirPods case`}
+                      image={matchingVariant?.image ?? null}
+                      title={`${matchingProduct?.name ?? baseItem.designName} ${matchingProduct?.form === "phone" ? "phone case" : "AirPods case"}`}
                       detail={
                         <button
                           type="button"
-                          onClick={() => setOpenAirpods(true)}
+                          onClick={() => setOpenMatching(true)}
                           aria-haspopup="dialog"
                           className="fl-offer__model"
                         >
-                          {airpodsDevice}
+                          {matchingDevice}
                           <ChevronDown size={13} />
                         </button>
                       }
-                      price={airpodsVariant?.price ?? 0}
+                      price={matchingVariant?.price ?? 0}
                     />
                   </div>
                 ) : (
                   <div className="fl-offer__preview" aria-hidden="true">
                     <MiniImage src={baseItem.thumbnail} />
                     <Plus size={14} />
-                    <MiniImage src={airpodsVariant?.image ?? null} />
+                    <MiniImage src={matchingVariant?.image ?? null} />
                   </div>
                 )}
               </OfferCard>
@@ -399,15 +402,15 @@ export default function PackSelector({
         slotLabel={tier ? `${1 + picked.length}/${tier.quantity}` : undefined}
       />
       <ModelDrawer
-        open={openAirpods}
-        onOpenChange={setOpenAirpods}
-        items={airpodsOptions.map((name) => ({ value: name, label: name, group: "AirPods" }))}
-        current={airpodsDevice}
+        open={openMatching}
+        onOpenChange={setOpenMatching}
+        items={matchingOptions.map((name) => ({ value: name, label: name, group: matchingProduct?.form === "phone" ? "Phone models" : "AirPods" }))}
+        current={matchingDevice}
         onSelect={(name) => {
-          setAirpodsOverride(name)
-          setOpenAirpods(false)
+          setMatchingOverride(name)
+          setOpenMatching(false)
         }}
-        title="Select AirPods"
+        title={matchingProduct?.form === "phone" ? "Select phone model" : "Select AirPods"}
       />
     </section>
   )

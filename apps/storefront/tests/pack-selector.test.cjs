@@ -23,7 +23,7 @@ function load(relative) {
 }
 const Selector = load("components/pack-selector.tsx").default
 const config = { settings: { is_active: true, heading: "Your custom pack heading", matching_set_enabled: true, matching_set_discount: 250 }, tiers: [{ id: "two", quantity: 2, discount_amount: 300, min_pct: 8, max_pct: 12, badge: "Owner's badge" }] }
-const props = { config, unitPrice: 1950, baseItem: { handle: "design", variantId: "phone-id", designName: "Design", thumbnail: null }, designs: [], caseTypes: [], bundleAirpods: { name: "Design AirPods", handle: "design-airpods", variants: { "AirPods Pro 3": { variantId: "airpods-id", price: 750, image: null } } }, device: "iPhone", caseType: "Armor", bundleMode: true, onModeChange: () => {}, soldOut: false }
+const props = { config, unitPrice: 1950, baseItem: { handle: "design", variantId: "phone-id", designName: "Design", thumbnail: null }, designs: [], caseTypes: [], matchingProduct: { name: "Design AirPods", handle: "design-airpods", variants: { "AirPods Pro 3": { variantId: "airpods-id", price: 750, image: null } } }, device: "iPhone", caseType: "Armor", bundleMode: true, onModeChange: () => {}, soldOut: false }
 const render = (overrides = {}) => renderToStaticMarkup(React.createElement(Selector, { ...props, ...overrides }))
 
 test("single purchase mode does not render bundle item requests or a competing bundle CTA", () => {
@@ -55,4 +55,20 @@ test("sold-out base variants cannot be added through the bundle control", () => 
 test("disabled offers and empty offer configurations render no purchase switch", () => {
   assert.equal(render({ config: { ...config, settings: { ...config.settings, is_active: false } } }), "")
   assert.equal(render({ config: { ...config, tiers: [], settings: { ...config.settings, matching_set_enabled: false } } }), "")
+})
+
+
+test("AirPods matching set offers the configured phone model and totals one phone plus one AirPods case", () => {
+  const html = render({ config: { ...config, tiers: [] }, unitPrice: 750,
+    baseItem: { handle: "design-airpods", variantId: "max-id", designName: "Design", thumbnail: null },
+    device: "AirPods Max", caseType: "Signature Earbuds",
+    matchingProduct: { name: "Design", handle: "design", form: "phone", defaultDevice: "iPhone 17 Pro Max", variants: {
+      "iPhone 12": { variantId: "old-id", price: 1400, image: null },
+      "iPhone 17 Pro Max": { variantId: "latest-id", price: 1400, image: null },
+    } },
+  })
+  assert.match(html, /Design phone case/)
+  assert.match(html, /iPhone 17 Pro Max/)
+  assert.match(html, /1,900\.00/)
+  assert.doesNotMatch(html, /Design AirPods case|1,250\.00/)
 })

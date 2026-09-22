@@ -114,7 +114,7 @@ export type ProductDesignData = {
 }
 
 export function productViewDesigns(
-  otherPhoneDesigns: StoreProduct[],
+  sameFormDesigns: StoreProduct[],
   pickedProducts: StoreProduct[]
 ): ProductDesignData {
   const data: ProductDesignData = {
@@ -142,7 +142,7 @@ export function productViewDesigns(
       id: product.id,
       title: product.title,
       handle: product.handle,
-      packHandle: (product.metadata?.design_slug as string) ?? product.handle,
+      packHandle: product.handle,
       name: (product.metadata?.design_name as string) ?? product.title,
       thumbnail: product.thumbnail,
       price: amounts.length ? Math.min(...amounts) : null,
@@ -163,7 +163,7 @@ export function productViewDesigns(
     designIndexes.set(key, next)
     return next
   }
-  data.packs = otherPhoneDesigns.map(add)
+  data.packs = sameFormDesigns.map(add)
   data.more = data.packs.slice(0, 12)
   data.featured = pickedProducts.map(add)
   return data

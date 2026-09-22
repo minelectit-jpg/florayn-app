@@ -68,7 +68,7 @@ export function MoreDesigns({
             </div>
           </li>
         ) : null}
-        {items.map((item) => {
+        {items.filter((item) => !device || !caseType || !!item.imageByPair?.[`${device}|${caseType}`]).map((item) => {
           const src =
             (device && caseType
               ? item.imageByPair?.[`${device}|${caseType}`]

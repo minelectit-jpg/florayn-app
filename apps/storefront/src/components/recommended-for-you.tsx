@@ -20,6 +20,9 @@ function modelGroup(label: string): string {
 }
 
 export type RecommendedVariant = {
+  image?: string | null
+  href?: string
+  caseType?: string
   id: string
   /** The model/option shown in the picker, e.g. "AirPods Pro", "iPhone 16". */
   label: string
@@ -54,6 +57,8 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
   const selected =
     item.variants.find((v) => v.id === variantId) ?? item.variants[0] ?? null
   const price = selected?.price ?? item.price
+  const image = selected?.image ?? null
+  const href = selected?.href ?? `/product/${item.handle}/`
 
   const modelItems: ModelItem[] = item.variants.map((v) => ({
     value: v.id,
@@ -68,9 +73,9 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
       // add() opens the cart drawer by default.
       await add(selected.id, 1, {
         productTitle: item.name,
-        variantTitle: selected.label,
+        variantTitle: [selected.caseType, selected.label].filter(Boolean).join(" / "),
         unitPrice: selected.price ?? item.price ?? 0,
-        thumbnail: item.thumbnail ?? null,
+        thumbnail: image,
       })
     } catch {
       /* the provider rolls the optimistic add back on failure */
@@ -82,14 +87,14 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
   return (
     <article className="flex h-full flex-col rounded-[12px] border border-line p-3">
       <Link
-        href={`/product/${item.handle}/`}
+        href={href}
         className="block"
         aria-label={`${item.name}, ${item.formLabel}`}
         prefetch={false}
       >
         <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-surface">
           <ProductImage
-            src={item.thumbnail}
+            src={image}
             alt={item.name}
             label={item.name}
             sizes="240px"
@@ -99,11 +104,12 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
       </Link>
 
       <div className="mt-3 flex flex-1 flex-col text-center">
-        <Link href={`/product/${item.handle}/`} className="block" prefetch={false}>
+        <Link href={href} className="block" prefetch={false}>
           <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
             {item.name}
           </h3>
           <p className="mt-0.5 text-[13px] text-ink-muted">{item.formLabel}</p>
+          {item.variants.length === 1 ? <p className="text-xs text-ink-muted">{selected?.label}</p> : null}
         </Link>
 
         <p className="mt-1 text-[15px] font-semibold tabular-nums">

@@ -6,6 +6,7 @@ const image = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www
 const devices = [
   { id: "dev_16", slug: "iphone-16-pro-max", name: "iPhone 16 Pro Max", family: "iphone", brand: "Apple" },
   { id: "dev_17", slug: "iphone-17-pro-max", name: "iPhone 17 Pro Max", family: "iphone", brand: "Apple" },
+  { id: "dev_air_max", slug: "airpods-max", name: "AirPods Max", family: "airpods", brand: "Apple" },
   { id: "dev_air", slug: "airpods-pro-3", name: "AirPods Pro 3", family: "airpods", brand: "Apple" },
 ]
 // devices carries the family the storefront derives each construction's forms
@@ -35,7 +36,7 @@ function makeProduct(slug, title, form = "phone") {
   const card = { pairs: Object.fromEntries(variants.map((v) => [`${v.options[1].value}|${v.options[0].value}`, { variantId: v.id, price: v.calculated_price.calculated_amount, image }])) }
   return { id: `prod_${handle}`, title, handle, description: "Local test product only.", subtitle: form === "phone" ? "Phone Case" : "AirPods Case", thumbnail: image, images: [{ id: `img_${handle}`, url: image }], collection, categories: [], options, variants, metadata: { design_name: title, design_slug: slug, form, card } }
 }
-const products = [makeProduct("audit-bloom", "Audit Bloom"), makeProduct("audit-midnight", "Audit Midnight"), makeProduct("audit-bloom", "Audit Bloom", "airpods")]
+const products = [makeProduct("audit-bloom", "Audit Bloom"), makeProduct("audit-midnight", "Audit Midnight"), makeProduct("audit-bloom", "Audit Bloom", "airpods"), makeProduct("audit-midnight", "Audit Midnight", "airpods")]
 const content = {
   sections: [{ key: "releases", type: "product_carousel", title: "Test products", config: { limit: 5 } }],
   primary: [{ id: "menu_phone", label: "Phone Case", href: "/shop/iphone-17-pro-max/signature/", groups: [] }],
