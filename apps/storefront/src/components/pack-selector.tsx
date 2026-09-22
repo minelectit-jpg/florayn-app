@@ -195,7 +195,8 @@ export default function PackSelector({
           disabled={adding}
           onClick={() => onModeChange(false)}
         >
-          Product only
+          <span className="fl-offers__radio" aria-hidden="true" />
+          <span className="fl-offers__option-label">Product only</span>
         </button>
         <button
           type="button"
@@ -203,7 +204,11 @@ export default function PackSelector({
           disabled={adding}
           onClick={() => onModeChange(true)}
         >
-          Bundle/pack {customBadge || maxSaving > 0 ? <span className="fl-offers__saving">{customBadge || `Up to ${maxSaving}% off`}</span> : <Tag size={14} aria-hidden="true" />}
+          <span className="fl-offers__radio" aria-hidden="true" />
+          <span className="fl-offers__option-label">Bundle/pack</span>
+          {customBadge || maxSaving > 0 ? (
+            <span className="fl-offers__badge">{customBadge || `Up to ${maxSaving}% off`}</span>
+          ) : null}
         </button>
       </div>
       {bundleMode ? (

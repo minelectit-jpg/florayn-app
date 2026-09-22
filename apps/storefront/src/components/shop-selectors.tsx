@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
 
 import CaseTypeModal from "@/components/case-type-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
@@ -87,9 +88,7 @@ export default function ShopSelectors({
           <span className="fl-shop-filter__label">Model</span>
           <span className="fl-shop-filter__value">{deviceName}</span>
         </span>
-        <span aria-hidden="true" className="text-[10px] text-ink-muted">
-          &#9662;
-        </span>
+        <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-ink-muted" />
       </button>
 
       <button
@@ -101,9 +100,7 @@ export default function ShopSelectors({
           <span className="fl-shop-filter__label">Case type</span>
           <span className="fl-shop-filter__value">{caseName}</span>
         </span>
-        <span aria-hidden="true" className="text-[10px] text-ink-muted">
-          &#9662;
-        </span>
+        <ChevronDown size={14} aria-hidden="true" className="shrink-0 text-ink-muted" />
       </button>
 
       {/* Model picker - the shared florayn SELECT MODEL drawer; picking a device

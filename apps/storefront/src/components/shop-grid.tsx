@@ -171,9 +171,12 @@ export default function ShopGrid({
             </ul>
           ) : null}
         </div>
+        {selectors ? (
+          <p className="fl-shop-count">{count} {count === 1 ? "design" : "designs"}</p>
+        ) : null}
       </div>
 
-      <p className="text-[12px] text-ink-muted sm:text-sm">{count} {count === 1 ? "design" : "designs"}</p>
+      {!selectors ? <p className="text-[12px] text-ink-muted sm:text-sm">{count} {count === 1 ? "design" : "designs"}</p> : null}
 
       <div ref={gridRef} className="fl-grid" data-shop-path={routePath}>
         {sorted.map((product, i) => (
