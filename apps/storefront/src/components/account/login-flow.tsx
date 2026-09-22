@@ -62,8 +62,8 @@ export default function LoginFlow() {
         <Link href="/" className="fl-text-link"><ArrowLeft size={16} /> Back to shopping</Link>
         <div className="fl-login__story">
           <p className="eyebrow text-purple-deep">Your Florayn</p>
-          <h1>Good to have<br />you here.</h1>
-          <p>Your favourites, your orders.<br />A little space that’s all yours.</p>
+          <h1>Good to have <br />you here.</h1>
+          <p>Your favourites, your orders. <br />A little space that’s all yours.</p>
         </div>
         <div className="fl-login__benefits">
           <div><Package size={20} /><span><strong>Orders, all together</strong><small>Find your order details in one place.</small></span></div>
