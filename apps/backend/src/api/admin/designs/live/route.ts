@@ -9,6 +9,6 @@ import { listLiveDesigns } from "../../../../lib/design-admin"
  * including uploaded designs.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
-  const designs = await listLiveDesigns(req.scope)
+  const designs = await listLiveDesigns(req.scope, true)
   res.json({ designs, count: designs.length })
 }

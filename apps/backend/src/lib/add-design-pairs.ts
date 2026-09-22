@@ -8,7 +8,7 @@ import {
 import { CATALOG_MODULE } from "../modules/catalog"
 import { CASE_TYPES, type CaseTypeSeed } from "../modules/catalog/data/case-types"
 import { DEVICES, type DeviceFamily } from "../modules/catalog/data/devices"
-import { skuCodeFromSlug, type UploadedPairs } from "./create-uploaded-design"
+import { createUploadedDesign, skuCodeFromSlug, type UploadedPairs } from "./create-uploaded-design"
 import { rebuildCards } from "./rebuild-cards"
 
 const CURRENCY = "bdt"
@@ -37,7 +37,7 @@ export type AddPairsResult = {
  * blank sharing and AirPods remap, but APPENDS: it adds any missing option
  * values first (variants can only reference existing values), then creates only
  * the pairs that are not already variants, then extends the gallery and rebuilds
- * the cards. Forms with no product yet are skipped (create those via upload).
+ * the cards. Missing forms are created without replacing any existing product.
  */
 export async function addPairsToDesign(
   container: any,
@@ -84,7 +84,7 @@ export async function addPairsToDesign(
   const { data: products } = await query.graph({
     entity: "product",
     fields: [
-      "id", "handle", "metadata",
+      "id", "handle", "metadata", "title", "status", "description",
       "images.url",
       "options.id", "options.title", "options.values.id", "options.values.value",
       "variants.id", "variants.options.option_id", "variants.options.value",
@@ -94,6 +94,24 @@ export async function addPairsToDesign(
   const mine = (products ?? []).filter((p: any) => p.metadata?.design_slug === slug)
   if (!mine.length) throw new Error(`No design found for "${slug}".`)
   const productByForm = new Map<ProductForm, any>(mine.map((p: any) => [(p.metadata?.form as ProductForm) ?? "phone", p]))
+  let formsAdded = 0
+  const newFormPairs: UploadedPairs = {}
+  for (const pair of flat.filter((p) => !productByForm.has(p.form))) {
+    newFormPairs[pair.caseTypeSlug] ??= {}
+    newFormPairs[pair.caseTypeSlug][pair.deviceSlug] = pair.images
+  }
+  if (Object.keys(newFormPairs).length) {
+    const first = mine[0]
+    const created = await createUploadedDesign({ container, slug,
+      name: first.metadata?.design_name ?? first.title,
+      theme: first.metadata?.theme ?? null, description: first.description ?? "",
+      status: first.status === "published" ? "published" : "draft",
+      pairs: newFormPairs, blankStock, allowExistingDesign: true,
+    })
+    formsAdded = created.variants
+    for (let i = flat.length - 1; i >= 0; i--) if (!productByForm.has(flat[i].form)) flat.splice(i, 1)
+  }
+  if (!flat.length) return { ok: true, variantsAdded: formsAdded, skipped: 0, skippedForms: [] }
 
   // Price from the (DB-backed) case type: a per-device group override, else flat.
   const priceFor = (caseTypeSlug: string, deviceSlug: string): number => {
@@ -137,7 +155,7 @@ export async function addPairsToDesign(
 
   // --- Per form: add option values, then create the new variants ---
   const skuCode = skuCodeFromSlug(slug)
-  let variantsAdded = 0
+  let variantsAdded = formsAdded
   let skipped = 0
   const skippedForms = new Set<string>()
   const touchedProductIds: string[] = []
@@ -179,6 +197,7 @@ export async function addPairsToDesign(
         skipped += 1
         continue
       }
+      existingPairKeys.add(key)
       neededCtValues.add(ct.name)
       neededDevValues.add(dev.name)
       toCreate.push({ caseTypeSlug, deviceSlug, ctName: ct.name, devName: dev.name, images })
@@ -229,11 +248,14 @@ export async function addPairsToDesign(
     // Extend the product gallery with the new images (versioned URLs already).
     const existingUrls = new Set<string>((product.images ?? []).map((i: any) => i.url))
     const addUrls = [...new Set(toCreate.flatMap((t) => t.images))].filter((u) => !existingUrls.has(u))
-    if (addUrls.length) {
-      await productModule.updateProducts(product.id, {
-        images: [...(product.images ?? []).map((i: any) => ({ url: i.url })), ...addUrls.map((url) => ({ url }))],
-      })
-    }
+    await productModule.updateProducts(product.id, {
+      images: [...(product.images ?? []).map((i: any) => ({ url: i.url })), ...addUrls.map((url) => ({ url }))],
+      metadata: { ...(product.metadata ?? {}), case_type_slugs: [...new Set([
+        ...(product.metadata?.case_type_slugs ?? []),
+        ...[...caseTypeSeedBySlug.values()].filter((c) => ctValueSet.has(c.name)).map((c) => c.slug),
+        ...toCreate.map((p) => remapCt(caseTypeSeedBySlug.get(p.caseTypeSlug)!, form).slug),
+      ])] },
+    })
     touchedProductIds.push(product.id)
   }
 

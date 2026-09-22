@@ -9,6 +9,29 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+  if (req.query.handle !== undefined) {
+    const handle = req.query.handle
+    if (typeof handle !== "string" || handle.length > 200 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
+      res.status(400).json({ message: "Invalid product handle." })
+      return
+    }
+    const { data: products } = await query.graph({ entity: "product", filters: { handle, status: "published" }, fields: [
+      "id", "variants.id", "variants.manage_inventory", "variants.allow_backorder",
+      "variants.inventory_items.required_quantity", "variants.inventory_items.inventory_item.location_levels.stocked_quantity",
+      "variants.inventory_items.inventory_item.location_levels.reserved_quantity",
+    ] })
+    const stock: Record<string, number> = {}
+    for (const v of (products[0] as any)?.variants ?? []) {
+      if (!v.manage_inventory || v.allow_backorder) continue
+      const available = (v.inventory_items ?? []).map((item: any) => {
+        const total = (item.inventory_item?.location_levels ?? []).reduce((n: number, l: any) => n + Math.max(0, Number(l.stocked_quantity) - Number(l.reserved_quantity)), 0)
+        return Math.floor(total / Math.max(1, Number(item.required_quantity ?? 1)))
+      })
+      stock[`variant:${v.id}`] = available.length ? Math.min(...available) : 0
+    }
+    res.json({ stock })
+    return
+  }
   const { data: items } = await query.graph({
     entity: "inventory_item",
     fields: [

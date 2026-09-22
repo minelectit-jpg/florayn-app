@@ -36,8 +36,14 @@ export const PATCH = async (req: MedusaRequest, res: MedusaResponse) => {
     name?: unknown
     theme?: unknown
     status?: unknown
+    description?: unknown
   }
-  const patch: { name?: string; theme?: string; status?: "published" | "draft" } = {}
+  const patch: { name?: string; theme?: string; description?: string; status?: "published" | "draft" } = {}
+  if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim() || body.name.length > 200)) {
+    res.status(400).json({ message: "Enter a product name within 200 characters." })
+    return
+  }
+  if (typeof body.description === "string" && body.description.length <= 20000) patch.description = body.description
   if (typeof body.name === "string") patch.name = body.name
   if (typeof body.theme === "string") patch.theme = body.theme
   if (body.status === "published" || body.status === "draft") patch.status = body.status
@@ -47,6 +53,13 @@ export const PATCH = async (req: MedusaRequest, res: MedusaResponse) => {
   }
 
   try {
+    if (patch.status === "published") {
+      const detail = await getDesignDetail(req.scope, slug)
+      if (!detail || detail.products.some((p) => !p.variants.length || p.variants.some((v) => v.price == null || !(v.images.length || p.images.length)))) {
+        res.status(400).json({ message: "Every product needs variants with prices and images before publishing." })
+        return
+      }
+    }
     const result = await editDesignMeta(req.scope, slug, patch)
     res.json(result)
   } catch (error: any) {
@@ -77,7 +90,7 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   const ids = all
     .filter((p: any) => {
       const bySlug = (p.metadata as any)?.design_slug === slug
-      const byHandle = p.handle === slug || p.handle?.startsWith(`${slug}-`)
+      const byHandle = !p.metadata?.design_slug && p.handle === slug
       return bySlug || byHandle
     })
     .map((p: any) => p.id)

@@ -1,4 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { uploadedPairs, wholeStock } from "../../../../lib/product-manager-input"
 
 import {
   createUploadedDesign,
@@ -21,9 +22,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     skuCode?: string
     blankStock?: number
     pairs?: UploadedPairs
+    status?: "published" | "draft"
+    description?: string
   }
 
-  if (!body.name?.trim()) {
+  if (typeof body.name !== "string" || !body.name.trim() || body.name.length > 200) {
     res.status(400).json({ message: "A design name is required." })
     return
   }
@@ -40,8 +43,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       slug: body.slug,
       theme: body.theme ?? null,
       skuCode: body.skuCode,
-      blankStock: Number.isFinite(body.blankStock) ? Number(body.blankStock) : 10,
-      pairs: body.pairs,
+      blankStock: wholeStock(body.blankStock ?? 10),
+      pairs: uploadedPairs(body.pairs),
+      status: body.status,
+      description: body.description,
     })
     res.json({ ok: true, result })
   } catch (error: any) {

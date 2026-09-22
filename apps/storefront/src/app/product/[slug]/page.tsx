@@ -181,7 +181,7 @@ export default async function ProductPage({ params }: Params) {
     productPromise,
     getDeviceFamilyMap(),
     getDeviceCatalog(),
-    getBlankStock(),
+    productPromise.then((resolved) => getBlankStock(resolved && !(resolved.matrix.caseTypes.length && resolved.matrix.devices.length) ? resolved.product.handle : undefined)),
     getCaseTypes(),
     getBundleConfig(),
     sectionsPromise,

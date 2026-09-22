@@ -209,9 +209,9 @@ export async function getCaseTypes(): Promise<CaseTypeRecord[]> {
  * Shared across every design, so this one number decides sold-out for a
  * (case type, device) everywhere.
  */
-export async function getBlankStock(): Promise<Record<string, number>> {
+export async function getBlankStock(productHandle?: string): Promise<Record<string, number>> {
   const data = await storeFetch<{ stock: Record<string, number> }>(
-    "/store/stock"
+    productHandle ? `/store/stock?handle=${encodeURIComponent(productHandle)}` : "/store/stock"
   )
   return data?.stock ?? {}
 }

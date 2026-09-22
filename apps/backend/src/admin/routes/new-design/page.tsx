@@ -720,7 +720,7 @@ const UploadDesign = ({ onCreated }: { onCreated: () => void }) => {
               name: designName,
               slug,
               theme: theme.trim() || null,
-              blankStock: Number(blankStock) || 10,
+              blankStock: Number(blankStock),
               pairs,
             }),
           })

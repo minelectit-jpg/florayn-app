@@ -131,21 +131,25 @@ export default function ProductBuyBox({
   // and we do not oversell.
   const [liveStock, setLiveStock] = useState(stock)
   useEffect(() => {
+    setLiveStock(stock)
     const base = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL
     const key = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
     if (!base || !key) return
-    fetch(`${base}/store/stock`, { headers: { "x-publishable-api-key": key } })
+    const controller = new AbortController()
+    const query = simple ? `?handle=${encodeURIComponent(productHandle)}` : ""
+    fetch(`${base}/store/stock${query}`, { headers: { "x-publishable-api-key": key }, signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.stock) setLiveStock(d.stock)
       })
       .catch(() => {})
-  }, [])
+    return () => controller.abort()
+  }, [productHandle, simple, stock])
 
   // Shared blank availability. A missing key means the pair is outside the blank
   // system (e.g. a stock not tracked), so treat it as available.
   const availableFor = (ct: string, dev: string) =>
-    liveStock[`${ct}|${dev}`] ?? Infinity
+    liveStock[simple ? `variant:${matrix.variantIdByPair[pairKey(ct, dev)]}` : `${ct}|${dev}`] ?? Infinity
   const selectedOut = availableFor(caseType, device) <= 0
 
   useEffect(() => {

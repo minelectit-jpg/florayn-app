@@ -100,6 +100,10 @@ Medusa integration checks.
 Read `CONTACT.md` before changing the Contact page, its admin editor or FAQ
 content. Keep Contact cache invalidation scoped and preserve editable blanks.
 
+Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
+shared stock or case pricing. Preserve existing IDs and the single storefront
+layout; verify real commerce changes using the isolated Medusa integration CI.
+
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
 ```bash

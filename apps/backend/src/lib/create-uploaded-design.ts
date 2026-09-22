@@ -88,6 +88,9 @@ export async function createUploadedDesign({
   skuCode: skuCodeInput,
   blankStock = 10,
   pairs,
+  status = "published",
+  description,
+  allowExistingDesign = false,
 }: {
   container: any
   name: string
@@ -96,6 +99,10 @@ export async function createUploadedDesign({
   skuCode?: string
   blankStock?: number
   pairs: UploadedPairs
+  status?: "published" | "draft"
+  description?: string
+  /** Internal: append a missing form without recreating existing products. */
+  allowExistingDesign?: boolean
 }): Promise<CreateUploadedDesignResult> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const link = container.resolve(ContainerRegistrationKeys.LINK)
@@ -105,7 +112,13 @@ export async function createUploadedDesign({
   const catalog: any = container.resolve(CATALOG_MODULE)
 
   const cleanName = (name ?? "").trim()
-  if (!cleanName) throw new Error("A design name is required.")
+  if (!cleanName || cleanName.length > 200) throw new Error("Enter a design name within 200 characters.")
+  if (description !== undefined && (typeof description !== "string" || description.length > 20000)) throw new Error("Description must be text within 20,000 characters.")
+  if (theme != null && (typeof theme !== "string" || theme.length > 200)) throw new Error("Collection must be text within 200 characters.")
+  if (slugInput !== undefined && (typeof slugInput !== "string" || slugInput.length > 150)) throw new Error("Product URL must be text within 150 characters.")
+  if (skuCodeInput !== undefined && (typeof skuCodeInput !== "string" || skuCodeInput.length > 100)) throw new Error("SKU code must be text within 100 characters.")
+  if (!Number.isSafeInteger(blankStock) || blankStock < 0) throw new Error("Starting stock must be a whole number of zero or more.")
+  if (!["draft", "published"].includes(status)) throw new Error("Invalid product status.")
   const slug = (slugInput?.trim() ? slugify(slugInput) : slugify(cleanName))
   if (!slug) throw new Error("Could not derive a slug from the design name.")
   const skuCode = (skuCodeInput?.trim() || skuCodeFromSlug(slug)).toUpperCase()
@@ -113,6 +126,9 @@ export async function createUploadedDesign({
   // --- Resolve seeds and normalise the uploaded pairs to known slugs ---
   const caseTypeSeedBySlug = new Map(CASE_TYPES.map((c) => [c.slug, c]))
   const deviceSeedBySlug = new Map(DEVICES.map((d) => [d.slug, d]))
+  const [dbCaseTypes, dbDevices] = await Promise.all([catalog.listCaseTypes({}), catalog.listDevices({})])
+  for (const c of dbCaseTypes as any[]) caseTypeSeedBySlug.set(c.slug, { ...caseTypeSeedBySlug.get(c.slug), ...c })
+  for (const d of dbDevices as any[]) deviceSeedBySlug.set(d.slug, { ...deviceSeedBySlug.get(d.slug), ...d })
 
   // pairs -> flat, validated list, dropping any pair with no images.
   const flat: { caseTypeSlug: string; deviceSlug: string; images: string[] }[] = []
@@ -132,12 +148,28 @@ export async function createUploadedDesign({
     throw new Error("No images were provided for any case type / device.")
   }
 
+  const normalizedPairs = new Set<string>()
+  for (const pair of flat) {
+    const isAirpods = deviceSeedBySlug.get(pair.deviceSlug)?.family === "airpods"
+    const ct = isAirpods && pair.caseTypeSlug === "signature" && caseTypeSeedBySlug.has("signature-earbuds") ? "signature-earbuds" : pair.caseTypeSlug
+    const key = `${ct}|${pair.deviceSlug}`
+    if (normalizedPairs.has(key)) throw new Error("The same effective case type and model were supplied twice.")
+    normalizedPairs.add(key)
+  }
+
   // Already live?
   const existing = await productModule.listProducts(
-    { handle: slug },
-    { select: ["id"] }
+    { handle: [slug, `${slug}-airpods`, `${slug}-watch`, `${slug}-wallet`] },
+    { select: ["id", "handle"] }
   )
-  if (existing.length) {
+  const targetHandles = new Set(flat.map((p) => {
+    const family = deviceSeedBySlug.get(p.deviceSlug)!.family
+    const form = FORM_BY_FAMILY[family]
+    if (!form) throw new Error("This device family is not supported.")
+    const suffix = FORM_SUFFIX[form]
+    return suffix ? `${slug}-${suffix}` : slug
+  }))
+  if (existing.length && (!allowExistingDesign || existing.some((p: any) => targetHandles.has(p.handle)))) {
     throw new Error(`A product with the handle "${slug}" already exists.`)
   }
 
@@ -208,7 +240,6 @@ export async function createUploadedDesign({
     )[0]
 
   // --- Prices: DB case-type price (admin-editable) + seed Alcantara groups ---
-  const dbCaseTypes = await catalog.listCaseTypes({})
   const dbPriceBySlug = new Map<string, number>(
     dbCaseTypes.map((c: any) => [c.slug, c.price])
   )
@@ -308,10 +339,10 @@ export async function createUploadedDesign({
     const ctMap = byForm.get(form)
     if (!ctMap) continue
     // Case types in the store's canonical order; devices in DEVICES order.
-    const formCaseTypes = CASE_TYPES.filter((c) => ctMap.has(c.slug))
+    const formCaseTypes = [...caseTypeSeedBySlug.values()].filter((c) => ctMap.has(c.slug))
     const formDeviceSlugs = new Set<string>()
     for (const devMap of ctMap.values()) for (const d of devMap.keys()) formDeviceSlugs.add(d)
-    const formDevices = DEVICES.filter((d) => formDeviceSlugs.has(d.slug))
+    const formDevices = [...deviceSeedBySlug.values()].filter((d) => formDeviceSlugs.has(d.slug))
     const formFamilies = [...new Set(formDevices.map((d) => d.family))]
     const suffix = FORM_SUFFIX[form]
     const handle = suffix ? `${slug}-${suffix}` : slug
@@ -358,7 +389,8 @@ export async function createUploadedDesign({
       title: form === "phone" ? cleanName : `${cleanName} - ${FORM_LABEL[form]}`,
       handle,
       ...(form === "phone" ? {} : { subtitle: FORM_LABEL[form] }),
-      status: ProductStatus.PUBLISHED,
+      status: status === "draft" ? ProductStatus.DRAFT : ProductStatus.PUBLISHED,
+      ...(description !== undefined ? { description } : {}),
       ...(shippingProfileId ? { shipping_profile_id: shippingProfileId } : {}),
       ...(collectionId ? { collection_id: collectionId } : {}),
       category_ids: [

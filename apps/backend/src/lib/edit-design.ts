@@ -23,6 +23,7 @@ export type DesignMetaPatch = {
   theme?: string
   /** published | draft, applied to every product of the design. */
   status?: "published" | "draft"
+  description?: string
 }
 
 /**
@@ -46,7 +47,7 @@ export async function editDesignMeta(
       { handle: handles },
       { select: ["id", "handle", "status", "title", "metadata"] }
     )
-  ).filter((p: any) => p.metadata?.design_slug === slug)
+  ).filter((p: any) => p.metadata?.design_slug === slug || (!p.metadata?.design_slug && p.handle === slug))
   if (!products.length) throw new Error(`No design found for "${slug}".`)
 
   // Theme -> collection (find or create), only when theme is being set.
@@ -81,13 +82,14 @@ export async function editDesignMeta(
     const u: any = { id: p.id }
     const meta = { ...(p.metadata ?? {}) }
     if (name) {
-      u.title = form === "phone" ? name : `${name} - ${FORM_LABEL[form] ?? "Accessory"}`
+      u.title = !p.metadata?.design_slug || form === "phone" ? name : `${name} - ${FORM_LABEL[form] ?? "Accessory"}`
       meta.design_name = name
     }
     if (themeGiven) meta.theme = themeName || null
     if (name || themeGiven) u.metadata = meta
     if (statusVal) u.status = statusVal
-    if (collectionId) u.collection_id = collectionId
+    if (themeGiven) u.collection_id = collectionId ?? null
+    if (patch.description !== undefined) u.description = patch.description
     return u
   })
   await productModule.updateProducts(updates)

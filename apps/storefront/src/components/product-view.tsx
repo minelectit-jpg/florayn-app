@@ -214,7 +214,7 @@ export default function ProductView({
             the live (case type, device) blank; an untracked pair reads as in
             stock. */}
         {(() => {
-          const n = stock[`${caseType}|${device}`]
+          const n = stock[simple ? `variant:${selectedId}` : `${caseType}|${device}`]
           const inStock = n === undefined || n > 0
           return (
             <p

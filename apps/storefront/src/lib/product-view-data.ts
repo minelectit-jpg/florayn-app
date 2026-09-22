@@ -28,7 +28,8 @@ export function productViewMatrix(matrix: VariantMatrix): ProductVariantMatrix {
 export function buildSimpleMatrix(
   product: StoreProduct
 ): { matrix: ProductVariantMatrix; optionTitle: string | null; values: string[] } {
-  const opt = product.options?.[0]
+  const options = product.options ?? []
+  const opt = options[0]
   const optId = opt?.id
   const DEVICE = ""
   const variants = product.variants ?? []
@@ -36,10 +37,11 @@ export function buildSimpleMatrix(
   const values: string[] = []
   const seen = new Set<string>()
   for (const v of variants) {
-    const value =
-      (optId ? v.options?.find((o) => o.option_id === optId)?.value : null) ??
-      v.title ??
-      "Default"
+    let value = options.length > 1
+      ? options.map((o) => `${o.title}: ${v.options?.find((choice) => choice.option_id === o.id)?.value ?? "—"}`).join(" / ")
+      : (optId ? v.options?.find((o) => o.option_id === optId)?.value : null) ?? v.title ?? "Default"
+    // Labels can contain separators. Never drop a distinct sellable variant.
+    if (options.length > 1 && seen.has(value)) value = `${value} (${v.sku || v.id})`
     if (!seen.has(value)) {
       seen.add(value)
       values.push(value)
@@ -57,7 +59,7 @@ export function buildSimpleMatrix(
       devicesByCaseType: Object.fromEntries(values.map((v) => [v, [DEVICE]])),
       caseTypesByDevice: { [DEVICE]: values },
     },
-    optionTitle: opt?.title ?? null,
+    optionTitle: options.length > 1 ? options.map((o) => o.title).join(" / ") : opt?.title ?? null,
     values,
   }
 }

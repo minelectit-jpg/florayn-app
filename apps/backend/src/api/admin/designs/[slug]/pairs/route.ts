@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
 import { addPairsToDesign } from "../../../../../lib/add-design-pairs"
 import type { UploadedPairs } from "../../../../../lib/create-uploaded-design"
+import { uploadedPairs, wholeStock } from "../../../../../lib/product-manager-input"
 
 /**
  * POST /admin/designs/:slug/pairs { pairs, blankStock? }
@@ -25,8 +26,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const result = await addPairsToDesign(
       req.scope,
       slug,
-      body.pairs,
-      Number.isFinite(body.blankStock) ? Number(body.blankStock) : 10
+      uploadedPairs(body.pairs),
+      wholeStock(body.blankStock ?? 0)
     )
     res.json(result)
   } catch (error: any) {
