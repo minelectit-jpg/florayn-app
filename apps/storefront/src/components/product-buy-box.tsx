@@ -238,6 +238,28 @@ export default function ProductBuyBox({
         {formatPrice(price?.calculated_amount, price?.currency_code)}
       </p>
 
+      {/* Keep the new Bundle/pack control in the original offer position. */}
+      {hasOffers ? (
+      <PackSelector
+        bundleMode={bundleMode}
+        onModeChange={setPackMode}
+        soldOut={selectedOut}
+        config={bundleConfig}
+        unitPrice={price?.calculated_amount ?? 0}
+        baseItem={{
+          handle: productHandle,
+          variantId: selected?.id ?? null,
+          designName,
+          thumbnail,
+        }}
+        designs={packDesigns}
+        caseTypes={caseTypeRecords}
+        bundleAirpods={bundleAirpods}
+        device={device}
+        caseType={caseType}
+      />
+      ) : null}
+
       {/* DEVICE - opens the same florayn SELECT MODEL drawer as the shop, but
           picks the device in place (no navigation). Order matches florayn:
           Device, then More designs, then Case type. Hidden for a simple
@@ -283,6 +305,7 @@ export default function ProductBuyBox({
       </div>
       ) : null}
 
+      {moreDesigns}
 
       {/* Option selector. A simple product (StickPad) shows a compact,
           horizontally scrollable slider of small swatches - no big thumbnails -
@@ -327,7 +350,7 @@ export default function ProductBuyBox({
       matrix.caseTypes.length > 1 ? (
         <section className="mt-6">
           <p className="fl-pdp-label">CASE TYPE</p>
-          <ul className="fl-case-options">
+          <ul className="flex gap-[8px] md:gap-[10px]">
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -335,7 +358,7 @@ export default function ProductBuyBox({
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
-                <li key={ct} className="min-w-0">
+                <li key={ct} className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => onSelectCaseType(ct)}
@@ -350,7 +373,7 @@ export default function ProductBuyBox({
                       (!fits && !isCurrent) || soldOut ? "opacity-40" : "",
                     ].join(" ")}
                   >
-                    <span className="relative block aspect-[5/4] w-full overflow-hidden rounded-t-[9px]">
+                    <span className="relative block aspect-[9/10] w-full overflow-hidden rounded-t-[9px]">
                       <ProductImage
                         src={img}
                         alt={ct}
@@ -358,7 +381,7 @@ export default function ProductBuyBox({
                         sizes="(max-width: 768px) 25vw, 135px"
                       />
                     </span>
-                    <span className="block w-full px-1 py-2 text-center md:px-2">
+                    <span className="block px-1 py-1.5 text-center md:px-2 md:py-2">
                       <span className="block text-[11px] font-semibold leading-tight md:text-[13px]">
                         {ct}
                       </span>
@@ -378,28 +401,8 @@ export default function ProductBuyBox({
         </section>
       ) : null}
 
-      {hasOffers ? (
-      <PackSelector
-        bundleMode={bundleMode}
-        onModeChange={setPackMode}
-        soldOut={selectedOut}
-        config={bundleConfig}
-        unitPrice={price?.calculated_amount ?? 0}
-        baseItem={{
-          handle: productHandle,
-          variantId: selected?.id ?? null,
-          designName,
-          thumbnail,
-        }}
-        designs={packDesigns}
-        caseTypes={caseTypeRecords}
-        bundleAirpods={bundleAirpods}
-        device={device}
-        caseType={caseType}
-      />
-      ) : null}
-
-      <div className="flex justify-end"><ShareButton title={productTitle} /></div>
+      {/* Share - grey link above the cart form, matching florayn. */}
+      <ShareButton title={productTitle} />
 
       {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
       {!bundleMode ? <>
@@ -486,7 +489,6 @@ export default function ProductBuyBox({
       ) : null}
 
       {shipping}
-      {moreDesigns}
     </div>
   )
 }

@@ -60,8 +60,10 @@ regular ecommerce products, the existing bulk uploader, and case-type pricing.
 
 ## Product and shop presentation
 
-The shared product page offers **Product only / Bundle/pack** after the model
-and case-type selectors. Product only is the default. In bundle mode, hide the
+Keep the original product page layout, gallery, title, case-type tiles and
+Device / More designs / Case type order. The **Product only / Bundle/pack**
+control sits below the price in the original offer position. Product only is
+the default. In bundle mode, hide the
 base product's single-item purchase buttons so the customer cannot accidentally
 buy one item while building a pack. Changing the base variant clears the pack.
 

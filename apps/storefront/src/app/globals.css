@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 
 @layer components {
-  .fl-case-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .fl-offers { margin-top: 24px; border: 1px solid var(--color-line); border-radius: 16px; overflow: hidden; }
   .fl-offers__switch { display: grid; grid-template-columns: 1fr 1fr; background: var(--muted); }
   .fl-offers__switch button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 8px; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; }
