@@ -1,6 +1,6 @@
 import { Badge, Button, Container, Heading, Input, Label, Text, Textarea, toast } from "@medusajs/ui"
 import { useEffect, useRef, useState } from "react"
-import { api, post, slugify, Gallery, CatalogCreate, selectClass, useUnsaved, type CatalogOption, type Detail } from "./shared"
+import { api, post, slugify, Gallery, CatalogCreate, ManagerSelect, useUnsaved, type CatalogOption, type Detail } from "./shared"
 
 import ContentPreview from "./content-preview"
 
@@ -103,7 +103,7 @@ export default function CreateProduct({ duplicate, onBack, onCreated }: { duplic
         <CatalogCreate onCreated={catalog} />
         <Text size="small">Prices come from Case Types and stay the same across designs. Only the combinations below will be sold.</Text>
         {pairs.slice(page * 10, page * 10 + 10).map((pair) => <div key={pair.key} className="grid gap-3 rounded-xl border border-ui-border-base p-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><select aria-label="Case type" className={selectClass} value={pair.caseSlug} onChange={(e) => updatePair(pair.key, { caseSlug: e.target.value })}><option value="">Choose case type</option>{cases.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</select><select aria-label="Model" className={selectClass} value={pair.deviceSlug} onChange={(e) => updatePair(pair.key, { deviceSlug: e.target.value })}><option value="">Choose model</option>{devices.map((d) => <option key={d.slug} value={d.slug}>{d.name}</option>)}</select><Button variant="transparent" onClick={() => { setPairs((all) => all.filter((p) => p.key !== pair.key)); setPage(0) }}>Remove combination</Button></div>
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><ManagerSelect aria-label="Case type" value={pair.caseSlug} onValueChange={(value) => updatePair(pair.key, { caseSlug: value })}><option value="">Choose case type</option>{cases.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</ManagerSelect><ManagerSelect aria-label="Model" value={pair.deviceSlug} onValueChange={(value) => updatePair(pair.key, { deviceSlug: value })}><option value="">Choose model</option>{devices.map((d) => <option key={d.slug} value={d.slug}>{d.name}</option>)}</ManagerSelect><Button variant="transparent" onClick={() => { setPairs((all) => all.filter((p) => p.key !== pair.key)); setPage(0) }}>Remove combination</Button></div>
           <Gallery images={pair.images} onChange={(images) => updatePair(pair.key, { images })} slug={slug} onBusy={setUploading} />
         </div>)}
         <Button variant="secondary" onClick={() => { const key = nextKey.current++; setPairs((current) => [...current, { key, caseSlug: "", deviceSlug: "", images: [] }]); setPage(Math.floor(pairs.length / 10)) }}>Add model / case type</Button>
@@ -119,7 +119,7 @@ export default function CreateProduct({ duplicate, onBack, onCreated }: { duplic
         </div> })}
       </>}
       {count > 10 && <div className="flex items-center gap-3"><Button variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button><Text size="small">{page + 1} / {Math.ceil(count / 10)}</Text><Button variant="secondary" disabled={(page + 1) * 10 >= count} onClick={() => setPage((p) => p + 1)}>Next</Button></div>}
-      <div className="flex flex-wrap items-end gap-3 border-t pt-4"><div><Label htmlFor="pm-status">Save as</Label><select id="pm-status" className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}><option value="draft">Draft</option><option value="published">Published</option></select></div><Badge>{count} variant{count === 1 ? "" : "s"}</Badge><Button variant="secondary" onClick={() => { try { payload(); setReview(!review) } catch (error: any) { toast.error(error.message) } }}>Review product</Button><Button isLoading={busy} onClick={save}>{status === "draft" ? "Create draft" : "Publish product"}</Button></div>
+      <div className="flex flex-wrap items-end gap-3 border-t pt-4"><div><Label htmlFor="pm-status">Save as</Label><ManagerSelect id="pm-status" value={status} onValueChange={(value) => setStatus(value)}><option value="draft">Draft</option><option value="published">Published</option></ManagerSelect></div><Badge>{count} variant{count === 1 ? "" : "s"}</Badge><Button variant="secondary" onClick={() => { try { payload(); setReview(!review) } catch (error: any) { toast.error(error.message) } }}>Review product</Button><Button isLoading={busy} onClick={save}>{status === "draft" ? "Create draft" : "Publish product"}</Button></div>
       {review && <ContentPreview name={name} description={description} variants={kind === "design" ? pairs.map((p) => ({ label: [cases.find((c) => c.slug === p.caseSlug)?.name, devices.find((d) => d.slug === p.deviceSlug)?.name].filter(Boolean).join(" / "), images: p.images, price: cases.find((c) => c.slug === p.caseSlug)?.price })) : rows.map((r) => ({ label: Object.values(r.options).join(" / "), images: r.images, price: r.price.trim() ? Number(r.price) : null }))} />}
     </fieldset>
   </Container>

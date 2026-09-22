@@ -54,6 +54,28 @@ regular ecommerce products, the existing bulk uploader, and case-type pricing.
 9. Keep upload/save progress, zero stock, error recovery, duplicate-click guards
    and unsaved-work warnings. API timeouts can mean a save completed: refresh
    before retrying rather than blindly creating the same product again.
+10. Product Manager pickers use the shared Medusa `ManagerSelect`. Do not replace
+    them with unthemed native select menus: Windows can paint white menus with
+    inherited dark-theme text, making their options unreadable.
+
+## Product and shop presentation
+
+The shared product page offers **Product only / Bundle/pack** after the model
+and case-type selectors. Product only is the default. In bundle mode, hide the
+base product's single-item purchase buttons so the customer cannot accidentally
+buy one item while building a pack. Changing the base variant clears the pack.
+
+Bundle headings, tier badges, discount rules and Matching Set content remain
+editable in the existing Admin Bundles page. Render real configured badges;
+never invent best-seller or percentage claims. Unfilled pack slots use the base
+price and must be labelled estimates. Filled mixed-model/construction packs use
+each selected variant's price and exact ID. The cart and checkout still own the
+final promotion calculation. Preserve visible failure feedback and the duplicate
+submission guard. A Matching Set can be available without any quantity tiers.
+
+Shop sorting applies to the displayed page and says so. Do not label catalog
+order as newest without actual creation dates and global ordering. Preserve the
+first eight image preloads and bounded 32-product reads described in PERFORMANCE.md.
 
 ## Verification
 

@@ -1,5 +1,4 @@
 "use client"
-
 import { useState } from "react"
 
 import ProductImage from "@/components/product-image"
@@ -41,16 +40,16 @@ export default function ProductGallery({
           className="order-2 flex shrink-0 gap-[10px] overflow-x-auto lg:order-1 lg:w-[60px] lg:flex-col lg:overflow-visible"
           aria-label="Product images"
         >
-          {items.map((item) => {
+          {items.map((item, index) => {
             const isActive = item.id === active?.id
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   onClick={() => setActiveId(item.id)}
-                  onMouseEnter={() => setActiveId(item.id)}
+
                   aria-current={isActive}
-                  aria-label={item.video ? "Play video" : "Show image"}
+                  aria-label={item.video ? "Play product video" : `Show image ${index + 1}`}
                   className={`relative block size-[60px] overflow-hidden rounded-[8px] border transition-colors ${
                     isActive
                       ? "border-purple"
@@ -81,7 +80,7 @@ export default function ProductGallery({
         </ul>
       ) : null}
 
-      <div className="order-1 min-w-0 flex-1 lg:order-2">
+      <div className="relative order-1 min-w-0 flex-1 lg:order-2">
         {active?.video ? (
           <video
             key={active.id}
@@ -95,18 +94,19 @@ export default function ProductGallery({
             className="aspect-square w-full rounded-[10px] border border-line bg-surface object-contain"
           />
         ) : (
-          <div data-product-hero className="relative aspect-square w-full overflow-hidden rounded-[10px] bg-surface">
+          <div data-product-hero className="relative aspect-square w-full overflow-hidden rounded-[20px] border border-line bg-surface">
             <ProductImage
               src={active?.url ?? null}
               alt={label}
               label={label}
               priority
-              sizes="(max-width: 1024px) 100vw, 540px"
+              sizes={`(max-width: 767px) calc(100vw - 30px), (max-width: 1023px) calc(100vw - 120px), (max-width: 1279px) calc(50vw - ${items.length > 1 ? 150 : 80}px), (max-width: 1419px) calc(100vw - ${items.length > 1 ? 750 : 680}px), ${items.length > 1 ? 670 : 740}px`}
               fillMode="absolute"
               className="absolute inset-0 h-full w-full object-contain"
             />
           </div>
         )}
+        {items.length > 1 ? <span className="pointer-events-none absolute bottom-3 right-3 rounded-full border border-line bg-paper/95 px-3 py-1 text-xs tabular-nums text-ink-muted">{Math.max(0, items.findIndex((item) => item.id === active?.id)) + 1} / {items.length}</span> : null}
       </div>
     </div>
   )

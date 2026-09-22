@@ -218,8 +218,8 @@ export default async function ShopView({
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="sr-only">{heading}</h1>
+      <header className="grid items-end gap-5 border-b border-line pb-6 lg:grid-cols-[1fr_1.2fr]">
+        <div><p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-ink-muted">Find your favourite</p><h1 className="text-[1.65rem] font-semibold leading-tight tracking-tight sm:text-3xl">{heading}</h1><p className="mt-2 text-sm text-ink-muted">Choose your model, pick your finish, make it yours.</p></div>
 
         <ShopSelectors
           deviceSlug={device?.slug}

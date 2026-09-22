@@ -1,41 +1,26 @@
 "use client"
 
-import { ChevronDown, Plus, X } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Check, ChevronDown, Plus, Tag, X } from "lucide-react"
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 
 import ChooseDesignModal, {
   type PackDesign,
   type PickedDesign,
 } from "@/components/choose-design-modal"
-import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
+import ModelDrawer from "@/components/model-drawer"
 import ProductImage from "@/components/product-image"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
 import { tierPricing, type BundleConfig } from "@/lib/bundles"
 import type { CaseTypeRecord } from "@/lib/catalog"
-import { cn } from "@/lib/utils"
+import { formatPrice } from "@/lib/money"
 
-/** Compact BDT, no decimals - florayn's pack widget style ("2,500৳"). */
-function bdt(n: number): string {
-  return `${Math.round(n).toLocaleString("en-US")}৳`
-}
-
-/**
- * The florayn "GET MORE SAVE MORE" pack selector: Single / 2-pack / 3-pack pills
- * with struck-through and discounted totals, then (for a multi pack) a row of
- * slots the customer fills with any design in the same model + construction, a
- * progress bar, and a CTA that adds the whole pack at once. The discount is
- * shown here from the tier config; the backend re-computes and applies it to the
- * cart, so this is a promise the checkout keeps, never the source of truth.
- */
 type BaseItem = {
   handle: string
   variantId: string | null
   designName: string
   thumbnail: string | null
 }
-
-/** This design's AirPods case, its variants keyed by AirPods model. */
 export type BundleAirpods = {
   name: string
   handle: string
@@ -51,412 +36,352 @@ export default function PackSelector({
   bundleAirpods,
   device,
   caseType,
+  bundleMode,
+  onModeChange,
+  soldOut,
 }: {
   config: BundleConfig | null
   unitPrice: number
   baseItem: BaseItem
-  /** The pool of other designs a pack slot can be filled from. */
   designs: PackDesign[]
-  /** Construction records for the picker's SELECT CASE TYPE popup. */
   caseTypes: CaseTypeRecord[]
-  /** This design's AirPods case for the Matching Set bundle, or null. */
   bundleAirpods: BundleAirpods | null
   device: string
   caseType: string
+  bundleMode: boolean
+  onModeChange: (bundle: boolean) => void
+  soldOut: boolean
 }) {
   const { addMany } = useCart()
-  const [activeQty, setActiveQty] = useState(1)
-  const [bundleOn, setBundleOn] = useState(false)
-  const [airpodsOverride, setAirpodsOverride] = useState<string | null>(null)
-  const [openAirpods, setOpenAirpods] = useState(false)
+  const groupId = useId()
+  const [offer, setOffer] = useState("")
   const [picked, setPicked] = useState<PickedDesign[]>([])
+  const [airpodsOverride, setAirpodsOverride] = useState("")
+  const [openAirpods, setOpenAirpods] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [error, setError] = useState("")
+  const addLock = useRef(false)
 
-  // A device or case-type change re-prices the base, so any pack in progress is
-  // no longer valid - reset to a single of the new selection.
+  // A new base combination must never inherit a pack made for another device.
   useEffect(() => {
-    setActiveQty(1)
-    setBundleOn(false)
     setPicked([])
-  }, [device, caseType])
+    setError("")
+    setModalOpen(false)
+    onModeChange(false)
+  }, [device, caseType, baseItem.variantId, onModeChange])
 
   const tiers = useMemo(
-    () => (config?.tiers ?? []).slice().sort((a, b) => a.quantity - b.quantity),
-    [config]
-  )
-
-  // The models / constructions the picker can offer: every pair that has a
-  // design, with the base item's own first.
-  const deviceOptions = useMemo(() => {
-    const set = new Set<string>([device])
-    for (const d of designs)
-      for (const k of Object.keys(d.variants)) set.add(k.split("|")[0])
-    return [...set]
-  }, [designs, device])
-
-  // The AirPods models for the bundle's SELECT MODEL drawer - AirPods only.
-  const airpodsItems: ModelItem[] = useMemo(
     () =>
-      (bundleAirpods ? Object.keys(bundleAirpods.variants) : []).map((name) => ({
-        value: name,
-        label: name,
-        group: "AirPods",
-      })),
-    [bundleAirpods]
+      (config?.tiers ?? [])
+        .filter((t) => t.quantity > 1)
+        .slice()
+        .sort((a, b) => a.quantity - b.quantity),
+    [config],
   )
-
-  // Only constructions that a design is actually printed in - so the picker's
-  // SELECT CASE TYPE popup never offers a dead option.
+  const deviceOptions = useMemo(
+    () => [
+      ...new Set([
+        device,
+        ...designs.flatMap((d) => Object.keys(d.variants).map((k) => k.split("|")[0])),
+      ]),
+    ],
+    [designs, device],
+  )
   const pickerCaseTypes = useMemo(() => {
-    const have = new Set<string>([caseType])
-    for (const d of designs)
-      for (const k of Object.keys(d.variants)) have.add(k.split("|")[1])
+    const have = new Set([
+      caseType,
+      ...designs.flatMap((d) => Object.keys(d.variants).map((k) => k.split("|")[1])),
+    ])
     return caseTypes.filter((c) => have.has(c.name))
   }, [caseTypes, designs, caseType])
-
-  if (!config || !config.settings.is_active || tiers.length === 0) return null
-
-  // Matching Set (bundle) config, admin-set where present, else florayn defaults.
-  const s = config.settings
-  const ms = {
-    enabled: s.matching_set_enabled ?? true,
-    title: s.matching_set_title || "The Matching Set",
-    subtitle: s.matching_set_subtitle || "One design, two pieces",
-    discount: s.matching_set_discount ?? 250,
-    defaultAirpods: s.matching_set_default_airpods || "AirPods Pro 3",
+  const s = config?.settings
+  const airpodsOptions = Object.keys(bundleAirpods?.variants ?? {})
+  const matchingAvailable = (s?.matching_set_enabled ?? true) && airpodsOptions.length > 0
+  const airpodsDevice = airpodsOptions.includes(airpodsOverride)
+    ? airpodsOverride
+    : airpodsOptions.includes(s?.matching_set_default_airpods || "AirPods Pro 3")
+      ? s?.matching_set_default_airpods || "AirPods Pro 3"
+      : (airpodsOptions[0] ?? "")
+  const airpodsVariant = bundleAirpods?.variants[airpodsDevice]
+  const matchingTitle = s?.matching_set_title || "The Matching Set"
+  const matchingSubtotal = unitPrice + (airpodsVariant?.price ?? 0)
+  const matchingDiscount = Math.min(Math.max(0, s?.matching_set_discount ?? 250), matchingSubtotal)
+  const matchingQuote = {
+    subtotal: matchingSubtotal,
+    discount: matchingDiscount,
+    total: matchingSubtotal - matchingDiscount,
   }
-  const airpodsOptions = bundleAirpods ? Object.keys(bundleAirpods.variants) : []
-  const bundleAvailable = ms.enabled && airpodsOptions.length > 0
-  const airpodsDevice =
-    airpodsOverride && airpodsOptions.includes(airpodsOverride)
-      ? airpodsOverride
-      : airpodsOptions.includes(ms.defaultAirpods)
-        ? ms.defaultAirpods
-        : (airpodsOptions[0] ?? "")
-  const airpodsVariant = bundleAirpods?.variants[airpodsDevice] ?? null
-  const airpodsPrice = airpodsVariant?.price ?? 0
-  const bundleSubtotal = unitPrice + airpodsPrice
-  const bundleDiscount = Math.min(Math.max(0, ms.discount), bundleSubtotal)
-  const bundleTotal = bundleSubtotal - bundleDiscount
-  // Split the saving proportionally so each row shows its own discounted price.
-  const share = (p: number) =>
-    bundleSubtotal > 0 ? Math.round(p - bundleDiscount * (p / bundleSubtotal)) : p
-  const phoneShare = share(unitPrice)
-  const airpodsShare = share(airpodsPrice)
-
-  const activeTier = tiers.find((t) => t.quantity === activeQty) ?? null
-  const filled = 1 + picked.length
-  const needed = activeTier ? Math.max(0, activeTier.quantity - filled) : 0
-
-  // Advertised pill total assumes N of the base price; the real total (once the
-  // slots are full) is the sum of the actual items, discounted by the tier.
-  const filledSubtotal = unitPrice + picked.reduce((s, p) => s + p.price, 0)
-  const packTotal =
-    activeTier && needed === 0
-      ? tierPricing(filledSubtotal / activeTier.quantity, activeTier).total
+  const activeOffer =
+    offer === "matching" && matchingAvailable
+      ? "matching"
+      : tiers.some((t) => t.id === offer)
+        ? offer
+        : (tiers[0]?.id ?? "matching")
+  const matchingOn = activeOffer === "matching"
+  const tier = tiers.find((t) => t.id === activeOffer)
+  const needed = tier ? Math.max(0, tier.quantity - 1 - picked.length) : 0
+  // Unfilled slots use the selected case's price and are explicitly estimates.
+  // Once filled, mixed models/constructions use their actual variant prices.
+  const subtotal = unitPrice + picked.reduce((sum, p) => sum + p.price, 0) + needed * unitPrice
+  const quote = matchingOn
+    ? matchingQuote
+    : tier
+      ? tierPricing(subtotal / tier.quantity, tier)
       : null
 
-  function selectQty(qty: number, tierQ: number | null) {
-    setBundleOn(false)
-    setActiveQty(qty)
-    if (tierQ) setPicked((cur) => cur.slice(0, tierQ - 1))
-    else setPicked([])
+  if (!s?.is_active || (!tiers.length && !matchingAvailable)) return null
+
+  function selectOffer(id: string) {
+    setOffer(id)
+    setError("")
+    const nextTier = tiers.find((t) => t.id === id)
+    setPicked((all) => (nextTier ? all.slice(0, nextTier.quantity - 1) : []))
   }
 
-  async function addBundle() {
-    if (!baseItem.variantId || !airpodsVariant || adding) return
-    setAdding(true)
-    try {
-      await addMany(
-        [
-          { variantId: baseItem.variantId, quantity: 1 },
-          { variantId: airpodsVariant.variantId, quantity: 1 },
-        ],
-        {
-          productTitle: ms.title,
-          variantTitle: `${baseItem.designName} phone + ${airpodsDevice}`,
-          unitPrice: bundleTotal,
-          thumbnail: baseItem.thumbnail,
-        }
-      )
-      setBundleOn(false)
-    } catch {
-      /* the drawer rolls itself back on failure */
+  async function addSelection() {
+    if (addLock.current || !baseItem.variantId || soldOut || !quote) return
+    if (!matchingOn && needed > 0) {
+      setModalOpen(true)
+      return
     }
-    setAdding(false)
-  }
-
-  function onPick(design: PickedDesign) {
-    setPicked((cur) =>
-      activeTier && cur.length < activeTier.quantity - 1 ? [...cur, design] : cur
-    )
-    setModalOpen(false)
-  }
-
-  async function addPack() {
-    if (!activeTier || !baseItem.variantId || needed > 0 || adding) return
+    if (matchingOn && !airpodsVariant) return
+    addLock.current = true
     setAdding(true)
+    setError("")
     try {
-      await addMany(
-        [
-          { variantId: baseItem.variantId, quantity: 1 },
-          ...picked.map((p) => ({ variantId: p.variantId, quantity: 1 })),
-        ],
-        {
-          productTitle: `${activeTier.quantity}-pack`,
-          variantTitle: `${baseItem.designName} + ${picked
-            .map((p) => p.designName)
-            .join(", ")}`,
-          unitPrice: packTotal ?? unitPrice * activeTier.quantity,
-          thumbnail: baseItem.thumbnail,
-        }
-      )
-      selectQty(1, null)
+      const extra = matchingOn
+        ? [{ variantId: airpodsVariant!.variantId, quantity: 1 }]
+        : picked.map((p) => ({ variantId: p.variantId, quantity: 1 }))
+      await addMany([{ variantId: baseItem.variantId, quantity: 1 }, ...extra], {
+        productTitle: matchingOn ? matchingTitle : `${tier!.quantity}-pack`,
+        variantTitle: matchingOn
+          ? `${baseItem.designName} phone + ${airpodsDevice}`
+          : [baseItem.designName, ...picked.map((p) => p.designName)].join(" + "),
+        unitPrice: quote.total,
+        thumbnail: baseItem.thumbnail,
+      })
+      setPicked([])
+      onModeChange(false)
     } catch {
-      /* the drawer rolls itself back on failure */
+      setError("Could not add your selection. Please check your connection and try again.")
+    } finally {
+      addLock.current = false
+      setAdding(false)
     }
-    setAdding(false)
   }
 
-  const excludeHandles = [baseItem.handle, ...picked.map((p) => p.handle)]
+  const baseRow = (
+    <ItemRow
+      image={baseItem.thumbnail}
+      title={baseItem.designName}
+      detail={`${caseType} / ${device}`}
+      price={unitPrice}
+      badge="This item"
+    />
+  )
 
   return (
-    <section className="mt-5">
-      {/* Pills: Single + each tier + Bundle. */}
-      <div
-        className="grid gap-[3px] rounded-[12px] bg-[#f5f3f8] p-[3px]"
-        style={{
-          gridTemplateColumns: `repeat(${tiers.length + 1 + (bundleAvailable ? 1 : 0)}, 1fr)`,
-        }}
-      >
-        <PackPill
-          label="Single"
-          onSelect={() => selectQty(1, null)}
-          active={activeQty === 1 && !bundleOn}
-          now={bdt(unitPrice)}
-        />
-        {tiers.map((t) => {
-          const p = tierPricing(unitPrice, t)
-          return (
-            <PackPill
-              key={t.id}
-              label={`${t.quantity}-pack`}
-              onSelect={() => selectQty(t.quantity, t.quantity)}
-              active={activeQty === t.quantity && !bundleOn}
-              was={p.discount > 0 ? bdt(p.subtotal) : undefined}
-              now={bdt(p.total)}
-              save={p.discount > 0 ? `Save ${bdt(p.discount)}` : undefined}
-            />
-          )
-        })}
-        {bundleAvailable ? (
-          <PackPill
-            label="Bundle"
-            onSelect={() => setBundleOn(true)}
-            active={bundleOn}
-            was={bundleDiscount > 0 ? bdt(bundleSubtotal) : undefined}
-            now={bdt(bundleTotal)}
-            save={bundleDiscount > 0 ? `Save ${bdt(bundleDiscount)}` : undefined}
-          />
-        ) : null}
+    <section id="bundle-pack" className="fl-offers scroll-mt-40" aria-label="Bundle/pack">
+      <div className="fl-offers__switch" role="group" aria-label="Purchase option">
+        <button
+          type="button"
+          aria-pressed={!bundleMode}
+          disabled={adding}
+          onClick={() => onModeChange(false)}
+        >
+          Product only
+        </button>
+        <button
+          type="button"
+          aria-pressed={bundleMode}
+          disabled={adding}
+          onClick={() => onModeChange(true)}
+        >
+          Bundle/pack <Tag size={14} aria-hidden="true" />
+        </button>
       </div>
-
-      {/* Bundle panel: the Matching Set (phone + AirPods). */}
-      {bundleOn && bundleAvailable ? (
-        <div className="mt-3.5">
-          <h4 className="text-[16px] font-semibold text-[#1a1625]">{ms.title}</h4>
-          <p className="mb-2.5 text-[13px] text-ink-muted">{ms.subtitle}</p>
-
-          <div className="space-y-2">
-            {/* Phone case (this item). */}
-            <div className="flex items-center gap-3 rounded-[11px] border border-[#f0eef4] bg-white p-[9px]">
-              <span className="relative block size-11 shrink-0 overflow-hidden rounded-[8px] bg-[#f6f5f8]">
-                <ProductImage
-                  src={baseItem.thumbnail}
-                  alt={baseItem.designName}
-                  label={baseItem.designName}
-                  sizes="44px"
-                />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-[#111]">
-                  {baseItem.designName} — {device} Case
-                </span>
-                <span className="text-[12px] text-ink-muted">This item</span>
-              </span>
-              <span className="flex items-baseline gap-1.5 tabular-nums">
-                {bundleDiscount > 0 ? (
-                  <s className="text-[11px] text-ink-faint">{bdt(unitPrice)}</s>
-                ) : null}
-                <b className="text-[13px] font-semibold text-[#111]">{bdt(phoneShare)}</b>
-              </span>
-            </div>
-
-            {/* AirPods case with a model selector. */}
-            <div className="flex items-center gap-3 rounded-[11px] border border-[#f0eef4] bg-white p-[9px]">
-              <span className="relative block size-11 shrink-0 overflow-hidden rounded-[8px] bg-[#f6f5f8]">
-                <ProductImage
-                  src={airpodsVariant?.image ?? null}
-                  alt={`${baseItem.designName} AirPods`}
-                  label={baseItem.designName}
-                  sizes="44px"
-                />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-[#111]">
-                  {baseItem.designName} — AirPods Case
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOpenAirpods(true)}
-                  aria-haspopup="dialog"
-                  className="mt-0.5 inline-flex items-center gap-1 rounded-[6px] border border-line bg-surface px-1.5 py-[3px] text-[11px] transition-colors hover:border-line-strong"
+      {bundleMode ? (
+        <div className="fl-offers__body">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold">{s.heading || "Choose your bundle or pack"}</h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              Make it yours. Choose your items and see your savings.
+            </p>
+          </div>
+          <fieldset className="grid min-w-0 gap-3" disabled={adding}>
+            <legend className="sr-only">Choose a bundle or pack</legend>
+            {tiers.map((t) => {
+              const active = activeOffer === t.id
+              const preview = active && quote ? quote : tierPricing(unitPrice, t)
+              return (
+                <OfferCard
+                  key={t.id}
+                  name={groupId}
+                  value={t.id}
+                  active={active}
+                  onSelect={() => selectOffer(t.id)}
+                  title={`${t.quantity}-pack`}
+                  description={`Your selected case + ${t.quantity - 1} design${t.quantity > 2 ? "s" : ""} of your choice.`}
+                  badge={t.badge}
+                  quote={preview}
+                  estimated={!active || needed > 0}
                 >
-                  <span className="eyebrow">Model</span>
-                  <span className="font-medium text-ink">{airpodsDevice}</span>
-                  <ChevronDown className="size-3 text-ink-muted" strokeWidth={1.6} />
-                </button>
-              </span>
-              <span className="flex items-baseline gap-1.5 tabular-nums">
-                {bundleDiscount > 0 ? (
-                  <s className="text-[11px] text-ink-faint">{bdt(airpodsPrice)}</s>
-                ) : null}
-                <b className="text-[13px] font-semibold text-[#111]">{bdt(airpodsShare)}</b>
-              </span>
-            </div>
-          </div>
-
-          {/* Total + saving. */}
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-[14px] font-semibold text-[#111]">Total</span>
-            <span className="flex items-baseline gap-2 tabular-nums">
-              {bundleDiscount > 0 ? (
-                <s className="text-[13px] text-ink-faint">{bdt(bundleSubtotal)}</s>
+                  {active ? (
+                    <div className="fl-offer__items">
+                      {baseRow}
+                      {picked.map((p, i) => (
+                        <ItemRow
+                          key={`${p.variantId}-${i}`}
+                          image={p.image}
+                          title={p.designName}
+                          detail={`${p.caseType} / ${p.device}`}
+                          price={p.price}
+                          action={
+                            <button
+                              type="button"
+                              onClick={() => setPicked((all) => all.filter((_, j) => j !== i))}
+                              aria-label={`Remove ${p.designName}`}
+                              className="fl-offer__remove"
+                            >
+                              <X size={16} />
+                            </button>
+                          }
+                        />
+                      ))}
+                      {Array.from({ length: needed }, (_, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          className="fl-offer__add"
+                          onClick={() => setModalOpen(true)}
+                        >
+                          <span>
+                            <Plus size={20} />
+                          </span>
+                          <span>
+                            <strong>Choose item {picked.length + i + 2}</strong>
+                            <small>Explore designs, models & case types</small>
+                          </span>
+                          <Plus size={16} aria-hidden="true" />
+                        </button>
+                      ))}
+                      <p className="mt-3 flex items-center gap-2 text-xs text-ink-muted">
+                        <Check size={14} aria-hidden="true" />
+                        {1 + picked.length} of {t.quantity} items selected
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="fl-offer__preview" aria-hidden="true">
+                      <MiniImage src={baseItem.thumbnail} />
+                      {Array.from({ length: Math.min(t.quantity - 1, 3) }, (_, i) => (
+                        <span key={i} className="contents">
+                          <Plus size={14} />
+                          <span className="fl-offer__empty">{i + 2}</span>
+                        </span>
+                      ))}
+                      {t.quantity > 4 ? <span>+{t.quantity - 4}</span> : null}
+                    </div>
+                  )}
+                </OfferCard>
+              )
+            })}
+            {matchingAvailable ? (
+              <OfferCard
+                name={groupId}
+                value="matching"
+                active={matchingOn}
+                onSelect={() => selectOffer("matching")}
+                title={matchingTitle}
+                description={s.matching_set_subtitle || "One design, two pieces"}
+                quote={matchingQuote}
+              >
+                {matchingOn ? (
+                  <div className="fl-offer__items">
+                    {baseRow}
+                    <ItemRow
+                      image={airpodsVariant?.image ?? null}
+                      title={`${baseItem.designName} AirPods case`}
+                      detail={
+                        <button
+                          type="button"
+                          onClick={() => setOpenAirpods(true)}
+                          aria-haspopup="dialog"
+                          className="fl-offer__model"
+                        >
+                          {airpodsDevice}
+                          <ChevronDown size={13} />
+                        </button>
+                      }
+                      price={airpodsVariant?.price ?? 0}
+                    />
+                  </div>
+                ) : (
+                  <div className="fl-offer__preview" aria-hidden="true">
+                    <MiniImage src={baseItem.thumbnail} />
+                    <Plus size={14} />
+                    <MiniImage src={airpodsVariant?.image ?? null} />
+                  </div>
+                )}
+              </OfferCard>
+            ) : null}
+          </fieldset>
+          {quote ? (
+            <div aria-live="polite">
+              {quote.discount > 0 ? (
+                <p className="fl-offers__saving">
+                  <Tag size={16} aria-hidden="true" />
+                  {!matchingOn && needed > 0 ? "Estimated saving" : "You save"}{" "}
+                  {formatPrice(quote.discount)}
+                </p>
               ) : null}
-              <b className="text-[16px] font-bold text-[#111]">{bdt(bundleTotal)}</b>
-            </span>
-          </div>
-          {bundleDiscount > 0 ? (
-            <div className="mt-2 rounded-[8px] bg-[#f3eefe] px-3 py-2 text-[13px] font-medium text-purple">
-              You save {bdt(bundleDiscount)}
+              <dl className="fl-offers__totals">
+                <div>
+                  <dt>Items subtotal</dt>
+                  <dd>{formatPrice(quote.subtotal)}</dd>
+                </div>
+                {quote.discount > 0 ? (
+                  <div>
+                    <dt>Bundle/pack savings</dt>
+                    <dd>−{formatPrice(quote.discount)}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>{!matchingOn && needed > 0 ? "Estimated total" : "Total"}</dt>
+                  <dd>{formatPrice(quote.total)}</dd>
+                </div>
+              </dl>
+              {!matchingOn && needed > 0 ? (
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                  Estimate uses your selected case price. Your total updates as you choose each
+                  item.
+                </p>
+              ) : null}
             </div>
           ) : null}
-
           <button
             type="button"
-            onClick={addBundle}
-            disabled={adding || !baseItem.variantId || !airpodsVariant}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#1f7a4d] py-3.5 text-[13.5px] font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-[#1a6a42] disabled:opacity-60"
+            onClick={addSelection}
+            disabled={adding || !baseItem.variantId || soldOut || !quote}
+            className="fl-offers__cta"
           >
             {adding ? <Spinner /> : null}
-            Add bundle — {bdt(bundleTotal)}
+            {soldOut
+              ? "Selected case is sold out"
+              : adding
+                ? "Adding to your bag…"
+                : !matchingOn && needed > 0
+                  ? `Choose ${needed} more item${needed > 1 ? "s" : ""}`
+                  : `Add ${matchingOn ? "bundle" : `${tier?.quantity}-pack`} · ${formatPrice(quote?.total ?? 0)}`}
           </button>
+          <p className="mt-2 text-center text-xs text-ink-muted">Delivery calculated at checkout</p>
+          {error ? (
+            <p role="alert" className="mt-3 text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
         </div>
       ) : null}
-
-      {/* Panel: only for a multi pack. */}
-      {activeTier && !bundleOn ? (
-        <div className="mt-3.5">
-          <div className="space-y-2">
-            {/* Base item. */}
-            <div className="flex items-center gap-3 rounded-[11px] border border-[#f0eef4] bg-white p-[9px]">
-              <span className="relative block size-11 shrink-0 overflow-hidden rounded-[8px] bg-[#f6f5f8]">
-                <ProductImage
-                  src={baseItem.thumbnail}
-                  alt={baseItem.designName}
-                  label={baseItem.designName}
-                  sizes="44px"
-                />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-[#111]">
-                  {baseItem.designName}
-                </span>
-                <span className="text-[12px] text-ink-muted">This item</span>
-              </span>
-              <span className="text-[13px] tabular-nums text-[#111]">
-                {bdt(unitPrice)}
-              </span>
-            </div>
-
-            {/* Picked items + one open "add" slot. */}
-            {picked.map((p, i) => (
-              <div
-                key={`${p.handle}-${i}`}
-                className="flex items-center gap-3 rounded-[11px] border border-[#f0eef4] bg-white p-[9px]"
-              >
-                <span className="relative block size-11 shrink-0 overflow-hidden rounded-[8px] bg-[#f6f5f8]">
-                  <ProductImage src={p.image} alt={p.designName} label={p.designName} sizes="44px" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-[#111]">
-                    {p.designName}
-                  </span>
-                  <span className="text-[12px] text-ink-muted">Item {i + 2}</span>
-                </span>
-                <span className="text-[13px] tabular-nums text-[#111]">{bdt(p.price)}</span>
-                <button
-                  type="button"
-                  onClick={() => setPicked((cur) => cur.filter((_, j) => j !== i))}
-                  aria-label={`Remove ${p.designName}`}
-                  className="grid size-6 place-items-center rounded-full text-ink-muted transition-colors hover:bg-[#f2f0f6] hover:text-ink"
-                >
-                  <X className="size-4" strokeWidth={1.6} />
-                </button>
-              </div>
-            ))}
-
-            {/* One open "add" slot per remaining item, so a 3-pack shows both
-                "Add item 2" and "Add item 3". */}
-            {Array.from({ length: needed }).map((_, i) => (
-              <button
-                key={`slot-${filled + i}`}
-                type="button"
-                onClick={() => setModalOpen(true)}
-                className="flex w-full items-center gap-3 rounded-[11px] border border-[#e9e6ef] bg-[#fafafa] p-[9px] text-left transition-colors hover:border-purple/40"
-              >
-                <span className="grid size-11 shrink-0 place-items-center rounded-[8px] border border-dashed border-line-strong text-ink-muted">
-                  <Plus className="size-5" strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-[#111]">
-                    Add item {filled + 1 + i}
-                  </span>
-                  <span className="text-[12px] text-ink-muted">Pick any design</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Progress. */}
-          <div className="mt-3 flex items-center gap-3">
-            <span className="relative h-[6px] flex-1 overflow-hidden rounded-full bg-[#ece9f2]">
-              <span
-                className="absolute inset-y-0 left-0 rounded-full bg-ink transition-all"
-                style={{ width: `${(filled / activeTier.quantity) * 100}%` }}
-              />
-            </span>
-            <span className="text-[12px] tabular-nums text-ink-muted">
-              {filled} of {activeTier.quantity}
-            </span>
-          </div>
-
-          {/* CTA. */}
-          <button
-            type="button"
-            onClick={needed > 0 ? () => setModalOpen(true) : addPack}
-            disabled={adding || !baseItem.variantId}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-[10px] bg-ink py-3.5 text-[13.5px] font-bold uppercase tracking-[0.06em] text-white transition-colors hover:bg-purple disabled:opacity-60"
-          >
-            {adding ? <Spinner /> : null}
-            {needed > 0
-              ? `Select ${needed} more item${needed > 1 ? "s" : ""}`
-              : `Add ${activeTier.quantity}-pack — ${bdt(packTotal ?? 0)}`}
-          </button>
-        </div>
-      ) : null}
-
       <ChooseDesignModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -465,16 +390,18 @@ export default function PackSelector({
         caseType={caseType}
         deviceOptions={deviceOptions}
         caseTypes={pickerCaseTypes}
-        excludeHandles={excludeHandles}
-        onPick={onPick}
-        slotLabel={activeTier ? `${filled}/${activeTier.quantity}` : undefined}
+        excludeHandles={[baseItem.handle, ...picked.map((p) => p.handle)]}
+        onPick={(design) => {
+          setPicked((all) => (tier && all.length < tier.quantity - 1 ? [...all, design] : all))
+          setModalOpen(false)
+          setError("")
+        }}
+        slotLabel={tier ? `${1 + picked.length}/${tier.quantity}` : undefined}
       />
-
-      {/* AirPods model - the shared SELECT MODEL drawer, AirPods models only. */}
       <ModelDrawer
         open={openAirpods}
         onOpenChange={setOpenAirpods}
-        items={airpodsItems}
+        items={airpodsOptions.map((name) => ({ value: name, label: name, group: "AirPods" }))}
         current={airpodsDevice}
         onSelect={(name) => {
           setAirpodsOverride(name)
@@ -486,43 +413,83 @@ export default function PackSelector({
   )
 }
 
-function PackPill({
-  label,
-  onSelect,
+function MiniImage({ src }: { src: string | null }) {
+  return (
+    <span className="fl-offer__thumb">
+      <ProductImage src={src} alt="" sizes="56px" />
+    </span>
+  )
+}
+
+function OfferCard({
+  name,
+  value,
   active,
-  was,
-  now,
-  save,
+  onSelect,
+  title,
+  description,
+  badge,
+  quote,
+  estimated,
+  children,
 }: {
-  label: string
-  onSelect: () => void
+  name: string
+  value: string
   active: boolean
-  was?: string
-  now: string
-  save?: string
+  onSelect: () => void
+  title: string
+  description: string
+  badge?: string | null
+  quote: { subtotal: number; discount: number; total: number }
+  estimated?: boolean
+  children: ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={active}
-      className={cn(
-        "flex flex-col items-center gap-0.5 rounded-[10px] border bg-white px-1 py-2 text-center transition-shadow",
-        active
-          ? "border-purple/40 shadow-[0_0_0_1px_rgba(124,58,237,0.35),0_3px_10px_0_rgba(124,58,237,0.14)]"
-          : "border-[#ddd0fb]"
-      )}
-    >
-      <span className="text-[10px] font-semibold text-purple">{label}</span>
-      <span className="flex items-baseline gap-1">
-        {was ? <s className="text-[9px] text-ink-faint">{was}</s> : null}
-        <b className="text-[12.5px] font-bold text-[#1a1625]">{now}</b>
-      </span>
-      {save ? (
-        <span className="rounded-full bg-purple px-1.5 py-[2px] text-[8.5px] font-bold text-white">
-          {save}
+    <div className={`fl-offer${active ? " is-selected" : ""}`}>
+      {badge ? <p className="fl-offer__badge">{badge}</p> : null}
+      <label className="fl-offer__choice">
+        <input type="radio" name={name} value={value} checked={active} onChange={onSelect} />
+        <span className="min-w-0">
+          <strong>{title}</strong>
+          <span className="fl-offer__description">{description}</span>
         </span>
-      ) : null}
-    </button>
+        <span className="fl-offer__price">
+          {estimated ? <small>Estimated</small> : null}
+          {quote.discount > 0 ? <s>{formatPrice(quote.subtotal)}</s> : null}
+          <b>{formatPrice(quote.total)}</b>
+        </span>
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function ItemRow({
+  image,
+  title,
+  detail,
+  price,
+  badge,
+  action,
+}: {
+  image: string | null
+  title: string
+  detail: ReactNode
+  price: number
+  badge?: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="fl-offer__item">
+      <MiniImage src={image} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold leading-snug">
+          {title} {badge ? <span className="fl-offer__item-badge">{badge}</span> : null}
+        </p>
+        <div className="mt-1 text-xs leading-relaxed text-ink-muted">{detail}</div>
+        <p className="mt-1 text-sm tabular-nums">{formatPrice(price)}</p>
+      </div>
+      {action}
+    </div>
   )
 }

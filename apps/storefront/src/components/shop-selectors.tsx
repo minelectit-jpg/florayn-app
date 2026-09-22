@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
 
 import CaseTypeModal from "@/components/case-type-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
@@ -42,6 +42,7 @@ export default function ShopSelectors({
   caseTypeImages?: Record<string, string>
 }) {
   const router = useRouter()
+  const [pending, startTransition] = useTransition()
   const [openModel, setOpenModel] = useState(false)
   const [openCase, setOpenCase] = useState(false)
 
@@ -56,7 +57,7 @@ export default function ShopSelectors({
   function go(nextDevice: string, nextCase: string) {
     setOpenModel(false)
     setOpenCase(false)
-    router.push(`/shop/${nextDevice}/${nextCase}/`)
+    startTransition(() => router.push(`/shop/${nextDevice}/${nextCase}/`))
   }
 
   // The whole catalogue as drawer items, family-grouped in FAMILY_ORDER.
@@ -75,15 +76,17 @@ export default function ShopSelectors({
   )
 
   return (
-    <div className="flex flex-wrap items-stretch gap-3">
+    <div className="relative grid grid-cols-2 items-stretch gap-3" aria-busy={pending}>
+      {pending ? <span role="status" className="absolute -bottom-5 right-0 text-xs text-ink-muted">Updating your selection…</span> : null}
       <button
         type="button"
         onClick={() => setOpenModel(true)}
-        className="flex min-w-[220px] flex-1 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-line-strong"
+        aria-haspopup="dialog" aria-expanded={openModel} disabled={pending}
+        className="flex min-w-0 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-3 py-3 text-left sm:px-4 transition-colors hover:border-purple focus-visible:outline-2 focus-visible:outline-purple disabled:opacity-60"
       >
         <span>
           <span className="eyebrow block">Model</span>
-          <span className="text-[15px] font-medium">{deviceName}</span>
+          <span className="mt-1 block text-[13px] font-semibold leading-snug sm:text-[15px]">{deviceName}</span>
         </span>
         <span aria-hidden="true" className="text-[10px] text-ink-muted">
           &#9662;
@@ -93,11 +96,12 @@ export default function ShopSelectors({
       <button
         type="button"
         onClick={() => setOpenCase(true)}
-        className="flex min-w-[220px] flex-1 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-line-strong"
+        aria-haspopup="dialog" aria-expanded={openCase} disabled={pending}
+        className="flex min-w-0 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-3 py-3 text-left sm:px-4 transition-colors hover:border-purple focus-visible:outline-2 focus-visible:outline-purple disabled:opacity-60"
       >
         <span>
           <span className="eyebrow block">Case type</span>
-          <span className="text-[15px] font-medium">{caseName}</span>
+          <span className="mt-1 block text-[13px] font-semibold leading-snug sm:text-[15px]">{caseName}</span>
         </span>
         <span aria-hidden="true" className="text-[10px] text-ink-muted">
           &#9662;

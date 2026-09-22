@@ -1,6 +1,55 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@layer components {
+  .fl-case-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .fl-offers { margin-top: 24px; border: 1px solid var(--color-line); border-radius: 16px; overflow: hidden; }
+  .fl-offers__switch { display: grid; grid-template-columns: 1fr 1fr; background: var(--muted); }
+  .fl-offers__switch button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 8px; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; }
+  .fl-offers__switch button[aria-pressed="true"] { background: var(--color-paper); border-color: var(--color-ink); }
+  .fl-offers button:focus-visible, .fl-offer__choice:has(input:focus-visible) { outline: 2px solid var(--color-purple); outline-offset: -3px; }
+  .fl-offers button:disabled { cursor: not-allowed; opacity: .55; }
+  .fl-offers__body { padding: 20px; border-top: 1px solid var(--color-line); }
+  .fl-offer { min-width: 0; border: 1px solid var(--color-line); border-radius: 12px; overflow: hidden; transition: border-color .15s; }
+  .fl-offer.is-selected { border-color: var(--color-ink); box-shadow: 0 0 0 1px var(--color-ink); }
+  .fl-offer__badge { background: var(--color-purple-tint); color: var(--color-purple-deep); padding: 7px 12px; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+  .fl-offer__choice { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 16px; cursor: pointer; }
+  .fl-offer__choice input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--color-ink); }
+  .fl-offer__choice strong { display: block; font-size: 15px; line-height: 1.4; }
+  .fl-offer__description { display: block; margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--color-ink-muted); }
+  .fl-offer__price { display: flex; flex-direction: column; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fl-offer__price small { font-size: 10px; color: var(--color-ink-muted); }
+  .fl-offer__price s { font-size: 11px; color: var(--color-ink-muted); }
+  .fl-offer__price b { color: var(--color-purple-deep); font-weight: 600; }
+  .fl-offer__preview { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 16px 16px 44px; color: var(--color-ink-muted); }
+  .fl-offer__thumb, .fl-offer__empty { position: relative; display: inline-flex; flex: 0 0 56px; width: 56px; height: 64px; border: 1px solid var(--color-line); border-radius: 8px; overflow: hidden; background: var(--color-paper); }
+  .fl-offer__empty { align-items: center; justify-content: center; border-style: dashed; background: var(--muted); font-size: 12px; }
+  .fl-offer__items { padding: 0 16px 16px; }
+  .fl-offer__item { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid var(--color-line); }
+  .fl-offer__item-badge { display: inline-block; margin-left: 4px; padding: 2px 5px; border-radius: 4px; background: var(--muted); font-size: 10px; font-weight: 400; white-space: nowrap; }
+  .fl-offer__remove { display: grid; flex-shrink: 0; place-items: center; width: 36px; height: 36px; border: 1px solid var(--color-line); border-radius: 50%; color: var(--color-ink-muted); }
+  .fl-offer__add { display: flex; width: 100%; gap: 12px; align-items: center; margin-top: 8px; padding: 12px; text-align: left; border: 1px dashed var(--color-line-strong); border-radius: 10px; }
+  .fl-offer__add > span:first-child { display: grid; width: 36px; height: 40px; place-items: center; flex-shrink: 0; background: var(--color-purple-tint); border-radius: 6px; color: var(--color-purple); }
+  .fl-offer__add > span:nth-child(2) { flex: 1; }
+  .fl-offer__add strong, .fl-offer__add small { display: block; }
+  .fl-offer__add strong { font-size: 13px; font-weight: 600; }
+  .fl-offer__add small { margin-top: 3px; font-size: 11px; color: var(--color-ink-muted); }
+  .fl-offer__model { display: inline-flex; align-items: center; gap: 6px; padding: 4px 7px; border: 1px solid var(--color-line); border-radius: 5px; color: var(--color-ink); }
+  .fl-offers__saving { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 12px; border-radius: 9px; background: color-mix(in srgb, var(--color-success) 7%, white); color: var(--color-success); font-size: 13px; }
+  .fl-offers__totals { margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--muted); font-size: 13px; }
+  .fl-offers__totals > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0; }
+  .fl-offers__totals dd { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fl-offers__totals > div:last-child { margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--color-line); font-size: 16px; font-weight: 600; }
+  .fl-offers__cta { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; padding: 12px; border-radius: 30px; background: var(--color-ink); color: white; font-size: 14px; font-weight: 600; }
+  .fl-offers__cta:hover { background: var(--color-purple-deep); }
+  @media (max-width: 400px) {
+    .fl-offers__body { padding: 12px; }
+    .fl-offer__choice { padding: 12px; gap: 8px; }
+    .fl-offer__choice strong { font-size: 14px; }
+    .fl-offer__items { padding: 0 12px 12px; }
+  }
+}
+
 /*
  * Florayn brand tokens.
  *
@@ -212,9 +261,8 @@
 }
 
 /*
- * Product card and shop grid - the exact CSS running on florayn.com's shop
- * page. Written as plain CSS rather than utility strings so each value stays
- * readable against the source it came from.
+ * Product cards and shop grid. Keep column widths and gaps aligned with
+ * CARD_IMAGE_SIZES so the first two rows request the correct image size.
  */
 @layer components {
   /* ---- Grid: 4 / 3 / 2 columns at 16 / 12 / 10px ------------------------ */
@@ -246,7 +294,7 @@
     height: 100%;
     background: #ffffff;
     border: 1px solid #e9e6ef;
-    border-radius: 10px;
+    border-radius: 16px;
     overflow: hidden;
     transition:
       transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -254,8 +302,8 @@
   }
 
   .fl-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 18px 34px -18px rgba(26, 22, 37, 0.28);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -16px rgba(26, 22, 37, 0.24);
   }
 
   /* ---- Image ------------------------------------------------------------ */
@@ -333,16 +381,16 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 12px 12px 16px;
-    text-align: center;
+    align-items: stretch;
+    gap: 4px;
+    padding: 14px 16px 16px;
+    text-align: left;
   }
 
   .fl-card__titles {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     width: 100%;
   }
 
@@ -384,8 +432,8 @@
      icon, rather than centred in the space the icon leaves over. */
   .fl-card__price {
     flex: 1 1 auto;
-    padding-left: 28px;
-    text-align: center;
+    padding-left: 0;
+    text-align: left;
     font-size: 17px;
     font-weight: 700;
     color: #1a1625;
@@ -397,7 +445,7 @@
   }
 
   .fl-qadd-wrap {
-    flex: 0 0 28px;
+    flex: 0 0 40px;
     display: flex;
     justify-content: flex-end;
     line-height: 0;
@@ -413,13 +461,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     margin: 0;
-    background: none;
-    border: 0;
-    border-radius: 0;
+    background: var(--color-purple-tint);
+    border: 1px solid transparent;
+    border-radius: 50%;
     box-shadow: none;
     color: #1a1625;
     opacity: 0.72;
@@ -467,24 +515,34 @@
   /* ---- Mobile ----------------------------------------------------------- */
   @media (max-width: 767px) {
     .fl-card__summary {
-      padding: 10px 8px 13px;
+      padding: 10px 10px 12px;
+    }
+
+    .fl-card__meta {
+      white-space: normal;
+      font-size: 11px;
+      min-height: 32px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
 
     .fl-card__title {
-      font-size: 15.5px;
+      font-size: 14px;
     }
 
     .fl-card__price {
-      padding-left: 22px;
+      padding-left: 0;
+      font-size: 15px;
     }
 
     .fl-qadd-wrap {
-      flex-basis: 22px;
+      flex-basis: 36px;
     }
 
     .fl-qadd {
-      width: 22px;
-      height: 22px;
+      width: 36px;
+      height: 36px;
     }
 
     .fl-qadd__icon {

@@ -200,7 +200,7 @@ export default function ProductView({
 
   return (
     <div data-product-ready data-product-path={pagePath} data-product-hydrated={hydratedPath === pagePath}
-      className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+      className="grid min-w-0 grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-x-10 xl:grid-cols-[minmax(0,1fr)_520px] lg:grid-rows-[max-content_1fr]">
       <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery
           key={selected?.id ?? "default"}
@@ -209,7 +209,7 @@ export default function ProductView({
         />
       </div>
 
-      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[50px] lg:self-start">
+      <div className="min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
         {/* Stock badge, above the title like florayn's "N in stock". Reflects
             the live (case type, device) blank; an untracked pair reads as in
             stock. */}
@@ -218,9 +218,9 @@ export default function ProductView({
           const inStock = n === undefined || n > 0
           return (
             <p
-              className={`mb-1.5 text-[15px] ${inStock ? "text-[#444]" : "text-danger"}`}
+              className={`mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${inStock ? "bg-success/5 text-success" : "bg-danger/5 text-danger"}`}
             >
-              {inStock ? "In stock" : "Sold out"}
+              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />{inStock ? "In stock" : "Sold out"}
             </p>
           )
         })()}
@@ -228,9 +228,10 @@ export default function ProductView({
         {/* Title only, matching florayn: "Design – Device Case", no collection
             eyebrow, no case-type suffix, no fit paragraph above the price. It
             follows the live device so an in-place model change keeps it true. */}
-        <h1 className="text-[1.625rem] font-semibold leading-[1.21] tracking-[-0.034em] text-[#111]">
-          {device ? `${designName} – ${device} Case` : designName}
+        <h1 className="text-[1.8rem] font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-[2rem]">
+          {designName}
         </h1>
+        {device ? <p className="mt-2 text-sm text-ink-muted">{device} Case <span className="mx-1.5" aria-hidden="true">·</span> {caseType}</p> : null}
 
         <div className="mt-3">
           <ProductBuyBox

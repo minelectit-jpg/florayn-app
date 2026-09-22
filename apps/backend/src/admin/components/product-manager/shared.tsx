@@ -1,11 +1,26 @@
-import { Button, Input, Text, toast } from "@medusajs/ui"
-import { useEffect, useRef, useState } from "react"
+import { Button, Input, Select, Text, toast } from "@medusajs/ui"
+import { Children, isValidElement, useEffect, useRef, useState, type ReactNode } from "react"
 
 export type Variant = { id: string; title: string; sku: string | null; caseType: string | null; device: string | null; caseTypeSlug: string | null; deviceSlug: string | null; image: string | null; images: string[]; price: number | null; options: Record<string, string>; inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[] }
 export type Product = { id: string; handle: string; title: string; form: string; status: string; thumbnail: string | null; description: string; images: string[]; options: { title: string; values: string[] }[]; caseTypes: string[]; devices: string[]; variants: Variant[] }
 export type Detail = { slug: string; name: string; theme: string | null; kind: "design" | "regular"; collection: { id: string; title: string } | null; products: Product[] }
 export type CatalogOption = { slug: string; name: string; family?: string; price?: number }
-export const selectClass = "w-full rounded-md border border-ui-border-base bg-ui-bg-field px-3 py-2 text-sm"
+// Use Medusa's themed popup: Windows native option menus can inherit light
+// text from dark mode while painting their own white background.
+export function ManagerSelect({ value, onValueChange, children, id, "aria-label": label }: {
+  value: string | number
+  onValueChange: (value: string) => void
+  children: ReactNode
+  id?: string
+  "aria-label"?: string
+}) {
+  const options = Children.toArray(children).filter(isValidElement<{ value: string | number; children: ReactNode }>)
+  const empty = "__manager_empty__"
+  return <Select value={String(value) || empty} onValueChange={(next) => onValueChange(next === empty ? "" : next)}>
+    <Select.Trigger id={id} aria-label={label} className="w-full"><Select.Value /></Select.Trigger>
+    <Select.Content>{options.map((option) => <Select.Item key={String(option.props.value)} value={String(option.props.value) || empty}>{option.props.children}</Select.Item>)}</Select.Content>
+  </Select>
+}
 export const slugify = (s: string) => s.toLowerCase().trim().replace(/['"]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
 
 export async function api(path: string, init?: RequestInit) {
@@ -93,7 +108,7 @@ export function CatalogCreate({ onCreated }: { onCreated: () => void }) {
   return <div className="rounded-lg border border-dashed border-ui-border-base p-3">
     {!kind ? <div className="flex gap-2"><Button size="small" variant="secondary" onClick={() => setKind("case")}>New case type</Button><Button size="small" variant="secondary" onClick={() => setKind("device")}>New model</Button></div> : <div className="grid gap-2">
       <Input aria-label="New catalog name" placeholder={kind === "case" ? "Case type name" : "Model name"} value={name} onChange={(e) => setName(e.target.value)} />
-      {kind === "case" ? <Input aria-label="Shared case type price" type="number" min={0} placeholder="Price for every design (BDT)" value={price} onChange={(e) => setPrice(e.target.value)} /> : <select aria-label="Model family" className={selectClass} value={family} onChange={(e) => setFamily(e.target.value)}>{["iphone", "samsung", "airpods", "watch", "wallet"].map((f) => <option key={f} value={f}>{f}</option>)}</select>}
+      {kind === "case" ? <Input aria-label="Shared case type price" type="number" min={0} placeholder="Price for every design (BDT)" value={price} onChange={(e) => setPrice(e.target.value)} /> : <ManagerSelect aria-label="Model family" value={family} onValueChange={setFamily}>{["iphone", "samsung", "airpods", "watch", "wallet"].map((f) => <option key={f} value={f}>{f}</option>)}</ManagerSelect>}
       <div className="flex gap-2"><Button size="small" isLoading={busy} onClick={save}>Create</Button><Button size="small" variant="secondary" disabled={busy} onClick={() => setKind("")}>Cancel</Button></div>
     </div>}
   </div>
