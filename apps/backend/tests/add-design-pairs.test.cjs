@@ -28,10 +28,11 @@ const DEVICES = [
   { slug: "iphone-16-pro-max", name: "iPhone 16 Pro Max", sku_code: "I16PM", family: "iphone" },
 ]
 
-const calls = { updateProducts: [], variants: [], rebuild: [], blanks: [] }
+const calls = { options: [], updateProducts: [], variants: [], rebuild: [], blanks: [] }
 const { addPairsToDesign } = load("lib/add-design-pairs.ts", {
   "@medusajs/framework/utils": { ContainerRegistrationKeys: { QUERY: "query" }, Modules: { PRODUCT: "product", INVENTORY: "inventory" } },
   "@medusajs/medusa/core-flows": {
+    setProductProductOptionsWorkflow: () => ({ run: async ({ input }) => { calls.options.push(input); return {} } }),
     createInventoryItemsWorkflow: () => ({ run: async ({ input }) => { calls.blanks.push(input); return { result: input.items.map((it, i) => ({ id: `blank_${i}`, sku: it.sku })) } } }),
     createInventoryLevelsWorkflow: () => ({ run: async () => ({ result: [] }) }),
     createProductVariantsWorkflow: () => ({ run: async ({ input }) => { calls.variants.push(...input.product_variants); return { result: [] } } }),
@@ -71,7 +72,7 @@ function makeContainer() {
   return { container }
 }
 
-test.beforeEach(() => { calls.updateProducts = []; calls.variants = []; calls.rebuild = []; calls.blanks = [] })
+test.beforeEach(() => { calls.options = []; calls.updateProducts = []; calls.variants = []; calls.rebuild = []; calls.blanks = [] })
 
 test("adds a new case type: creates the option value + the variant, priced from the case type", async () => {
   const { container } = makeContainer()
@@ -80,12 +81,11 @@ test("adds a new case type: creates the option value + the variant, priced from 
   assert.equal(res.variantsAdded, 1)
   assert.equal(res.skipped, 0)
 
-  // The Case Type option now includes the existing Signature (by id) + new Elite Clear.
-  const optUpdate = calls.updateProducts.find((u) => u.patch.options)
-  assert.ok(optUpdate, "options were updated to add the missing value")
-  const ctOpt = optUpdate.patch.options.find((o) => o.title === "Case Type")
-  assert.equal(ctOpt.values.map((v) => v.value).sort().join(","), "Elite Clear,Signature")
-  assert.ok(ctOpt.values.find((v) => v.value === "Signature").id === "val_sig", "existing value kept by id")
+  // Append only the new allowed value, retaining existing IDs and associations.
+  assert.equal(calls.options[0].product_id, "prod_phone")
+  const ctUpdate = calls.options[0].update.find((u) => u.product_option_id === "opt_ct")
+  assert.deepEqual(JSON.parse(JSON.stringify(ctUpdate.add)), [{ value: "Elite Clear" }])
+  assert.equal(ctUpdate.remove, undefined)
 
   // The new variant is created with the right options + case-type price + blank.
   assert.equal(calls.variants.length, 1)
@@ -110,10 +110,9 @@ test("adds only a new DEVICE under an existing case type, and extends the galler
   const { container } = makeContainer()
   const res = await addPairsToDesign(container, "timeless", { signature: { "iphone-16-pro-max": ["s16.jpg"] } })
   assert.equal(res.variantsAdded, 1)
-  // Device option got the new value; Case Type kept Signature only.
-  const optUpdate = calls.updateProducts.find((u) => u.patch.options)
-  const devOpt = optUpdate.patch.options.find((o) => o.title === "Device")
-  assert.equal(devOpt.values.map((v) => v.value).sort().join(","), "iPhone 16 Pro Max,iPhone 17 Pro Max")
+  const devUpdate = calls.options[0].update.find((u) => u.product_option_id === "opt_dev")
+  assert.deepEqual(JSON.parse(JSON.stringify(devUpdate.add)), [{ value: "iPhone 16 Pro Max" }])
+  assert.equal(devUpdate.remove, undefined)
   // Gallery extended with the new image.
   const imgUpdate = calls.updateProducts.find((u) => u.patch.images)
   assert.ok(imgUpdate.patch.images.some((i) => i.url === "s16.jpg"))

@@ -1,6 +1,6 @@
 import { ContainerRegistrationKeys, Modules, MedusaError } from "@medusajs/framework/utils"
 import { createStep, createWorkflow, StepResponse, WorkflowResponse, transform } from "@medusajs/framework/workflows-sdk"
-import { createProductsWorkflow, createProductVariantsWorkflow, createInventoryLevelsWorkflow, updateProductsWorkflow, updateProductVariantsWorkflow } from "@medusajs/medusa/core-flows"
+import { createProductsWorkflow, createProductVariantsWorkflow, createInventoryLevelsWorkflow, updateProductsWorkflow, updateProductVariantsWorkflow, updateProductOptionValuesOnProductStep } from "@medusajs/medusa/core-flows"
 import { regularInput, imageUrls, money } from "../lib/product-manager-input"
 import { rebuildCards } from "../lib/rebuild-cards"
 
@@ -132,14 +132,16 @@ const prepareRegularVariant = createStep("prepare-regular-variant", async (input
   if (!locations[0]) throw new MedusaError(MedusaError.Types.INVALID_DATA, "A warehouse is required.")
   const images = [...new Set<string>([...p.images.map((i: any) => i.url), ...v.images])]
   return new StepResponse({ productId: p.id, locationId: locations[0].id, stock: v.stock,
-    product: { id: p.id, images: images.map((url) => ({ url })), options: p.options.map((o: any) => ({ id: o.id, title: o.title, values: [...o.values.map((value: any) => ({ id: value.id, value: value.value })), ...(!o.values.some((value: any) => value.value === v.options[o.title]) ? [{ value: v.options[o.title] }] : [])] })) },
+    optionUpdates: p.options.map((o: any) => ({ product_id: p.id, product_option_id: o.id, add: o.values.some((value: any) => value.value === v.options[o.title]) ? [] : [{ value: v.options[o.title] }] })),
+    product: { id: p.id, images: images.map((url) => ({ url })) },
     variant: { product_id: p.id, title: v.title, sku: v.sku, manage_inventory: true, allow_backorder: false, options: v.options, metadata: { images: v.images }, prices: [{ currency_code: "bdt", amount: v.price }] },
   })
 })
 
 export const addRegularVariantWorkflow = createWorkflow("add-regular-variant", (input: { productId: string; variant: any }) => {
   const prepared = prepareRegularVariant(input)
-  const product = updateProductsWorkflow.runAsStep({ input: { products: transform(prepared, (p) => [p.product]) } })
+  const optionValues = updateProductOptionValuesOnProductStep(prepared.optionUpdates)
+  const product = updateProductsWorkflow.runAsStep({ input: { products: transform({ prepared, optionValues }, ({ prepared }) => [prepared.product]) } })
   const variants = createProductVariantsWorkflow.runAsStep({ input: { product_variants: transform({ prepared, product }, ({ prepared }) => [prepared.variant]) } })
   const levels = regularStock(transform({ prepared, variants }, ({ prepared }) => ({ productId: prepared.productId, locationId: prepared.locationId, quantities: { [prepared.variant.sku]: prepared.stock } })))
   const created = createInventoryLevelsWorkflow.runAsStep({ input: { inventory_levels: levels } })

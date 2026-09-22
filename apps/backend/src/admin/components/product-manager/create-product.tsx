@@ -2,6 +2,8 @@ import { Badge, Button, Container, Heading, Input, Label, Text, Textarea, toast 
 import { useEffect, useRef, useState } from "react"
 import { api, post, slugify, Gallery, CatalogCreate, selectClass, useUnsaved, type CatalogOption, type Detail } from "./shared"
 
+import ContentPreview from "./content-preview"
+
 type Pair = { key: number; caseSlug: string; deviceSlug: string; images: string[] }
 type RegularRow = { options: Record<string, string>; sku: string; price: string; stock: string; images: string[] }
 const emptyRegular = (): RegularRow => ({ options: { Option: "Default" }, sku: "", price: "", stock: "0", images: [] })
@@ -118,7 +120,7 @@ export default function CreateProduct({ duplicate, onBack, onCreated }: { duplic
       </>}
       {count > 10 && <div className="flex items-center gap-3"><Button variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button><Text size="small">{page + 1} / {Math.ceil(count / 10)}</Text><Button variant="secondary" disabled={(page + 1) * 10 >= count} onClick={() => setPage((p) => p + 1)}>Next</Button></div>}
       <div className="flex flex-wrap items-end gap-3 border-t pt-4"><div><Label htmlFor="pm-status">Save as</Label><select id="pm-status" className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}><option value="draft">Draft</option><option value="published">Published</option></select></div><Badge>{count} variant{count === 1 ? "" : "s"}</Badge><Button variant="secondary" onClick={() => { try { payload(); setReview(!review) } catch (error: any) { toast.error(error.message) } }}>Review product</Button><Button isLoading={busy} onClick={save}>{status === "draft" ? "Create draft" : "Publish product"}</Button></div>
-      {review && <div className="rounded-xl border p-4"><Heading level="h2">{name}</Heading><Text>{description || "No description"}</Text><Text size="small">{kind === "design" ? "Case-type pricing · shared blank stock" : "Individual variant pricing and stock"} · {count} variants · {status}</Text><Text size="small">/product/{slug}/</Text></div>}
+      {review && <ContentPreview name={name} description={description} variants={kind === "design" ? pairs.map((p) => ({ label: [cases.find((c) => c.slug === p.caseSlug)?.name, devices.find((d) => d.slug === p.deviceSlug)?.name].filter(Boolean).join(" / "), images: p.images, price: cases.find((c) => c.slug === p.caseSlug)?.price })) : rows.map((r) => ({ label: Object.values(r.options).join(" / "), images: r.images, price: r.price.trim() ? Number(r.price) : null }))} />}
     </fieldset>
   </Container>
 }

@@ -3,6 +3,7 @@ import {
   createInventoryItemsWorkflow,
   createInventoryLevelsWorkflow,
   createProductVariantsWorkflow,
+  setProductProductOptionsWorkflow,
 } from "@medusajs/medusa/core-flows"
 
 import { CATALOG_MODULE } from "../modules/catalog"
@@ -204,28 +205,20 @@ export async function addPairsToDesign(
     }
     if (!toCreate.length) continue
 
-    // Add any missing option values. Pass BOTH options with their full value
-    // lists (existing by id + new by value) so upsertWithReplace keeps the
-    // existing values/variants and only adds what is new.
+    // Medusa 2.19 links allowed values to each product. Append through that
+    // API instead of replacing the shared option or its existing associations.
     const ctValueSet = new Set<string>((ctOpt.values ?? []).map((v: any) => v.value))
     const devValueSet = new Set<string>((devOpt.values ?? []).map((v: any) => v.value))
     const newCt = [...neededCtValues].filter((v) => !ctValueSet.has(v))
     const newDev = [...neededDevValues].filter((v) => !devValueSet.has(v))
     if (newCt.length || newDev.length) {
-      await productModule.updateProducts(product.id, {
-        options: [
-          {
-            id: ctOpt.id,
-            title: CASE_TYPE_OPTION,
-            values: [...(ctOpt.values ?? []).map((v: any) => ({ id: v.id, value: v.value })), ...newCt.map((value) => ({ value }))],
-          },
-          {
-            id: devOpt.id,
-            title: DEVICE_OPTION,
-            values: [...(devOpt.values ?? []).map((v: any) => ({ id: v.id, value: v.value })), ...newDev.map((value) => ({ value }))],
-          },
+      await setProductProductOptionsWorkflow(container).run({ input: {
+        product_id: product.id,
+        update: [
+          { product_option_id: ctOpt.id, add: newCt.map((value) => ({ value })) },
+          { product_option_id: devOpt.id, add: newDev.map((value) => ({ value })) },
         ],
-      })
+      } })
     }
 
     // Create the new variants.

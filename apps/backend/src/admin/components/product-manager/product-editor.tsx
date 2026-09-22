@@ -1,5 +1,6 @@
 import { Badge, Button, Container, Heading, Input, Label, Text, Textarea, toast } from "@medusajs/ui"
 import { useCallback, useEffect, useRef, useState } from "react"
+import ContentPreview from "./content-preview"
 import VariantEditor from "./variant-editor"
 import AddRegularVariant from "./add-regular-variant"
 import { api, post, Gallery, CatalogCreate, selectClass, useUnsaved, type Detail, type Product, type CatalogOption } from "./shared"
@@ -20,6 +21,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const [variantSearch, setVariantSearch] = useState("")
   const [selected, setSelected] = useState<string[]>([])
   const [editing, setEditing] = useState<{ product: Product; ids: string[] } | null>(null)
+  const [preview, setPreview] = useState(false)
   const [variantPage, setVariantPage] = useState(0)
   const [variantDirty, setVariantDirty] = useState(false)
   const [variantBusy, setVariantBusy] = useState(false)
@@ -73,7 +75,8 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const selectedProduct = d.products.find((p) => selected.length && selected.every((id) => p.variants.some((v) => v.id === id)))
   const editingProduct = d.products.find((p) => p.id === editing?.product.id)
   return <div className="grid gap-5">
-    <Container className="flex flex-wrap items-center justify-between gap-3"><div><Button size="small" variant="transparent" disabled={busy || uploading || variantBusy || addBusy} onClick={() => leave(onBack)}>← All products</Button><Heading level="h1">{d.name}</Heading><Text size="xsmall" className="text-ui-fg-muted">/product/{d.products[0]?.handle}/</Text></div><div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy} onClick={() => leave(() => onDuplicate(d))}>Duplicate</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy} onClick={() => changeStatus(published ? "draft" : "published")}>{published ? "Move to draft" : "Publish"}</Button><Button isLoading={busy} disabled={!dirty || uploading} onClick={saveMeta}>Save changes</Button></div></Container>
+    <Container className="flex flex-wrap items-center justify-between gap-3"><div><Button size="small" variant="transparent" disabled={busy || uploading || variantBusy || addBusy} onClick={() => leave(onBack)}>← All products</Button><Heading level="h1">{d.name}</Heading><Text size="xsmall" className="text-ui-fg-muted">/product/{d.products[0]?.handle}/</Text></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setPreview(!preview)}>Preview</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy} onClick={() => leave(() => onDuplicate(d))}>Duplicate</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy} onClick={() => changeStatus(published ? "draft" : "published")}>{published ? "Move to draft" : "Publish"}</Button><Button isLoading={busy} disabled={!dirty || uploading} onClick={saveMeta}>Save changes</Button></div></Container>
+    {preview && <ContentPreview name={name} description={description} variants={d.products.flatMap((p) => p.variants.map((v) => ({ label: v.title, images: v.images.length ? v.images : p.images, price: v.price })))} />}
     {error && <Text role="alert" className="text-ui-fg-error">{error}</Text>}
     <Container className="grid gap-4"><div className="flex flex-wrap gap-2">{d.products.map((p) => <Badge key={p.id} color={p.status === "published" ? "green" : "grey"}>{p.form} · {p.status}</Badge>)}{dirty && <Badge color="orange">Unsaved changes</Badge>}</div><div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="edit-name">Name</Label><Input id="edit-name" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} /></div><div><Label htmlFor="edit-theme">Collection</Label><Input id="edit-theme" value={theme} onChange={(e) => setTheme(e.target.value)} /></div></div><div><Label htmlFor="edit-description">Description</Label><Textarea id="edit-description" maxLength={20000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="flex flex-wrap items-center gap-3">{d.products.filter((p) => p.status === "published").map((p) => <a key={p.id} className="text-sm text-ui-fg-interactive underline" href={`https://new.florayn.com/product/${encodeURIComponent(p.handle)}/`} target="_blank" rel="noreferrer">View {p.form} on storefront ↗</a>)}{!published && <Text size="small" className="text-ui-fg-muted">Drafts stay private. Review their images and details here before publishing.</Text>}{d.kind === "design" && <Button size="small" variant="secondary" onClick={() => leave(onPricing)}>Manage shared case-type prices</Button>}</div>
