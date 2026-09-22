@@ -57,8 +57,9 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(detail.products[0].description, "Edited description")
   const { data: regions } = await query.graph({ entity: "region", fields: ["id"] })
   const { result: cart } = await createCartWorkflow(container).run({ input: { region_id: regions[0].id, sales_channel_id: channels[0].id, items: [{ variant_id: large.id, quantity: 1 }] } })
-  assert.equal(cart.items?.[0].variant_id, large.id)
-  assert.equal(Number(cart.items?.[0].unit_price), 525)
+  const { data: savedCarts } = await query.graph({ entity: "cart", filters: { id: cart.id }, fields: ["id", "items.variant_id", "items.unit_price"] })
+  assert.equal(savedCarts[0].items?.[0]?.variant_id, large.id)
+  assert.equal(Number(savedCarts[0].items?.[0]?.unit_price), 525)
 
   progress("metadata, publish, collection removal and exact cart pricing passed")
   const catalog: any = container.resolve(CATALOG_MODULE)
