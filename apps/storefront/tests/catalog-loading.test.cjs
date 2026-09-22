@@ -239,7 +239,7 @@ test("shop uses uploaded exact-pair renders without changing variant selection, 
     assert.equal(grid.products[0].variants[0].id, `uploaded-${ct.slug}-${device.name}`)
     assert.equal(grid.products[0].variants[0].calculated_price.calculated_amount, ct.price)
     assert.equal(grid.products[1].thumbnail, `https://images.invalid/legacy/${ct.slug}/legacy.webp`)
-    const selectors = tree.props.children[0].props.children[1].props
+    const selectors = tree.props.children[1].props.selectors.props
     assert.equal(selectors.caseTypeImages.signature, upload)
     assert.equal(selectors.caseTypeImages["armor-black"], armor)
     // Only one selected image per card reaches the client, not metadata.card.
@@ -316,7 +316,7 @@ test("shop narrows model and case compatibility before counts and pagination", a
   assert.equal(grid.totalPages, 1)
   assert.equal(grid.currentPage, 1)
   assert.deepEqual(Array.from(grid.products, (p) => p.handle), ["compatible-first", "compatible-last"])
-  const selectors = tree.props.children[0].props.children[1].props
+  const selectors = tree.props.children[1].props.selectors.props
   assert.deepEqual(Array.from(selectors.caseTypes, (ct) => ct.slug), ["signature", "armor-black"])
 })
 
@@ -353,14 +353,14 @@ test("shop scopes case types by form: Signature Earbuds shows only on AirPods, a
   // Phone view: only Signature is offered, priced 1400.
   const { default: PhoneShop } = loadSource("components/shop-view.tsx", deps(phone.slug))
   const phoneTree = await PhoneShop({ deviceSlug: phone.slug, caseTypeSlug: "signature" })
-  const phoneSelectors = phoneTree.props.children[0].props.children[1].props
+  const phoneSelectors = phoneTree.props.children[1].props.selectors.props
   assert.deepEqual(Array.from(phoneSelectors.caseTypes, (c) => c.slug), ["signature"])
   assert.equal(phoneTree.props.children[1].props.products[0].variants[0].calculated_price.calculated_amount, 1400)
 
   // AirPods view: only Signature Earbuds is offered, priced 750.
   const { default: AirpodsShop } = loadSource("components/shop-view.tsx", deps(airpods.slug))
   const airTree = await AirpodsShop({ deviceSlug: airpods.slug, caseTypeSlug: "signature-earbuds" })
-  const airSelectors = airTree.props.children[0].props.children[1].props
+  const airSelectors = airTree.props.children[1].props.selectors.props
   assert.deepEqual(Array.from(airSelectors.caseTypes, (c) => c.slug), ["signature-earbuds"])
   const airGrid = airTree.props.children[1].props
   assert.equal(airGrid.products[0].variants[0].calculated_price.calculated_amount, 750)

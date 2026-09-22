@@ -72,3 +72,9 @@ test("AirPods matching set offers the configured phone model and totals one phon
   assert.match(html, /1,900\.00/)
   assert.doesNotMatch(html, /Design AirPods case|1,250\.00/)
 })
+
+test("Admin badge copy is displayed verbatim without altering bundle pricing", () => {
+  const html = render({ config: { ...config, settings: { ...config.settings, badge_text: "Save up to 20%" } } })
+  assert.match(html, /Save up to 20%/)
+  assert.match(html, /3,588\.00/)
+})

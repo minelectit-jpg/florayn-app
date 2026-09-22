@@ -53,6 +53,7 @@ export default function ProductView({
   tabs,
   pairs,
   recommendedItems,
+  manualFeaturedItems,
   featureBlocks,
   productForm,
   galleryVideos,
@@ -95,6 +96,7 @@ export default function ProductView({
    * node, so the band can load client-side only.
    */
   recommendedItems?: RecommendedItem[]
+  manualFeaturedItems?: RecommendedItem[]
   /** Feature blocks (all groups); the band picks the live group's set. */
   featureBlocks?: FeatureBlock[]
   /** The product's form ("phone", "airpods"…); keys the Features band. */
@@ -139,7 +141,18 @@ export default function ProductView({
   // Honour ?case=<slug> from a filtered shop card, on the client so the page
   // itself stays static/cacheable. Runs once after hydration.
   useEffect(() => {
-    const slug = new URLSearchParams(window.location.search).get("case")
+    const params = new URLSearchParams(window.location.search)
+    const variant = params.get("variant")
+    if (variant) {
+      for (const ct of matrix.caseTypes) {
+        for (const model of matrix.devicesByCaseType[ct] ?? []) {
+          if (matrix.variantIdByPair[pairKey(ct, model)] === variant) {
+            setCaseType(ct); setDevice(model); return
+          }
+        }
+      }
+    }
+    const slug = params.get("case")
     if (!slug) return
     const name = caseTypeRecords?.find((c) => c.slug === slug)?.name
     if (name && matrix.caseTypes.includes(name)) selectCaseType(name)
@@ -209,7 +222,7 @@ export default function ProductView({
         />
       </div>
 
-      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[50px] lg:self-start">
+      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
         {/* Stock badge, above the title like florayn's "N in stock". Reflects
             the live (case type, device) blank; an untracked pair reads as in
             stock. */}
@@ -278,13 +291,14 @@ export default function ProductView({
       </div>
 
       {recommendedItems?.length ||
-      featureBlocks?.length ||
+      featureBlocks?.length || manualFeaturedItems?.length ||
       youWillLoveItems?.length ? (
         <div className="lg:col-start-1 lg:row-start-2">
           {/* Below the fold: mount only when the viewport nears it, so the
               buy box + gallery hydrate first on a low-end phone. */}
           <LazyReveal minHeight={360}>
             <RecommendedForYou items={recommendedItems ?? []} />
+            <RecommendedForYou items={manualFeaturedItems ?? []} title="We think you’ll love" />
             <YouWillLove
               items={youWillLoveItems ?? []}
               device={device}

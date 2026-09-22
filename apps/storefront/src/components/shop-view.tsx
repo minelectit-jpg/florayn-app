@@ -217,21 +217,18 @@ export default async function ShopView({
       : "Shop"
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="sr-only">{heading}</h1>
+    <div>
+      <header className="sr-only"><h1>{heading}</h1></header>
 
-        <ShopSelectors
+      {matching.length ? (
+        <ShopGrid
+          selectors={<ShopSelectors inline
           deviceSlug={device?.slug}
           caseTypeSlug={caseType ? caseSlug : undefined}
           devices={devices}
           caseTypes={shownCaseTypes}
           caseTypeImages={caseTypeImages}
-        />
-      </header>
-
-      {matching.length ? (
-        <ShopGrid
+        />}
           products={products}
           device={device?.name ?? null}
           deviceSlug={device?.slug ?? null}
@@ -243,7 +240,15 @@ export default async function ShopView({
           routePath={routePath}
         />
       ) : (
-        <div className="py-12">
+        <div>
+          <ShopSelectors
+          deviceSlug={device?.slug}
+          caseTypeSlug={caseType ? caseSlug : undefined}
+          devices={devices}
+          caseTypes={shownCaseTypes}
+          caseTypeImages={caseTypeImages}
+        />
+          <div className="py-12">
           <p className="text-sm text-ink-muted">
             Nothing matches that combination
             {device ? ` for the ${device.name}` : ""}. Try another device or
@@ -255,6 +260,7 @@ export default async function ShopView({
           >
             Clear filters
           </Link>
+          </div>
         </div>
       )}
     </div>

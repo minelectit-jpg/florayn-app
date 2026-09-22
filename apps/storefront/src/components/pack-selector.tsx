@@ -11,7 +11,7 @@ import ModelDrawer from "@/components/model-drawer"
 import ProductImage from "@/components/product-image"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
-import { tierPricing, type BundleConfig } from "@/lib/bundles"
+import { savingsPercent, tierPricing, type BundleConfig } from "@/lib/bundles"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import { formatPrice } from "@/lib/money"
 
@@ -115,6 +115,8 @@ export default function PackSelector({
     discount: matchingDiscount,
     total: matchingSubtotal - matchingDiscount,
   }
+  const customBadge = s?.badge_text?.trim()
+  const maxSaving = savingsPercent([...tiers.map((t) => tierPricing(unitPrice, t)), ...(matchingAvailable ? [matchingQuote] : [])])
   const activeOffer =
     offer === "matching" && matchingAvailable
       ? "matching"
@@ -201,7 +203,7 @@ export default function PackSelector({
           disabled={adding}
           onClick={() => onModeChange(true)}
         >
-          Bundle/pack <Tag size={14} aria-hidden="true" />
+          Bundle/pack {customBadge || maxSaving > 0 ? <span className="fl-offers__saving">{customBadge || `Up to ${maxSaving}% off`}</span> : <Tag size={14} aria-hidden="true" />}
         </button>
       </div>
       {bundleMode ? (

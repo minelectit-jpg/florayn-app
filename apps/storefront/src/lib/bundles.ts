@@ -17,6 +17,7 @@ export type BundleTier = {
 }
 
 export type BundleSettings = {
+  badge_text?: string
   heading: string
   single_label: string
   free_shipping_threshold: number
@@ -150,4 +151,12 @@ export async function getBundleConfig(): Promise<BundleConfig | null> {
   } catch {
     return null
   }
+}
+
+
+// Never advertise a larger whole percentage than the configured offer saves.
+export function savingsPercent(quotes: { subtotal: number; discount: number }[]): number {
+  return Math.floor(Math.max(0, ...quotes.map(({ subtotal, discount }) =>
+    subtotal > 0 && Number.isFinite(subtotal) && Number.isFinite(discount)
+      ? Math.min(100, Math.max(0, discount / subtotal * 100)) : 0)) + 1e-8)
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
+import { getManualRecommendations } from "@/lib/manual-recommendations"
 import ProductView from "@/components/product-view"
 import {
   type RecommendedItem,
@@ -141,6 +142,11 @@ export default async function ProductPage({ params }: Params) {
     ? { ...resolved, matrix: buildVariantMatrix(resolved.product) }
     : null)
   const sectionsPromise = getProductSections()
+  const manualPromise = productPromise.then((resolved) =>
+    resolved && !(resolved.matrix.caseTypes.length && resolved.matrix.devices.length)
+      ? getManualRecommendations(resolved.product.metadata)
+      : { recommended: [], featured: [] })
+
 
   // Start each dependency as soon as its inputs are available. A slow stock or
   // SEO request must not postpone collection data or the featured-picks query.
@@ -218,6 +224,7 @@ export default async function ProductPage({ params }: Params) {
   // values become the tiles (e.g. colours) - no device selector, no multi-buy
   // packs - and the Features band still keys off the form ("Sticky Pad").
   if (!(matrix.caseTypes.length && matrix.devices.length)) {
+    const manual = await manualPromise
     const simple = buildSimpleMatrix(product)
     const simpleFacts = [
       ...(product.collection
@@ -263,7 +270,8 @@ export default async function ProductPage({ params }: Params) {
             />
           }
           pairs={null}
-          recommendedItems={[]}
+          recommendedItems={manual.recommended}
+          manualFeaturedItems={manual.featured}
           featureBlocks={featureBlocks}
           productForm={(product.metadata?.form as string) ?? null}
           simple

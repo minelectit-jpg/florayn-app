@@ -33,12 +33,14 @@ export default function ShopSelectors({
   devices,
   caseTypes,
   caseTypeImages = {},
+  inline = false,
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
   devices: DeviceRecord[]
   caseTypes: CaseTypeRecord[]
   /** case type slug -> a sample render for the current device (florayn shows one). */
+  inline?: boolean
   caseTypeImages?: Record<string, string>
 }) {
   const router = useRouter()
@@ -75,15 +77,15 @@ export default function ShopSelectors({
   )
 
   return (
-    <div className="flex flex-wrap items-stretch gap-3">
+    <div className={inline ? "contents" : "grid grid-cols-2 gap-2 sm:gap-3"}>
       <button
         type="button"
         onClick={() => setOpenModel(true)}
-        className="flex min-w-[220px] flex-1 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-line-strong"
+        className="fl-shop-filter"
       >
-        <span>
-          <span className="eyebrow block">Model</span>
-          <span className="text-[15px] font-medium">{deviceName}</span>
+        <span className="min-w-0">
+          <span className="fl-shop-filter__label">Model</span>
+          <span className="fl-shop-filter__value">{deviceName}</span>
         </span>
         <span aria-hidden="true" className="text-[10px] text-ink-muted">
           &#9662;
@@ -93,11 +95,11 @@ export default function ShopSelectors({
       <button
         type="button"
         onClick={() => setOpenCase(true)}
-        className="flex min-w-[220px] flex-1 items-center justify-between gap-3 rounded-[12px] border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-line-strong"
+        className="fl-shop-filter"
       >
-        <span>
-          <span className="eyebrow block">Case type</span>
-          <span className="text-[15px] font-medium">{caseName}</span>
+        <span className="min-w-0">
+          <span className="fl-shop-filter__label">Case type</span>
+          <span className="fl-shop-filter__value">{caseName}</span>
         </span>
         <span aria-hidden="true" className="text-[10px] text-ink-muted">
           &#9662;

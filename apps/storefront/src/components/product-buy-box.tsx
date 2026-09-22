@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
+import CaseTypeModal from "@/components/case-type-modal"
 import type { PackDesign } from "@/components/choose-design-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import PackSelector, { type MatchingProduct } from "@/components/pack-selector"
@@ -119,6 +120,7 @@ export default function ProductBuyBox({
   const router = useRouter()
   const { add } = useCart()
   const [openModel, setOpenModel] = useState(false)
+  const [openCase, setOpenCase] = useState(false)
   const [qty, setQty] = useState(1)
   const [packMode, setPackMode] = useState(false)
   const hasOffers = !simple && !!bundleConfig?.settings.is_active && (bundleConfig.tiers.some((tier) => tier.quantity > 1) || ((bundleConfig.settings.matching_set_enabled ?? true) && Object.keys(matchingProduct?.variants ?? {}).length > 0))
@@ -265,15 +267,16 @@ export default function ProductBuyBox({
           Device, then More designs, then Case type. Hidden for a simple
           accessory (StickPad), which has no device. */}
       {!simple ? (
-      <div className="mt-6">
-        <p className="fl-pdp-label">DEVICE</p>
+      <div className="mt-6 grid grid-cols-2 gap-2 md:block">
+        <div className="min-w-0">
+        <p className="fl-pdp-label">MODEL</p>
         <button
           type="button"
           onClick={() => setOpenModel(true)}
           aria-haspopup="dialog"
-          className="flex h-[52px] w-full items-center justify-between rounded-[12px] border border-[#e2e2e2] bg-surface px-4 text-left text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
+          className="flex h-[52px] w-full items-center justify-between gap-2 rounded-[12px] border border-[#e2e2e2] bg-surface px-3 text-left text-[13px] md:px-4 md:text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
         >
-          <span>{device || "Select a device"}</span>
+          <span className="truncate">{device || "Select a device"}</span>
           <svg
             width="14"
             height="14"
@@ -291,6 +294,18 @@ export default function ProductBuyBox({
           </svg>
         </button>
 
+        </div>
+        <div className="min-w-0 md:hidden">
+          <p className="fl-pdp-label">CASE TYPE</p>
+          <button type="button" onClick={() => setOpenCase(true)} aria-haspopup="dialog" className="flex h-[52px] w-full items-center justify-between gap-2 rounded-[12px] border border-[#e2e2e2] bg-surface px-3 text-left text-[13px]"><span className="truncate">{caseType}</span><span aria-hidden="true">⌄</span></button>
+        </div>
+        {openCase && <CaseTypeModal
+          current={caseTypeRecords.find((c) => c.name === caseType)?.slug ?? ""}
+          caseTypes={caseTypeRecords.filter((c) => (matrix.caseTypesByDevice[device] ?? []).includes(c.name)).map((c) => ({ ...c, price: priceForCaseType(c.name) ?? c.price }))}
+          images={Object.fromEntries(caseTypeRecords.map((c) => [c.slug, imageForCaseType(c.name) ?? ""]))}
+          onClose={() => setOpenCase(false)}
+          onSelect={(slug) => { const choice = caseTypeRecords.find((c) => c.slug === slug); if (choice) onSelectCaseType(choice.name); setOpenCase(false) }}
+        />}
         <ModelDrawer
           open={openModel}
           onOpenChange={setOpenModel}
@@ -348,7 +363,7 @@ export default function ProductBuyBox({
       ) : /* CASE TYPE tiles (image + name + price) for a real case product. A
              case type not sold for the selected device is disabled, not hidden. */
       matrix.caseTypes.length > 1 ? (
-        <section className="mt-6">
+        <section className="mt-6 hidden md:block">
           <p className="fl-pdp-label">CASE TYPE</p>
           <ul className="flex gap-[8px] md:gap-[10px]">
             {matrix.caseTypes.map((ct) => {

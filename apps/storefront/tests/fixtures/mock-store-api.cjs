@@ -42,6 +42,12 @@ const content = {
   primary: [{ id: "menu_phone", label: "Phone Case", href: "/shop/iphone-17-pro-max/signature/", groups: [] }],
   footer: [], footerNote: "Local verification", social: [],
 }
+if (process.env.UI_REFINEMENT_FIXTURE === "1") products.push({
+ id: "prod_stickpad", title: "StickPad Pro", handle: "audit-stickpad", description: "Local regular product fixture.",
+ thumbnail: image, images: [{ id: "img_stickpad", url: image }], options: [{ id: "color", title: "Color" }],
+ variants: [{ id: "variant_stickpad", title: "Rose", options: [{ option_id: "color", value: "Rose" }], metadata: { images: [image] }, calculated_price: { calculated_amount: 350, currency_code: "bdt" }, manage_inventory: false }],
+ metadata: { florayn_manual_recommendations: { recommended: [products[0].variants[0].id], featured: [products[3].variants[0].id] } },
+})
 const bundle = { settings: { heading: "Choose a pack", single_label: "Single", free_shipping_threshold: 3000, scope: "cases", is_active: true, matching_set_enabled: true, matching_set_discount: 250, matching_set_default_airpods: "AirPods Pro 3" }, tiers: [{ id: "tier_two", quantity: 2, badge: null, discount_amount: 200, min_pct: 0, max_pct: 0 }] }
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
 const carts = new Map()
@@ -249,7 +255,7 @@ const server = http.createServer(async (req, res) => {
       const deviceObj = devices.find((d) => d.slug === url.searchParams.get("device"))
       const targetForm = deviceObj ? (deviceObj.family === "iphone" || deviceObj.family === "samsung" ? "phone" : deviceObj.family) : null
       const bySlug = new Map()
-      for (const p of products) {
+      for (const p of products.filter((p) => p.metadata.design_slug)) {
         if (targetForm && p.metadata.form !== targetForm) continue
         const entry = bySlug.get(p.metadata.design_slug) ?? { slug: p.metadata.design_slug, name: p.title, caseTypes: [], forms: [] }
         for (const c of caseTypes.filter((c) => c.forms.includes(p.metadata.form))) if (!entry.caseTypes.includes(c.slug)) entry.caseTypes.push(c.slug)
@@ -273,6 +279,10 @@ const server = http.createServer(async (req, res) => {
     }
     case "/store/collections": return send(res, { collections: !filters(url, "handle").length || filters(url, "handle").includes(collection.handle) ? [collection] : [] })
     case "/store/product-categories": return send(res, { product_categories: [] })
+    case "/store/product-variants": {
+      const ids = filters(url, "id")
+      return send(res, { variants: products.flatMap((p) => p.variants.filter((v) => ids.includes(v.id)).map((v) => ({ ...v, product: { id: p.id, title: p.title, handle: p.handle, thumbnail: p.thumbnail } }))) })
+    }
     case "/store/products": {
       const handles = filters(url, "handle"), ids = filters(url, "id")
       const filtered = products.filter((p) => (!handles.length || handles.includes(p.handle)) && (!ids.length || ids.includes(p.id)))

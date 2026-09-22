@@ -1,3 +1,7 @@
+import { GET as getManual, POST as saveManual } from "../api/admin/products/[id]/recommendations/route"
+import { POST as saveBadge } from "../api/admin/bundles/badge/route"
+import { GET as publicBundles } from "../api/store/bundles/route"
+import { MANUAL_RECOMMENDATIONS_KEY } from "../lib/manual-recommendations"
 import { GET as getRecommendations, POST as saveRecommendations } from "../api/admin/content/recommendations/route"
 import { GET as publicProductSections } from "../api/store/content/product-sections/route"
 import { RECOMMENDATION_KEY } from "../lib/recommendation-settings"
@@ -120,5 +124,29 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(status, 400)
   assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[RECOMMENDATION_KEY], settings)
   progress("persisted matching defaults, public projection, metadata preservation and family validation passed")
+  // Exact variant selection, independent ordering, draft rejection, and clearing.
+  const picks = { recommended: [large.id, small.id], featured: [small.id] }
+  const req: any = { scope: container, params: { id: design.products[0].id }, body: picks }
+  await saveManual(req, res)
+  assert.deepEqual(response.settings, picks)
+  assert.equal(response.choices.find((v: any) => v.id === small.id).image, "https://example.invalid/replaced-version.webp")
+  await getManual(req, res)
+  assert.deepEqual(response.settings, picks)
+  const productService = container.resolve(Modules.PRODUCT)
+  assert.equal((await productService.retrieveProduct(req.params.id)).metadata?.design_slug, "manager-one-pair")
+  await assert.rejects(() => saveManual({ ...req, body: { ...picks, recommended: [firstVariant.id] } }, res))
+  await assert.rejects(() => saveManual({ ...req, body: { ...picks, recommended: [copied.products[0].variants[0].id] } }, res))
+  assert.deepEqual((await productService.retrieveProduct(req.params.id)).metadata?.[MANUAL_RECOMMENDATIONS_KEY], picks)
+  await saveManual({ ...req, body: { recommended: [], featured: [] } }, res)
+  assert.deepEqual(response.settings, { recommended: [], featured: [] })
+  await saveBadge({ scope: container, body: { text: "  Up to 20% off  " } } as any, res)
+  assert.equal(response.text, "Up to 20% off")
+  await publicBundles({ scope: container } as any, res)
+  assert.equal(response.settings.badge_text, "Up to 20% off")
+  assert.equal((await stores.retrieveStore(store.id)).metadata?.recommendation_fixture_keep, "preserved")
+  await assert.rejects(() => saveBadge({ scope: container, body: { text: "x".repeat(33) } } as any, res))
+  await saveBadge({ scope: container, body: { text: "" } } as any, res)
+  assert.equal(response.text, "")
+  progress("manual recommendations, exact variant images, section order, invalid target rejection, clearing and editable bundle badge passed")
   container.resolve(ContainerRegistrationKeys.LOGGER).info("PRODUCT_MANAGER_INTEGRATION_PASS: regular create/edit/append, exact cart variant and price, draft, single phone pair, dynamic catalogs, missing forms, stable IDs and shared-stock duplicate")
 }

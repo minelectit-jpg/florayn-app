@@ -1,5 +1,6 @@
 "use client"
 
+import { Dialog } from "radix-ui"
 import { ChevronDown, Search, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
@@ -100,21 +101,6 @@ export default function ChooseDesignModal({
     }
   }, [open, device, caseType])
 
-  // Close on Escape and lock the page scroll while open.
-  useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-    }
-    document.addEventListener("keydown", onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.body.style.overflow = prev
-    }
-  }, [open, onClose])
-
   const exclude = useMemo(() => new Set(excludeHandles), [excludeHandles])
 
   const modelItems: ModelItem[] = useMemo(
@@ -174,23 +160,21 @@ export default function ChooseDesignModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-6">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/40"
-      />
-      <div className="relative flex max-h-[88vh] w-full max-w-[900px] flex-col overflow-hidden rounded-t-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)] sm:max-h-[82vh] sm:rounded-[14px]">
+    <Dialog.Root open={open} onOpenChange={(value) => { if (!value) onClose() }}>
+      <Dialog.Portal>
+      <Dialog.Overlay className="fixed inset-0 z-[70] bg-ink/45" />
+      <Dialog.Content aria-describedby={undefined}
+        onEscapeKeyDown={(event) => { if (openModel || openCase) event.preventDefault() }}
+        className="fixed bottom-0 left-1/2 z-[70] flex max-h-[90dvh] w-full max-w-[960px] -translate-x-1/2 flex-col overflow-hidden rounded-t-[18px] bg-white shadow-2xl outline-none sm:bottom-auto sm:top-1/2 sm:max-h-[calc(100dvh-64px)] sm:w-[calc(100%-48px)] sm:-translate-y-1/2 sm:rounded-[16px]">
         <div className="relative flex items-center justify-center border-b border-[#ededed] px-[52px] py-4">
           {slotLabel ? (
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[13px] tabular-nums text-ink-muted">
               {slotLabel}
             </span>
           ) : null}
-          <p className="text-[14px] font-semibold uppercase tracking-[1.12px] text-[#111]">
+          <Dialog.Title className="text-[14px] font-semibold uppercase tracking-[1.12px] text-[#111]">
             Choose a design
-          </p>
+          </Dialog.Title>
           <button
             type="button"
             onClick={onClose}
@@ -202,11 +186,12 @@ export default function ChooseDesignModal({
         </div>
 
         {/* Filters: search + the shop's model drawer + case-type popup triggers. */}
-        <div className="grid gap-3 border-b border-[#f0eef4] p-[18px] sm:grid-cols-[1fr_auto_auto]">
-          <label className="flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5">
+        <div className="grid grid-cols-2 gap-2 border-b border-[#f0eef4] p-3 sm:gap-3 sm:p-[18px] sm:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <label className="col-span-2 flex min-w-0 items-center sm:col-span-1 gap-2.5 rounded-[10px] border border-line bg-surface px-3.5 py-2.5">
             <Search className="size-4 shrink-0 text-ink-muted" strokeWidth={1.6} />
             <input
               type="search"
+              aria-label="Search designs"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search a design"
@@ -268,7 +253,7 @@ export default function ChooseDesignModal({
             </div>
           )}
         </div>
-      </div>
+      </Dialog.Content>
 
       {/* Model: the shared florayn SELECT MODEL drawer. */}
       <ModelDrawer
@@ -295,7 +280,8 @@ export default function ChooseDesignModal({
           }}
         />
       ) : null}
-    </div>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 
@@ -313,13 +299,13 @@ function FilterTrigger({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-[160px] items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 py-1.5 text-left transition-colors hover:border-line-strong"
+      className="flex min-w-0 items-center gap-2 rounded-[10px] border border-line bg-surface px-3.5 py-1.5 text-left transition-colors hover:border-line-strong"
     >
-      <span className="flex flex-col">
+      <span className="flex min-w-0 flex-col">
         <span className="eyebrow">{label}</span>
-        <span className="text-[14px] font-medium">{value}</span>
+        <span className="truncate text-[13px] font-medium sm:text-[14px]">{value}</span>
       </span>
-      <ChevronDown className="ml-auto size-4 text-ink-muted" strokeWidth={1.6} />
+      <ChevronDown className="ml-auto size-4 shrink-0 text-ink-muted" strokeWidth={1.6} />
     </button>
   )
 }

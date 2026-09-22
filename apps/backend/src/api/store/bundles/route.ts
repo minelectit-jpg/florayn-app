@@ -1,3 +1,4 @@
+import { readBundleBadge } from "../../../lib/bundle-badge"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
 import { BUNDLES_MODULE } from "../../../modules/bundles"
@@ -14,11 +15,12 @@ import {
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(BUNDLES_MODULE)
-  const { settings, tiers } = await getBundleConfig(service)
+  const [{ settings, tiers }, { text: badgeText }] = await Promise.all([getBundleConfig(service), readBundleBadge(req.scope)])
 
   res.json({
     settings: {
       heading: settings.heading,
+      badge_text: badgeText,
       single_label: settings.single_label,
       free_shipping_threshold: settings.free_shipping_threshold,
       scope: settings.scope,

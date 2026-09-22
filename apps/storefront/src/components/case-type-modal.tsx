@@ -1,26 +1,12 @@
 "use client"
 
 import { X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Dialog } from "radix-ui"
+import { useState } from "react"
 
 import Price from "@/components/price"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
-
-function useModalChrome(onClose: () => void) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-    }
-    document.addEventListener("keydown", onKey)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.body.style.overflow = prev
-    }
-  }, [onClose])
-}
 
 /**
  * The case-type picker - a centred modal matching florayn.com's SELECT CASE
@@ -43,19 +29,14 @@ export default function CaseTypeModal({
   onClose: () => void
   onSelect: (slug: string) => void
 }) {
-  useModalChrome(onClose)
   const [pending, setPending] = useState(current)
   const active = caseTypes.find((c) => c.slug === pending) ?? caseTypes[0]
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center sm:p-4">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/40"
-      />
-      <div className="relative flex max-h-[92vh] w-full max-w-[720px] flex-col overflow-hidden rounded-t-[16px] bg-white shadow-[0_24px_60px_-20px_rgba(26,22,37,0.45)] sm:max-h-[88vh] sm:rounded-[12px]">
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose() }}>
+      <Dialog.Portal>
+      <Dialog.Overlay className="fixed inset-0 z-[90] bg-ink/45" />
+      <Dialog.Content aria-describedby={undefined} className="fixed bottom-0 left-1/2 z-[90] flex max-h-[90dvh] w-full max-w-[720px] -translate-x-1/2 flex-col overflow-hidden rounded-t-[16px] bg-white shadow-2xl outline-none sm:bottom-auto sm:top-1/2 sm:max-h-[calc(100dvh-64px)] sm:w-[calc(100%-48px)] sm:-translate-y-1/2 sm:rounded-[12px]">
         <div className="relative border-b border-[#ededed] px-[52px] py-4 text-center">
           <button
             type="button"
@@ -65,9 +46,9 @@ export default function CaseTypeModal({
           >
             <X className="size-[18px]" strokeWidth={1.5} />
           </button>
-          <p className="text-[14px] font-semibold uppercase tracking-[1.12px] text-[#111]">
+          <Dialog.Title className="text-[14px] font-semibold uppercase tracking-[1.12px] text-[#111]">
             Select case type
-          </p>
+          </Dialog.Title>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-[18px]">
@@ -127,7 +108,8 @@ export default function CaseTypeModal({
         >
           Select
         </button>
-      </div>
-    </div>
+      </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

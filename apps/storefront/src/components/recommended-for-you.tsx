@@ -109,7 +109,7 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
             {item.name}
           </h3>
           <p className="mt-0.5 text-[13px] text-ink-muted">{item.formLabel}</p>
-          {item.variants.length === 1 ? <p className="text-xs text-ink-muted">{selected?.label}</p> : null}
+          {item.variants.length === 1 && selected?.label !== item.formLabel ? <p className="text-xs text-ink-muted">{selected?.label}</p> : null}
         </Link>
 
         <p className="mt-1 text-[15px] font-semibold tabular-nums">

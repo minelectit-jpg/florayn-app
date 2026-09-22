@@ -114,3 +114,27 @@ Do not fabricate models, prices or image URLs. Curated design handles resolve to
 the current form before fetching products. Keep the bounded collection query,
 compact shared choices, and exact pair filtering. Admin edits invalidate the
 content domain; recommendations require no new whole-catalog variant reads.
+
+## Regular product recommendations and offer badge
+
+Product Manager > open a regular product > Product recommendations edits
+Recommended for you and We think you'll love independently. Each ordered list
+holds at most eight exact variant IDs in product metadata under
+florayn_manual_recommendations. Save through saveManualRecommendationsWorkflow;
+reject missing, draft and self-product choices and preserve other metadata.
+Empty lists hide their sections. The storefront makes one bounded regional
+/store/product-variants request for at most 16 selected IDs, using core Medusa
+published/sales-channel filters and prices. Never load every target product's
+full variant matrix for these cards. Image, amount, cart variant and ?variant=
+destination must stay in sync. Product writes invalidate the products cache.
+
+Bundles > Bundle/pack badge sets up to 32 characters of custom tab copy.
+It is stored in existing store metadata (florayn_bundle_badge) through the core
+store workflow; no schema migration. Blank means calculate the badge from the
+active offers and selected price, rounded down to avoid overstating savings.
+The label does not alter prices. /admin/bundles/badge invalidates bundles.
+
+Choose-design and case-type dialogs use Radix body portals, keeping overlay,
+focus and scroll behavior independent of product columns and card stacking.
+Preserve the original product layout, the mobile side-by-side selectors, and
+the shop's single-row model/case/sort toolbar when making future UI changes.

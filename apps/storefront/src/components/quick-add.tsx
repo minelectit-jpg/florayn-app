@@ -6,14 +6,8 @@ import { useCart } from "@/components/cart-provider"
 import ShoppingBagIcon from "@/components/shopping-bag-icon"
 
 /**
- * The card's quick-add control, matching .fl-qadd on florayn.com: a bare 23px
- * glyph in a 28px box - no border, background or shadow - that turns Florayn
- * violet and lifts slightly on hover. It is visible at rest rather than
- * appearing on hover, because it has to be reachable on touch.
- *
- * The 44x44 ::before is a transparent tap target. The glyph itself is well
- * under the WCAG 2.5.8 minimum, so the hit area is enlarged without changing
- * the visual size.
+ * Compact bag button with a visible circular surface and a 44px touch target.
+ * The selected variant stays authoritative; adding opens the cart drawer.
  */
 export default function QuickAdd({
   variantId,

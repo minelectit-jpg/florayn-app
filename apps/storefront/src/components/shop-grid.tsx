@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 
 import ProductCard from "@/components/product-card"
 import { useShopImageLoading } from "@/components/use-shop-image-loading"
@@ -46,6 +46,7 @@ export default function ShopGrid({
   currentPage = 1,
   totalPages = 1,
   routePath,
+  selectors,
 }: {
   products: StoreProduct[]
   device?: string | null
@@ -57,6 +58,7 @@ export default function ShopGrid({
   currentPage?: number
   totalPages?: number
   /** Server-rendered route identity for opt-in image-readiness diagnostics. */
+  selectors?: ReactNode
   routePath: string
 }) {
   const [sort, setSort] = useState<SortKey>("featured")
@@ -81,7 +83,8 @@ export default function ShopGrid({
   // Include ordered image identities so model, sort, and updated renders start
   // a fresh bounded batch without remounting every card or resetting Quick Add.
   const imageBatchKey = useMemo(() => JSON.stringify([
-    routePath, device, caseType,
+    routePath,
+  selectors, device, caseType,
     sorted.map((product) => [
       product.id, product.thumbnail, product.images?.map((image) => image.url),
       product.variants?.map((variant) => [variant.id, variant.options, variant.metadata?.images]),
@@ -101,14 +104,12 @@ export default function ShopGrid({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-ink-muted">
-          {count} {count === 1 ? "design" : "designs"}
-        </p>
+      <div className={selectors ? "fl-shop-toolbar" : "flex justify-end"}>
+        {selectors}
 
         <div
           ref={boxRef}
-          className="relative"
+          className="relative min-w-0"
           onBlur={(e) => {
             if (!boxRef.current?.contains(e.relatedTarget as Node)) setOpen(false)
           }}
@@ -120,16 +121,16 @@ export default function ShopGrid({
             title="Sort designs on this page"
             aria-haspopup="listbox"
             aria-expanded={open}
-            className="flex min-w-[160px] items-center justify-between gap-3 rounded-[10px] border border-line bg-paper px-4 py-2.5 text-sm transition-colors hover:border-line-strong"
+            className="fl-shop-filter h-full w-full"
           >
-            <span>{activeLabel}</span>
+            <span className="min-w-0"><span className="fl-shop-filter__label">Sort by</span><span className="fl-shop-filter__value">{activeLabel}</span></span>
             <svg
               width="14"
               height="14"
               viewBox="0 0 24 24"
               fill="none"
               aria-hidden="true"
-              className={`transition-transform ${open ? "rotate-180" : ""}`}
+              className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
             >
               <path
                 d="M6 9l6 6 6-6"
@@ -171,6 +172,8 @@ export default function ShopGrid({
           ) : null}
         </div>
       </div>
+
+      <p className="text-[12px] text-ink-muted sm:text-sm">{count} {count === 1 ? "design" : "designs"}</p>
 
       <div ref={gridRef} className="fl-grid" data-shop-path={routePath}>
         {sorted.map((product, i) => (
