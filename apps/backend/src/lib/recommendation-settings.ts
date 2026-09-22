@@ -40,7 +40,11 @@ export function validateRecommendationSettings(body: unknown, devices: any[], ca
     const device = devices.find((d) => d.name === settings[`${form}_model`] && d.is_active !== false)
     if (!device || (form === "phone" ? !["iphone", "samsung"].includes(device.family) : device.family !== "airpods")) throw new Error(`Choose an active ${form} model.`)
     const construction = caseTypes.find((c) => c.name === settings[`${form}_case_type`] && c.is_active !== false)
-    if (!construction || !(construction.devices ?? []).some((d: any) => d.id === device.id)) throw new Error(`The selected case type does not support ${device.name}.`)
+    // These catalog relations describe established families, not every future
+    // sellable pair. New models/types from Product Manager can have no links yet.
+    // The storefront still resolves an actual priced variant for each design.
+    const linked = construction?.devices ?? []
+    if (!construction || (linked.length && !linked.some((d: any) => form === "phone" ? ["iphone", "samsung"].includes(d.family) : d.family === "airpods"))) throw new Error(`Choose a case type for the ${form} category.`)
   }
   return settings
 }

@@ -23,3 +23,9 @@ test("existing bundle preference is retained until new matching defaults are sav
   assert.equal(recommendationSettings(null, "AirPods Pro 2").airpods_model, "AirPods Pro 2")
   assert.equal(recommendationSettings({ airpods_model: "AirPods Pro 4" }, "AirPods Pro 2").airpods_model, "AirPods Pro 4")
 })
+
+test("new models and constructions do not require legacy per-device catalog links", () => {
+  const legacyTypes = [{ name: "Signature", devices: [{ id: "old", family: "iphone" }] }, { name: "Signature Earbuds", devices: [{ id: "older", family: "airpods" }] }]
+  assert.equal(validateRecommendationSettings(input, devices, legacyTypes).airpods_model, "AirPods Pro 4")
+  assert.equal(validateRecommendationSettings(input, devices, types.map(t => ({ ...t, devices: [] }))).phone_model, "iPhone 18 Pro Max")
+})

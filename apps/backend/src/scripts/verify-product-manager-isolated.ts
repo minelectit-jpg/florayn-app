@@ -107,7 +107,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   const res: any = { json: (data: any) => { response = data; return res }, status: (code: number) => { status = code; return res } }
   const settings = { phone_model: "Manager Model Two", phone_case_type: "Manager Shell", airpods_model: "Manager Earbuds", airpods_case_type: "Manager Shell" }
   await saveRecommendations({ scope: container, body: settings } as any, res)
-  assert.equal(status, 200)
+  assert.equal(status, 200, response?.message)
   assert.deepEqual(response.settings, settings)
   await getRecommendations({ scope: container } as any, res)
   assert.deepEqual(response.settings, settings)

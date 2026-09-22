@@ -7,7 +7,11 @@ import { api, ManagerSelect, post, useUnsaved } from "../../components/product-m
 
 type Settings = { phone_model: string; phone_case_type: string; airpods_model: string; airpods_case_type: string }
 type Device = { id: string; name: string; family: string }
-type CaseType = { name: string; devices: Device[] }
+type CaseType = { name: string; is_active?: boolean; devices: Device[] }
+
+function categoryTypes(caseTypes: CaseType[], form: "phone" | "airpods") {
+  return caseTypes.filter((c) => c.is_active !== false && (!c.devices.length || c.devices.some((d) => form === "phone" ? ["iphone", "samsung"].includes(d.family) : d.family === "airpods")))
+}
 
 const RecommendationsPage = () => {
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -45,13 +49,12 @@ const RecommendationsPage = () => {
         {(["phone", "airpods"] as const).map((form) => {
           const models = devices.filter((d) => form === "phone" ? ["iphone", "samsung"].includes(d.family) : d.family === "airpods")
           const selected = models.find((d) => d.name === settings[`${form}_model`])
-          const types = caseTypes.filter((c) => c.devices.some((d) => d.id === selected?.id))
+          const types = categoryTypes(caseTypes, form)
           return <div key={form} className="space-y-3 rounded-lg border border-ui-border-base p-4">
             <Heading level="h2">{form === "phone" ? "On AirPods pages: matching phone case" : "On phone pages: matching AirPods case"}</Heading>
             <Label htmlFor={`${form}-model`}>Default model</Label>
             <ManagerSelect id={`${form}-model`} value={settings[`${form}_model`]} onValueChange={(value) => {
-              const model = models.find((d) => d.name === value)
-              const fits = caseTypes.filter((c) => c.devices.some((d) => d.id === model?.id))
+              const fits = categoryTypes(caseTypes, form)
               setSettings({ ...settings, [`${form}_model`]: value, [`${form}_case_type`]: fits.some((c) => c.name === settings[`${form}_case_type`]) ? settings[`${form}_case_type`] : fits[0]?.name ?? "" })
             }}>
               {!selected ? <option value={settings[`${form}_model`]}>{settings[`${form}_model`]} (unavailable)</option> : null}
