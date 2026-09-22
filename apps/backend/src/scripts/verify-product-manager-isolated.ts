@@ -13,6 +13,7 @@ import { CATALOG_MODULE } from "../modules/catalog"
 export default async function verifyProductManager({ container }: ExecArgs) {
   const database = new URL(process.env.DATABASE_URL ?? "postgres://invalid/invalid")
   if (process.env.PRODUCT_MANAGER_ISOLATED_TEST !== "1" || !/^\/florayn_checkout_test_[a-z0-9_]+$/.test(database.pathname) || !["localhost", "127.0.0.1"].includes(database.hostname) || process.env.REVALIDATE_SECRET || !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(process.env.STOREFRONT_URL ?? "")) throw new Error("Product Manager tests require the disposable local checkout fixture.")
+  const progress = (message: string) => container.resolve(ContainerRegistrationKeys.LOGGER).info(`PRODUCT_MANAGER_CHECK: ${message}`)
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { result: channels } = await createSalesChannelsWorkflow(container).run({ input: { salesChannelsData: [{ name: "Florayn Web" }] } })
   const { data: locations } = await query.graph({ entity: "stock_location", fields: ["id"] })
@@ -37,6 +38,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(small.price, 425.5)
   assert.equal(small.inventory[0].levels[0].stocked, 0)
   assert.equal(large.inventory[0].levels[0].stocked, 8)
+  progress("regular creation and stock passed")
   await saveManagedVariantsWorkflow(container).run({ input: { productId: original.id, variants: [{ id: small.id, price: 450.5, images: ["https://example.invalid/replaced-version.webp"] }] } })
   detail = (await getDesignDetail(container, result.slug!))!
   assert.equal(detail.products[0].variants.find((v) => v.id === small.id)?.price, 450.5)
@@ -47,6 +49,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(detail.products[0].variants.length, 3)
   assert.ok(detail.products[0].variants.some((v) => v.id === small.id))
   assert.equal(detail.products[0].variants.find((v) => v.sku === "MANAGER-W-L")?.inventory[0].levels[0].stocked, 9)
+  progress("regular price/gallery edits and appended option values passed")
   await editDesignMeta(container, result.slug!, { name: "Manager edited", description: "Edited description", theme: "Fixture collection", status: "published" })
   await editDesignMeta(container, result.slug!, { theme: "" })
   detail = (await getDesignDetail(container, result.slug!))!
@@ -57,6 +60,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(cart.items?.[0].variant_id, large.id)
   assert.equal(Number(cart.items?.[0].unit_price), 525)
 
+  progress("metadata, publish, collection removal and exact cart pricing passed")
   const catalog: any = container.resolve(CATALOG_MODULE)
   await catalog.createCaseTypes([{ slug: "manager-shell", name: "Manager Shell", sku_code: "MGS", price: 1450, sort_order: 99 }])
   await catalog.createDevices([
@@ -70,6 +74,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   const firstVariant = design.products[0].variants[0]
   assert.equal(firstVariant.price, 1450)
   assert.equal(firstVariant.inventory[0].levels[0].stocked, 7)
+  progress("single phone pair and dynamic catalog entries passed")
   await addPairsToDesign(container, "manager-one-pair", { "manager-shell": { "manager-model-two": ["https://example.invalid/design-two.webp"] } }, 0)
   design = (await getDesignDetail(container, "manager-one-pair"))!
   assert.equal(design.products[0].variants.length, 2)

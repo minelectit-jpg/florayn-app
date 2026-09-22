@@ -3,7 +3,7 @@ import {
   Modules,
   ProductStatus,
 } from "@medusajs/framework/utils"
-import { createCollectionsWorkflow } from "@medusajs/medusa/core-flows"
+import { createCollectionsWorkflow, updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 
 import { CATALOG_MODULE } from "../modules/catalog"
 import { slugify } from "./create-uploaded-design"
@@ -92,7 +92,7 @@ export async function editDesignMeta(
     if (patch.description !== undefined) u.description = patch.description
     return u
   })
-  await productModule.updateProducts(updates)
+  await updateProductsWorkflow(container).run({ input: { products: updates } })
 
   // Keep the catalog design record in step with name/theme.
   const [designRec] = await catalog.listDesigns({ slug })

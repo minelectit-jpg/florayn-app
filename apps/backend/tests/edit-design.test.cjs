@@ -34,7 +34,7 @@ const utils = {
 }
 const { editDesignMeta } = load("lib/edit-design.ts", {
   "@medusajs/framework/utils": utils,
-  "@medusajs/medusa/core-flows": { createCollectionsWorkflow: () => ({ run: async () => ({ result: [{ id: "col_new" }] }) }) },
+  "@medusajs/medusa/core-flows": { updateProductsWorkflow: (container) => ({ run: async ({ input }) => ({ result: await container.resolve("product").upsertProducts(input.products) }) }), createCollectionsWorkflow: () => ({ run: async () => ({ result: [{ id: "col_new" }] }) }) },
   "../modules/catalog": { CATALOG_MODULE: "catalog" },
   "./create-uploaded-design": { slugify: (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") },
   "./rebuild-cards": { rebuildCards: async (...args) => { rebuildCalls.push(args) } },
@@ -49,7 +49,7 @@ function makeContainer() {
   const state = { productUpdates: null, designUpdates: [] }
   const productModule = {
     listProducts: async () => products,
-    updateProducts: async (updates) => { state.productUpdates = updates; return updates },
+    upsertProducts: async (updates) => { state.productUpdates = updates; return updates },
   }
   const catalog = {
     listDesigns: async () => [{ id: "d1", slug: "timeless" }],
