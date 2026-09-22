@@ -3,12 +3,11 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
-import CaseTypeModal from "@/components/case-type-modal"
+import DragScroll from "@/components/drag-scroll"
 import type { PackDesign } from "@/components/choose-design-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import PackSelector, { type MatchingProduct } from "@/components/pack-selector"
 import ProductImage from "@/components/product-image"
-import ShareButton from "@/components/share-button"
 import WishlistButton from "@/components/wishlist-button"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
@@ -120,7 +119,6 @@ export default function ProductBuyBox({
   const router = useRouter()
   const { add } = useCart()
   const [openModel, setOpenModel] = useState(false)
-  const [openCase, setOpenCase] = useState(false)
   const [qty, setQty] = useState(1)
   const [packMode, setPackMode] = useState(false)
   const hasOffers = !simple && !!bundleConfig?.settings.is_active && (bundleConfig.tiers.some((tier) => tier.quantity > 1) || ((bundleConfig.settings.matching_set_enabled ?? true) && Object.keys(matchingProduct?.variants ?? {}).length > 0))
@@ -267,14 +265,14 @@ export default function ProductBuyBox({
           Device, then More designs, then Case type. Hidden for a simple
           accessory (StickPad), which has no device. */}
       {!simple ? (
-      <div className="mt-6 grid grid-cols-2 gap-2 md:block">
+      <div className="mt-5">
         <div className="min-w-0">
         <p className="fl-pdp-label">MODEL</p>
         <button
           type="button"
           onClick={() => setOpenModel(true)}
           aria-haspopup="dialog"
-          className="flex h-[52px] w-full items-center justify-between gap-2 rounded-[12px] border border-[#e2e2e2] bg-surface px-3 text-left text-[13px] md:px-4 md:text-base transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
+          className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[10px] border border-[#e2e2e2] bg-surface px-3 py-2 text-left text-sm transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
         >
           <span className="truncate">{device || "Select a device"}</span>
           <svg
@@ -295,17 +293,6 @@ export default function ProductBuyBox({
         </button>
 
         </div>
-        <div className="min-w-0 md:hidden">
-          <p className="fl-pdp-label">CASE TYPE</p>
-          <button type="button" onClick={() => setOpenCase(true)} aria-haspopup="dialog" className="flex h-[52px] w-full items-center justify-between gap-2 rounded-[12px] border border-[#e2e2e2] bg-surface px-3 text-left text-[13px]"><span className="truncate">{caseType}</span><span aria-hidden="true">⌄</span></button>
-        </div>
-        {openCase && <CaseTypeModal
-          current={caseTypeRecords.find((c) => c.name === caseType)?.slug ?? ""}
-          caseTypes={caseTypeRecords.filter((c) => (matrix.caseTypesByDevice[device] ?? []).includes(c.name)).map((c) => ({ ...c, price: priceForCaseType(c.name) ?? c.price }))}
-          images={Object.fromEntries(caseTypeRecords.map((c) => [c.slug, imageForCaseType(c.name) ?? ""]))}
-          onClose={() => setOpenCase(false)}
-          onSelect={(slug) => { const choice = caseTypeRecords.find((c) => c.slug === slug); if (choice) onSelectCaseType(choice.name); setOpenCase(false) }}
-        />}
         <ModelDrawer
           open={openModel}
           onOpenChange={setOpenModel}
@@ -363,9 +350,9 @@ export default function ProductBuyBox({
       ) : /* CASE TYPE tiles (image + name + price) for a real case product. A
              case type not sold for the selected device is disabled, not hidden. */
       matrix.caseTypes.length > 1 ? (
-        <section className="mt-6 hidden md:block">
+        <section className="mt-5">
           <p className="fl-pdp-label">CASE TYPE</p>
-          <ul className="flex gap-[8px] md:gap-[10px]">
+          <DragScroll className="fl-case-tiles">
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -373,7 +360,7 @@ export default function ProductBuyBox({
               const img = imageForCaseType(ct)
               const ctPrice = priceForCaseType(ct)
               return (
-                <li key={ct} className="min-w-0 flex-1">
+                <li key={ct} className="fl-case-tiles__item">
                   <button
                     type="button"
                     onClick={() => onSelectCaseType(ct)}
@@ -381,7 +368,7 @@ export default function ProductBuyBox({
                     disabled={!fits && !isCurrent}
                     title={!fits ? `${ct} is not made for ${device}` : ct}
                     className={[
-                      "flex w-full flex-col overflow-hidden rounded-[10px] border bg-surface text-left transition-colors",
+                      "flex h-full w-full flex-col overflow-hidden rounded-[10px] border bg-surface text-left transition-colors",
                       isCurrent
                         ? "border-purple"
                         : "border-[#e2e2e2] hover:border-purple",
@@ -396,7 +383,7 @@ export default function ProductBuyBox({
                         sizes="(max-width: 768px) 25vw, 135px"
                       />
                     </span>
-                    <span className="block px-1 py-1.5 text-center md:px-2 md:py-2">
+                    <span className="flex w-full flex-1 flex-col justify-between px-1 py-2 text-center">
                       <span className="block text-[11px] font-semibold leading-tight md:text-[13px]">
                         {ct}
                       </span>
@@ -412,16 +399,13 @@ export default function ProductBuyBox({
                 </li>
               )
             })}
-          </ul>
+          </DragScroll>
         </section>
       ) : null}
 
-      {/* Share - grey link above the cart form, matching florayn. */}
-      <ShareButton title={productTitle} />
-
       {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
       {!bundleMode ? <>
-      <div className="mt-2 flex items-stretch gap-[10px]">
+      <div className="mt-5 flex items-stretch gap-[10px]">
         <div className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
             type="button"

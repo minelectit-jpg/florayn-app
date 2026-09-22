@@ -1,0 +1,88 @@
+/* Product details remain readable in HTML; reviews have their own visible section. */
+@layer components {
+ .fl-review-jump { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-top:10px; font-size:12px; color:var(--color-ink-muted); }
+ .fl-review-jump > span:first-child { color:var(--color-purple-deep); font-size:15px; }
+ .fl-review-jump__link { margin-left:6px; text-decoration:underline; text-underline-offset:3px; }
+ .fl-product-copy { margin-top:28px; }
+ .fl-product-copy__panel { border-top:1px solid var(--color-line); }
+ .fl-product-copy summary { display:flex; align-items:center; gap:10px; cursor:pointer; list-style:none; padding:18px 0; }
+ .fl-product-copy summary::-webkit-details-marker { display:none; }
+ .fl-product-copy summary > svg:first-child { color:var(--color-purple-deep); }
+ .fl-product-copy summary > svg:last-child { margin-left:auto; flex-shrink:0; color:var(--color-ink-muted); transition:transform .2s; }
+ .fl-product-copy details[open] > summary > svg:last-child { transform:rotate(180deg); }
+ .fl-product-copy h2 { font-size:16px; font-weight:600; }
+ .fl-product-copy__text { display:grid; gap:12px; padding:0 0 20px; font-size:14px; line-height:1.8; color:var(--color-ink-muted); white-space:pre-line; overflow-wrap:anywhere; }
+ .fl-product-facts { padding-bottom:16px; font-size:13px; }
+ .fl-product-facts > div { display:grid; grid-template-columns:minmax(90px,.65fr) minmax(0,1.35fr); gap:14px; padding:11px 12px; border-radius:5px; overflow-wrap:anywhere; }
+ .fl-product-facts > div:nth-child(odd) { background:var(--color-surface); }
+ .fl-product-facts dt { font-weight:500; }
+ .fl-product-facts dd { color:var(--color-ink-muted); }
+ .fl-product-faq { padding:18px; margin-top:10px; border:1px solid var(--color-line); border-radius:14px; background:var(--color-surface); }
+ .fl-product-faq > h2 { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+ .fl-product-faq > h2 > svg { color:var(--color-purple-deep); }
+ .fl-product-faq > h2 > span { margin-left:auto; padding:3px 6px; background:var(--color-purple-tint); color:var(--color-purple-deep); border-radius:4px; font-size:10px; letter-spacing:.06em; }
+ .fl-product-faq details + details { border-top:1px solid var(--color-line); }
+ .fl-product-faq summary { padding:14px 0; font-size:13px; font-weight:500; }
+ .fl-product-faq p { padding:0 0 15px; font-size:13px; line-height:1.75; color:var(--color-ink-muted); white-space:pre-line; overflow-wrap:anywhere; }
+ .fl-product-copy summary:focus-visible { outline:2px solid var(--color-purple); outline-offset:3px; border-radius:4px; }
+ .fl-reviews { margin-top:64px; padding:32px; border:1px solid var(--color-line); border-radius:20px; scroll-margin-top:170px; }
+ .fl-reviews__header { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:28px; }
+ .fl-reviews__header h2 { margin:8px 0; font-size:30px; font-weight:600; letter-spacing:-.03em; }
+ .fl-reviews__header > div > p:last-child { font-size:14px; color:var(--color-ink-muted); }
+ .fl-reviews__write { display:flex; align-items:center; justify-content:center; gap:9px; min-height:44px; padding:12px 18px; border-radius:28px; background:var(--color-purple); color:white; font-size:13px; font-weight:600; flex-shrink:0; }
+ .fl-reviews__layout { display:grid; grid-template-columns:250px minmax(0,1fr); gap:30px; }
+ .fl-reviews__summary { align-self:start; padding:24px; border-radius:14px; background:var(--color-purple-tint); text-align:center; }
+ .fl-reviews__summary > strong { display:block; font-size:44px; font-weight:600; line-height:1.2; }
+ .fl-reviews__summary > strong small { margin-left:8px; font-size:15px; color:var(--color-ink-muted); }
+ .fl-review-stars { display:inline-flex; align-items:center; gap:3px; color:var(--color-purple-deep); }
+ .fl-reviews__summary .fl-review-stars { margin:10px 0; }
+ .fl-reviews__summary > svg { margin:0 auto 12px; color:var(--color-purple-deep); }
+ .fl-reviews__summary h3 { font-size:18px; font-weight:600; }
+ .fl-reviews__summary p { margin-top:6px; font-size:12px; color:var(--color-ink-muted); line-height:1.6; }
+ .fl-reviews__distribution { display:grid; gap:6px; margin-top:20px; font-size:11px; }
+ .fl-reviews__distribution > div { display:flex; gap:10px; align-items:center; }
+ .fl-reviews__bar { flex:1; height:5px; background:var(--color-paper); border-radius:4px; overflow:hidden; }
+ .fl-reviews__bar > span { display:block; height:100%; background:var(--color-purple); border-radius:4px; }
+ .fl-reviews__list > article { padding:0 0 22px; }
+ .fl-reviews__list > article + article { padding-top:22px; border-top:1px solid var(--color-line); }
+ .fl-review__byline { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+ .fl-review__avatar { display:grid; place-items:center; flex-shrink:0; width:36px; height:36px; border-radius:50%; background:var(--color-surface); color:var(--color-purple-deep); font-size:13px; }
+ .fl-review__byline strong { display:block; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+ .fl-review__byline time { display:block; margin-top:3px; font-size:11px; color:var(--color-ink-muted); }
+ .fl-review__byline .fl-review-stars { margin-left:auto; flex-shrink:0; }
+ .fl-reviews__list h3 { font-size:15px; font-weight:600; overflow-wrap:anywhere; }
+ .fl-reviews__list p { margin-top:8px; font-size:13px; line-height:1.75; color:var(--color-ink-muted); white-space:pre-line; overflow-wrap:anywhere; }
+ .fl-review__reply { padding:14px; background:var(--color-surface); border-radius:10px; margin-top:15px; font-size:12px; }
+ .fl-review__reply strong { font-weight:600; }
+ .fl-reviews__invitation { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:12px 0; }
+ .fl-reviews__invitation > svg { color:var(--color-purple); margin-bottom:12px; }
+ .fl-reviews__invitation h3,.fl-review-form h3 { font-size:18px; font-weight:600; }
+ .fl-reviews__invitation p,.fl-review-form p { margin:8px 0 16px; font-size:13px; line-height:1.6; color:var(--color-ink-muted); }
+ .fl-reviews__invitation button { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; color:var(--color-purple-deep); min-height:44px; }
+ .fl-review-form { border-top:1px solid var(--color-line); padding-top:20px; margin-top:12px; }
+ .fl-review-form label,.fl-review-form legend { display:block; font-size:12px; font-weight:500; }
+ .fl-review-form input:not([type=radio]),.fl-review-form textarea { display:block; width:100%; padding:10px 12px; border:1px solid var(--color-line-strong); border-radius:8px; font-size:16px; font-weight:400; margin-top:6px; background:var(--color-paper); }
+ .fl-review-form__fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; }
+ .fl-review-form__rating { display:flex; margin-top:6px; }
+ .fl-review-form__rating label { position:relative; display:grid; place-items:center; width:44px; height:44px; color:var(--color-purple-deep); cursor:pointer; }
+ .fl-review-form__rating input { position:absolute; opacity:0; width:100%; height:100%; cursor:pointer; }
+ .fl-review-form__rating label:has(input:focus-visible) { outline:2px solid var(--color-purple); border-radius:8px; }
+ .fl-review-form__buttons { display:flex; gap:12px; margin-top:14px; }
+ .fl-review-form__buttons button { padding:10px 18px; border-radius:24px; min-height:44px; font-size:13px; }
+ .fl-review-form__buttons button[type=submit] { background:var(--color-ink); color:white; }
+ .fl-reviews button:disabled { opacity:.5; cursor:not-allowed; }
+ .fl-reviews nav button { min-height:44px; color:var(--color-purple-deep); }
+ @media(max-width:639px) {
+   .fl-product-faq { padding:14px; }
+   .fl-reviews { margin-top:36px; padding:20px 16px; border-radius:16px; scroll-margin-top:100px; }
+   .fl-reviews__header { align-items:flex-start; flex-direction:column; gap:14px; margin-bottom:20px; }
+   .fl-reviews__header h2 { font-size:25px; }
+   .fl-reviews__header > div > p:last-child { font-size:13px; }
+   .fl-reviews__layout { grid-template-columns:minmax(0,1fr); gap:20px; }
+   .fl-reviews__summary { padding:18px; }
+   .fl-reviews__distribution { max-width:240px; margin:16px auto 0; }
+   .fl-review-form__fields { grid-template-columns:1fr; }
+   .fl-review__byline { gap:8px; flex-wrap:wrap; }
+ }
+}
+

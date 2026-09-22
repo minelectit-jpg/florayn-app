@@ -1,5 +1,7 @@
 # Product Manager
 
+Product page content, mobile case thumbnails and moderated reviews are documented in [PRODUCT_PAGE_CONTENT.md](PRODUCT_PAGE_CONTENT.md). Its current selector requirements supersede the earlier mobile side-by-side selector note below.
+
 Admin > Product Manager is the shared entry point for case/design products,
 regular ecommerce products, the existing bulk uploader, and case-type pricing.
 

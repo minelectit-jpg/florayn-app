@@ -52,7 +52,7 @@ export default function ProductView({
   matchingProduct,
   shipping,
   tabs,
-  pairs,
+  reviewSummary,
   recommendedItems,
   manualFeaturedItems,
   featureBlocks,
@@ -90,7 +90,7 @@ export default function ProductView({
   matchingProduct?: MatchingProduct | null
   shipping?: ReactNode
   tabs: ReactNode
-  pairs: ReactNode
+  reviewSummary?: ReactNode
   /**
    * Recommended-for-you accessories, shown under the gallery in the left column
    * on desktop (below the buy box on mobile). Passed as data, not a rendered
@@ -245,6 +245,7 @@ export default function ProductView({
         <h1 className="text-[1.625rem] font-semibold leading-[1.21] tracking-[-0.034em] text-[#111]">
           {device ? `${designName} – ${device} Case` : designName}
         </h1>
+        {reviewSummary}
 
         <div className="mt-3">
           <ProductBuyBox
@@ -288,7 +289,6 @@ export default function ProductView({
         </div>
 
         {tabs}
-        {pairs}
       </ProductDetailsSticky>
 
       {recommendedItems?.length ||

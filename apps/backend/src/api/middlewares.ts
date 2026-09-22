@@ -38,6 +38,7 @@ const STOREFRONT_WRITE_PREFIXES = [
 
 export default defineMiddlewares({
   routes: [
+    { matcher: "/store/product-reviews", method: ["POST"], middlewares: [authenticate("customer", ["session", "bearer"])] },
     /**
      * The design uploader sends each mockup as base64 JSON to /admin/designs/upload.
      * A single high-resolution render base64-encodes well past the default JSON body

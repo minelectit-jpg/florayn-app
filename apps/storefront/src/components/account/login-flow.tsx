@@ -51,7 +51,8 @@ export default function LoginFlow() {
         setError(r.error ?? "Invalid or expired code.")
         return
       }
-      router.push("/account")
+      const returnTo = new URLSearchParams(window.location.search).get("returnTo")
+      router.push(returnTo && /^\/product\/[a-z0-9-]+\/(?:#customer-reviews)?$/.test(returnTo) ? returnTo : "/account")
       router.refresh()
     })
   }

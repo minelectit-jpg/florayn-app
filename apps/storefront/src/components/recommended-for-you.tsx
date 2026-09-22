@@ -85,7 +85,7 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
   }
 
   return (
-    <article className="flex h-full flex-col rounded-[12px] border border-line p-3">
+    <article className="fl-recommendation">
       <Link
         href={href}
         className="block"
@@ -97,13 +97,13 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
             src={image}
             alt={item.name}
             label={item.name}
-            sizes="240px"
+            sizes="(max-width: 639px) 96px, 204px"
             fillMode="absolute"
           />
         </div>
       </Link>
 
-      <div className="mt-3 flex flex-1 flex-col text-center">
+      <div className="fl-recommendation__body">
         <Link href={href} className="block" prefetch={false}>
           <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
             {item.name}
@@ -115,16 +115,17 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
         <p className="mt-1 text-[15px] font-semibold tabular-nums">
           {price != null ? <Price amount={price} /> : "—"}
         </p>
-
+      </div>
+      <div className="fl-recommendation__actions">
         {item.variants.length > 1 ? (
           <>
             <button
               type="button"
               onClick={() => setOpenModel(true)}
               aria-haspopup="dialog"
-              className="mt-3 flex h-11 w-full items-center justify-between rounded-[8px] border border-[#e2e2e2] bg-paper px-3 text-left text-[13px] transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
+              className="flex min-h-11 w-full items-center justify-between rounded-[8px] border border-[#e2e2e2] bg-paper px-2 py-2 text-left text-xs transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
             >
-              <span className="truncate">{selected?.label ?? "Select model"}</span>
+              <span>{selected?.label ?? "Select model"}</span>
               <svg
                 width="13"
                 height="13"
@@ -159,7 +160,7 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
           type="button"
           onClick={addToCart}
           disabled={busy || !selected}
-          className="mt-3 flex h-11 w-full items-center justify-center rounded-full border border-ink text-[13px] font-semibold uppercase tracking-wide text-ink transition-colors hover:bg-ink hover:text-white disabled:opacity-50"
+          className="flex min-h-11 w-full items-center justify-center rounded-full border border-ink px-2 text-xs font-semibold text-ink transition-colors hover:bg-ink hover:text-white disabled:opacity-50"
         >
           {busy ? "Adding…" : "Add to cart"}
         </button>
@@ -186,7 +187,7 @@ export default function RecommendedForYou({
     <section>
       <div className="flex items-center gap-4">
         <span className="h-px flex-1 bg-line" />
-        <h2 className="text-center text-[1.05rem] font-semibold uppercase tracking-[0.04em]">
+        <h2 className="text-center text-sm font-semibold uppercase tracking-[0.04em] sm:text-[1.05rem]">
           {title}
         </h2>
         <span className="h-px flex-1 bg-line" />
@@ -196,7 +197,7 @@ export default function RecommendedForYou({
         {items.map((item) => (
           <li
             key={item.id}
-            className="w-[210px] shrink-0 snap-start sm:w-[230px]"
+            className="w-full max-w-[350px] shrink-0 snap-start sm:w-[230px]"
           >
             <RecommendedCard item={item} />
           </li>

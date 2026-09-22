@@ -15,6 +15,11 @@ import { addPairsToDesign } from "../lib/add-design-pairs"
 import { getDesignDetail, listLiveDesigns } from "../lib/design-admin"
 import { editDesignMeta } from "../lib/edit-design"
 import { CATALOG_MODULE } from "../modules/catalog"
+import { saveProductContentWorkflow } from "../workflows/save-product-content"
+import { DEFAULT_PRODUCT_CONTENT, PRODUCT_CONTENT_KEY } from "../lib/product-content"
+import { submitProductReviewWorkflow, moderateProductReviewWorkflow } from "../workflows/product-reviews"
+import { publicReviews } from "../lib/product-reviews"
+import { CONTENT_MODULE } from "../modules/content"
 
 /** Runs after the checkout fixture, on its disposable database only. */
 export default async function verifyProductManager({ container }: ExecArgs) {
@@ -148,5 +153,30 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   await saveBadge({ scope: container, body: { text: "" } } as any, res)
   assert.equal(response.text, "")
   progress("manual recommendations, exact variant images, section order, invalid target rejection, clearing and editable bundle badge passed")
+  const pageContent = { ...DEFAULT_PRODUCT_CONTENT, facts: [{ label: "Material", value: "Fixture material" }], faqs: [{ question: "Does it fit?", answer: "Choose the fixture model." }] }
+  await saveProductContentWorkflow(container).run({ input: { productId: original.id, settings: pageContent } })
+  const savedPage = await productService.retrieveProduct(original.id)
+  assert.deepEqual(savedPage.metadata?.[PRODUCT_CONTENT_KEY], pageContent)
+  assert.equal(savedPage.description, "Edited description")
+  const customer = await container.resolve(Modules.CUSTOMER).createCustomers({ email: "review-fixture@example.invalid", first_name: "Fixture" })
+  const reviewInput = { productId: original.id, customerId: customer.id, body: { rating: 4, author: "Fixture shopper", title: "Synthetic review", body: "Only a disposable test review.", status: "approved" } }
+  const submitted = await submitProductReviewWorkflow(container).run({ input: reviewInput })
+  assert.equal(submitted.result.status, "pending")
+  assert.equal((await publicReviews(container, original.id)).count, 0)
+  await assert.rejects(() => submitProductReviewWorkflow(container).run({ input: reviewInput }))
+  await moderateProductReviewWorkflow(container).run({ input: { id: submitted.result.id, status: "approved", reply: "Fixture reply" } })
+  const publishedReviews = await publicReviews(container, original.id)
+  assert.equal(publishedReviews.count, 1); assert.equal(publishedReviews.average, 4)
+  assert.equal(publishedReviews.reviews[0].reply, "Fixture reply")
+  assert.equal((publishedReviews.reviews[0] as any).customer_id, undefined)
+  await moderateProductReviewWorkflow(container).run({ input: { id: submitted.result.id, status: "rejected", reply: "" } })
+  assert.equal((await publicReviews(container, original.id)).count, 0)
+  const contentService = container.resolve(CONTENT_MODULE)
+  const persisted = await contentService.retrieveProductReview(submitted.result.id)
+  assert.equal(persisted.body, "Only a disposable test review.")
+  await assert.rejects(() => contentService.createProductReviews({ review_key: persisted.review_key, customer_id: customer.id, product_id: original.id, author: "Fixture", title: "Duplicate", body: "Duplicate fixture review", rating: 5 }))
+  await saveProductContentWorkflow(container).run({ input: { productId: original.id, settings: { ...pageContent, reviews_enabled: false } } })
+  await assert.rejects(() => publicReviews(container, original.id))
+  progress("product FAQ persistence, pending review privacy, moderation, replies, aggregate ratings, duplicate protection and disabling passed")
   container.resolve(ContainerRegistrationKeys.LOGGER).info("PRODUCT_MANAGER_INTEGRATION_PASS: regular create/edit/append, exact cart variant and price, draft, single phone pair, dynamic catalogs, missing forms, stable IDs and shared-stock duplicate")
 }

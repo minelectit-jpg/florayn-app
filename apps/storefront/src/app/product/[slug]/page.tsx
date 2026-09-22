@@ -6,12 +6,11 @@ import ProductView from "@/components/product-view"
 import {
   type RecommendedItem,
 } from "@/components/recommended-for-you"
-import {
-  PairsWellWith,
-  ShippingNote,
-  type RelatedProduct,
-} from "@/components/product-sections"
+import { ShippingNote } from "@/components/product-sections"
 import ProductTabs from "@/components/product-tabs"
+import ProductReviews from "@/components/product-reviews"
+import { readProductContent } from "@/lib/product-content"
+import { getProductReviews } from "@/lib/product-reviews"
 import { getBundleConfig } from "@/lib/bundles"
 import {
   getBlankStock,
@@ -142,6 +141,7 @@ export default async function ProductPage({ params }: Params) {
     ? { ...resolved, matrix: buildVariantMatrix(resolved.product) }
     : null)
   const sectionsPromise = getProductSections()
+  const reviewsPromise = productPromise.then((r) => r && readProductContent(r.product.metadata).reviews_enabled ? getProductReviews(r.product.id) : null)
   const manualPromise = productPromise.then((resolved) =>
     resolved && !(resolved.matrix.caseTypes.length && resolved.matrix.devices.length)
       ? getManualRecommendations(resolved.product.metadata)
@@ -213,6 +213,10 @@ export default async function ProductPage({ params }: Params) {
   const designSlug = product.metadata?.design_slug as string | undefined
   const designName = (product.metadata?.design_name as string) ?? product.title
   const { featureBlocks } = productSections
+  const content = readProductContent(product.metadata)
+  const reviews = await reviewsPromise
+  const reviewSummary = content.reviews_enabled ? <a href="#customer-reviews" className="fl-review-jump"><span aria-hidden="true">★</span>{reviews?.count ? `${reviews.average!.toFixed(1)} · ${reviews.count} review${reviews.count === 1 ? "" : "s"}` : "Customer reviews"}<span className="fl-review-jump__link">{reviews?.count ? "Read reviews" : "Be the first to review"}</span></a> : null
+  const reviewSection = content.reviews_enabled ? <ProductReviews productId={product.id} pagePath={`/product/${slug}/`} initial={reviews} heading={content.reviews_heading} intro={content.reviews_intro} /> : null
 
   // Apply the existing fixed prices for supported case types. Variants such as
   // Alcantara retain the region-calculated prices fetched with the product.
@@ -263,13 +267,12 @@ export default async function ProductPage({ params }: Params) {
           tabs={
             <ProductTabs
               description={product.description}
-              caseTypeName={null}
-              caseTypeDescription={product.description}
               facts={simpleFacts}
-              designName={designName}
+              content={content}
+              isCase={false}
             />
           }
-          pairs={null}
+          reviewSummary={reviewSummary}
           recommendedItems={manual.recommended}
           manualFeaturedItems={manual.featured}
           featureBlocks={featureBlocks}
@@ -277,6 +280,7 @@ export default async function ProductPage({ params }: Params) {
           simple
           optionLabel={simple.optionTitle ?? undefined}
         />
+        {reviewSection}
       </article>
     )
   }
@@ -372,10 +376,6 @@ export default async function ProductPage({ params }: Params) {
 
   const recommendedItems = matchingProducts.map((p) => recommendationItem(p, preferences))
     .filter((item): item is RecommendedItem => item !== null).slice(0, 8)
-  const pairsItems: RelatedProduct[] = recommendedItems.slice(0, 3).map((item) => ({
-    id: item.id, title: item.name, handle: item.handle, thumbnail: item.thumbnail,
-    label: item.formLabel, price: item.price,
-  }))
 
   const fallbackImages = (product.images ?? []).map((i) => i.url)
 
@@ -426,18 +426,18 @@ export default async function ProductPage({ params }: Params) {
         tabs={
           <ProductTabs
             description={product.description}
-            caseTypeName={null}
-            caseTypeDescription={product.description}
             facts={facts}
-            designName={designName}
+            content={content}
+            isCase
           />
         }
-        pairs={<PairsWellWith items={pairsItems} />}
+        reviewSummary={reviewSummary}
         recommendedItems={recommendedItems}
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
       />
+      {reviewSection}
     </article>
   )
 }

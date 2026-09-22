@@ -11,8 +11,10 @@ import MenuItem from "./models/menu-item"
 import MenuSection from "./models/menu-section"
 import SeoOverride from "./models/seo-override"
 import SeoSetting from "./models/seo-setting"
+import ProductReview from "./models/product-review"
 
 class ContentModuleService extends MedusaService({
+  ProductReview,
   CheckoutSetting,
   ContactSetting,
   HomeSection,

@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Read [PRODUCT_PAGE_CONTENT.md](PRODUCT_PAGE_CONTENT.md) before changing product content, reviews or mobile case selectors.
+
 ## Overview
 
 Medusa DTC Starter — a Turborepo workspace monorepo containing a Medusa backend (`@medusajs/medusa` latest, Node 20+, PostgreSQL 15+) and an optional storefront (Next.js, Tanstack, etc...).

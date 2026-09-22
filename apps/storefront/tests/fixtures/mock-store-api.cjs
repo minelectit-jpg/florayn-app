@@ -17,6 +17,9 @@ const caseTypes = [
   { id: "case_earbuds", name: "Signature Earbuds", slug: "signature-earbuds", price: 750, is_active: true, description: "Test earbuds case", forms: ["airpods"], devices: devices.filter((d) => d.family === "airpods") },
 ]
 const collection = { id: "col_test", title: "Test Collection", handle: "test-collection" }
+if (process.env.UI_REFINEMENT_FIXTURE === "1") {
+  for (const [name, slug] of [["Elite Clear", "elite-clear"], ["Armor Clear", "armor-clear"], ["Alcantara", "alcantara"]]) caseTypes.push({ ...caseTypes[0], id: `case_${slug}`, name, slug, price: 1950 })
+}
 function makeProduct(slug, title, form = "phone") {
   const handle = form === "phone" ? slug : `${slug}-${form}`
   const productDevices = devices.filter((device) => form === "phone" ? device.family === "iphone" : device.family === "airpods")
@@ -54,6 +57,8 @@ const carts = new Map()
 const orders = new Map()
 // Opt-in account UI checks. These fake codes never send email or contact Medusa.
 const accountFixture = process.env.UI_REFINEMENT_FIXTURE === "1"
+const pageContentDefaults = { description_heading: "Made for your everyday", information_heading: "Product details", faq_heading: "Good to know", reviews_heading: "Customer reviews", reviews_intro: "Real experiences, shared by our customers.", reviews_enabled: true, facts: null, faqs: null }
+const fixtureReviews = accountFixture ? Array.from({ length: 8 }, (_, i) => ({ id: `review_fixture_${i}`, author: `Fixture shopper ${i + 1}`, rating: i % 2 ? 4 : 5, title: "Local review fixture", body: "This is a synthetic review for local layout verification only.", reply: i === 0 ? "Fixture reply from Florayn." : "", created_at: "2026-09-23T09:00:00.000Z", review_key: "design:audit-bloom", status: i === 7 ? "pending" : "approved", product_id: "prod_audit-bloom" })) : []
 const fixtureCustomer = { id: "cus_fixture", email: "shopper@example.invalid", first_name: "Alex", last_name: "Rahman", phone: "01700000000" }
 const fixtureAddresses = [{ id: "addr_fixture", first_name: "Alex", last_name: "Rahman", address_1: "12 Fixture Road", city: "Dhaka", country_code: "bd", phone: "01700000000" }]
 const districts = ["Chattogram", "Dhaka", "Gazipur", "Narayanganj", "Rajshahi", "Sylhet"]
@@ -171,6 +176,35 @@ const server = http.createServer(async (req, res) => {
   let body = ""
   for await (const chunk of req) body += chunk
   const data = body ? JSON.parse(body) : {}
+  if (url.pathname === "/store/product-reviews") {
+    if (req.method === "POST") {
+      if (!accountFixture || req.headers.authorization !== "Bearer local-account-fixture") return send(res, { message: "Sign in to write a review." }, 401)
+      if (fixtureReviews.some((r) => r.id === "submitted_fixture")) return send(res, { message: "You have already submitted a review for this design." }, 400)
+      fixtureReviews.push({ ...data, id: "submitted_fixture", status: "pending", created_at: new Date().toISOString(), review_key: "design:audit-bloom", reply: "" })
+      return send(res, { id: "submitted_fixture", status: "pending" }, 201)
+    }
+    const offset = Number(url.searchParams.get("offset") || 0)
+    const rows = url.searchParams.get("product_id") === "prod_audit-bloom" ? fixtureReviews.filter((r) => r.status === "approved") : []
+    const distribution = [1, 2, 3, 4, 5].map((n) => rows.filter((r) => r.rating === n).length)
+    return send(res, { reviews: rows.slice(offset, offset + 6), count: rows.length, average: rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : null, distribution, offset, limit: 6 })
+  }
+  if (accountFixture && /^\/admin\/products\/[^/]+\/page-content$/.test(url.pathname)) {
+    const p = products.find((p) => p.id === url.pathname.split("/")[3])
+    if (!p) return send(res, { message: "Missing product" }, 404)
+    if (req.method === "POST") p.metadata.florayn_product_content = data
+    return send(res, { settings: p.metadata.florayn_product_content ?? pageContentDefaults })
+  }
+  if (accountFixture && url.pathname === "/admin/content/product-reviews") {
+    const status = url.searchParams.get("status")
+    const rows = fixtureReviews.filter((r) => !status || r.status === status)
+    return send(res, { reviews: rows, count: rows.length, offset: 0, limit: 20 })
+  }
+  if (accountFixture && /^\/admin\/content\/product-reviews\/[^/]+$/.test(url.pathname)) {
+    const row = fixtureReviews.find((r) => r.id === url.pathname.split("/").pop())
+    if (!row) return send(res, {}, 404)
+    row.status = data.status; row.reply = data.reply
+    return send(res, { id: row.id })
+  }
   if (accountFixture && url.pathname === "/store/auth/otp/request") {
     return send(res, { message: "Local fixture only. Use 123456." })
   }

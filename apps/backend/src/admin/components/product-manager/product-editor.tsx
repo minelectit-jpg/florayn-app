@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import ContentPreview from "./content-preview"
 import VariantEditor from "./variant-editor"
 import RecommendationsEditor from "./recommendations-editor"
+import PageContentEditor from "./page-content-editor"
+import ReviewsEditor from "./reviews-editor"
 import AddRegularVariant from "./add-regular-variant"
 import { api, post, Gallery, CatalogCreate, ManagerSelect, useUnsaved, type Detail, type Product, type CatalogOption } from "./shared"
 
@@ -30,6 +32,8 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const [addBusy, setAddBusy] = useState(false)
   const [recommendationDirty, setRecommendationDirty] = useState(false)
   const [recommendationBusy, setRecommendationBusy] = useState(false)
+  const [contentDirty, setContentDirty] = useState(false)
+  const [contentBusy, setContentBusy] = useState(false)
   const lock = useRef(false)
   const dirty = !!d && (name !== d.name || theme !== (d.theme ?? "") || description !== d.products[0]?.description)
   useUnsaved(dirty || images.length > 0)
@@ -51,7 +55,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
     lock.current = true; setBusy(true)
     try { await fn() } catch (e: any) { toast.error(e.message) } finally { lock.current = false; setBusy(false) }
   }
-  const leave = (next: () => void) => { if (variantBusy || addBusy || recommendationBusy) return; if ((!dirty && !images.length && !variantDirty && !addDirty && !recommendationDirty) || window.confirm("Discard unsaved product changes?")) next() }
+  const leave = (next: () => void) => { if (variantBusy || addBusy || recommendationBusy || contentBusy) return; if ((!dirty && !images.length && !variantDirty && !addDirty && !recommendationDirty && !contentDirty) || window.confirm("Discard unsaved product changes?")) next() }
   const openVariants = (product: Product, ids: string[]) => { if (variantBusy) return; if (!variantDirty || window.confirm("Discard unsaved variant or stock changes?")) setEditing({ product, ids }) }
   const saveMeta = () => run(async () => {
     const patch = { ...(name !== d?.name ? { name } : {}), ...(theme !== (d?.theme ?? "") ? { theme } : {}), ...(description !== d?.products[0]?.description ? { description } : {}) }
@@ -78,7 +82,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const selectedProduct = d.products.find((p) => selected.length && selected.every((id) => p.variants.some((v) => v.id === id)))
   const editingProduct = d.products.find((p) => p.id === editing?.product.id)
   return <div className="grid gap-5">
-    <Container className="flex flex-wrap items-center justify-between gap-3"><div><Button size="small" variant="transparent" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy} onClick={() => leave(onBack)}>← All products</Button><Heading level="h1">{d.name}</Heading><Text size="xsmall" className="text-ui-fg-muted">/product/{d.products[0]?.handle}/</Text></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setPreview(!preview)}>Preview</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy} onClick={() => leave(() => onDuplicate(d))}>Duplicate</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy} onClick={() => changeStatus(published ? "draft" : "published")}>{published ? "Move to draft" : "Publish"}</Button><Button isLoading={busy} disabled={!dirty || uploading || recommendationBusy} onClick={saveMeta}>Save changes</Button></div></Container>
+    <Container className="flex flex-wrap items-center justify-between gap-3"><div><Button size="small" variant="transparent" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => leave(onBack)}>← All products</Button><Heading level="h1">{d.name}</Heading><Text size="xsmall" className="text-ui-fg-muted">/product/{d.products[0]?.handle}/</Text></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setPreview(!preview)}>Preview</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => leave(() => onDuplicate(d))}>Duplicate</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => changeStatus(published ? "draft" : "published")}>{published ? "Move to draft" : "Publish"}</Button><Button isLoading={busy} disabled={!dirty || uploading || recommendationBusy || contentBusy} onClick={saveMeta}>Save changes</Button></div></Container>
     {preview && <ContentPreview name={name} description={description} variants={d.products.flatMap((p) => p.variants.map((v) => ({ label: v.title, images: v.images.length ? v.images : p.images, price: v.price })))} />}
     {error && <Text role="alert" className="text-ui-fg-error">{error}</Text>}
     <Container className="grid gap-4"><div className="flex flex-wrap gap-2">{d.products.map((p) => <Badge key={p.id} color={p.status === "published" ? "green" : "grey"}>{p.form} · {p.status}</Badge>)}{dirty && <Badge color="orange">Unsaved changes</Badge>}</div><div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="edit-name">Name</Label><Input id="edit-name" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} /></div><div><Label htmlFor="edit-theme">Collection</Label><Input id="edit-theme" value={theme} onChange={(e) => setTheme(e.target.value)} /></div></div><div><Label htmlFor="edit-description">Description</Label><Textarea id="edit-description" maxLength={20000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
@@ -94,6 +98,8 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
     {d.kind === "design" && <Container className="grid gap-4"><Heading level="h2">Add model / case type</Heading><Text size="small">Add one combination with its own gallery. Existing variants keep their IDs and shared stock.</Text><div className="grid gap-3 md:grid-cols-2"><ManagerSelect aria-label="New variant case type" value={caseSlug} onValueChange={(value) => setCaseSlug(value)}><option value="">Choose case type</option>{cases.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</ManagerSelect><ManagerSelect aria-label="New variant model" value={deviceSlug} onValueChange={(value) => setDeviceSlug(value)}><option value="">Choose model</option>{devices.map((v) => <option key={v.slug} value={v.slug}>{v.name}</option>)}</ManagerSelect></div><Gallery images={images} onChange={setImages} slug={slug} disabled={busy} onBusy={setUploading} /><div><Button onClick={addPair} isLoading={busy} disabled={uploading || !caseSlug || !deviceSlug || !images.length}>Add variant</Button></div><CatalogCreate onCreated={catalog} /></Container>}
     {d.kind === "regular" && <RecommendationsEditor key={d.products[0].id} productId={d.products[0].id} disabled={busy || uploading || variantBusy || addBusy} onDirtyChange={setRecommendationDirty} onBusyChange={setRecommendationBusy} />}
     {d.kind === "regular" && <AddRegularVariant onDirtyChange={setAddDirty} onBusyChange={setAddBusy} product={d.products[0]} onSaved={() => { void load(); onChanged() }} />}
-    <div><Button variant="danger" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy} onClick={removeProduct}>Delete product</Button></div>
+    <PageContentEditor products={d.products} disabled={busy || uploading || variantBusy || addBusy || recommendationBusy} onDirtyChange={setContentDirty} onBusyChange={setContentBusy} />
+    <ReviewsEditor productId={d.products[0].id} />
+    <div><Button variant="danger" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={removeProduct}>Delete product</Button></div>
   </div>
 }
