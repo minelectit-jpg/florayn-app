@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState, useTransition } from "react"
+import { Minus, Plus, Trash2 } from "lucide-react"
 
 import { useCart } from "@/components/cart-provider"
 import ProductImage from "@/components/product-image"
@@ -21,65 +21,65 @@ export default function CartLineItem({
   item: CartItem
   currencyCode: string
 }) {
-  const router = useRouter()
   const { applySummary } = useCart()
   const [quantity, setQuantity] = useState(item.quantity)
-  const [busy, setBusy] = useState(false)
+  const [pending, startUpdate] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
   const productTitle = item.variant?.product?.title ?? item.title
   const handle = item.variant?.product?.handle
   const thumbnail = item.thumbnail ?? item.variant?.product?.thumbnail ?? null
 
-  async function commit(next: number) {
+  useEffect(() => setQuantity(item.quantity), [item.quantity])
+
+  function commit(next: number) {
+    if (pending || next < 1) return
     const previous = quantity
     setQuantity(next)
-    setBusy(true)
     setError(null)
 
-    try {
-      const summary = await setLineItemQuantity(item.id, next)
-      applySummary(summary)
-      router.refresh()
-    } catch {
-      setQuantity(previous)
-      setError("Could not update. Try again.")
-    } finally {
-      setBusy(false)
-    }
+    // The action revalidates /cart and returns fresh server-rendered totals.
+    // Keep one transition through that update; a second refresh can race it.
+    startUpdate(async () => {
+      try {
+        applySummary(await setLineItemQuantity(item.id, next))
+      } catch {
+        setQuantity(previous)
+        setError("Could not update. Try again.")
+      }
+    })
   }
 
-  async function remove() {
-    setBusy(true)
+  function remove() {
+    if (pending) return
     setError(null)
-    try {
-      const summary = await removeLineItem(item.id)
-      applySummary(summary)
-      router.refresh()
-    } catch {
-      setError("Could not remove. Try again.")
-      setBusy(false)
-    }
+    startUpdate(async () => {
+      try {
+        applySummary(await removeLineItem(item.id))
+      } catch {
+        setError("Could not remove. Try again.")
+      }
+    })
   }
 
   return (
     <li
       className={[
-        "flex flex-wrap items-center gap-4 py-5 transition-opacity",
-        busy ? "opacity-50" : "opacity-100",
+        "fl-bag-item",
+        pending ? "opacity-60" : "opacity-100",
       ].join(" ")}
-      aria-busy={busy}
+      aria-busy={pending}
     >
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden border border-line bg-paper">
+      <div className="fl-bag-item__image">
         <ProductImage
           src={thumbnail}
           alt=""
           label={productTitle}
-          sizes="80px"
+          sizes="(max-width: 640px) 88px, 112px"
         />
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="fl-bag-item__details">
         {handle ? (
           <Link
             href={`/product/${handle}/`}
@@ -90,46 +90,47 @@ export default function CartLineItem({
         ) : (
           <p className="display text-base">{productTitle}</p>
         )}
-        <p className="eyebrow pt-1">
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">
           {item.variant?.title}
-          {item.variant?.sku ? ` · ${item.variant.sku}` : ""}
         </p>
-        {error ? <p className="pt-1 text-xs text-danger">{error}</p> : null}
+        <p className="mt-2 text-xs text-ink-muted">{formatPrice(item.unit_price, currencyCode)} each</p>
+        {error ? <p role="alert" className="pt-1 text-xs text-danger">{error}</p> : null}
       </div>
 
-      <div className="flex items-center border border-line bg-surface">
+      <div className="fl-bag-item__quantity">
         <button
           type="button"
           onClick={() => commit(quantity - 1)}
-          disabled={busy || quantity <= 1}
+          disabled={pending || quantity <= 1}
           aria-label={`Decrease quantity of ${productTitle}`}
-          className="px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
+          className="disabled:opacity-30"
         >
-          &minus;
+          <Minus size={14} aria-hidden="true" />
         </button>
         <span className="w-8 text-center text-sm tabular-nums">{quantity}</span>
         <button
           type="button"
           onClick={() => commit(quantity + 1)}
-          disabled={busy}
+          disabled={pending}
           aria-label={`Increase quantity of ${productTitle}`}
-          className="px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-30"
+          className="disabled:opacity-30"
         >
-          +
+          <Plus size={14} aria-hidden="true" />
         </button>
       </div>
 
-      <p className="w-24 text-right text-sm tabular-nums">
+      <p className="fl-bag-item__price">
         {formatPrice(item.unit_price * quantity, currencyCode)}
       </p>
 
       <button
         type="button"
         onClick={remove}
-        disabled={busy}
-        className="eyebrow transition-colors hover:text-danger disabled:opacity-40"
+        disabled={pending}
+        aria-label={`Remove ${productTitle} from bag`}
+        className="fl-bag-item__remove"
       >
-        Remove
+        <Trash2 size={15} aria-hidden="true" /><span>Remove</span>
       </button>
     </li>
   )

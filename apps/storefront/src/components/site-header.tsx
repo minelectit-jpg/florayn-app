@@ -75,7 +75,7 @@ export default function SiteHeader({
        * position:fixed child would then size itself against the header rather
        * than the viewport.
        */}
-      <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur-sm">
+      <header data-store-header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur-sm">
       <div className="mx-auto flex w-full max-w-[1470px] items-center gap-4 px-[15px] py-4 md:px-[30px]">
         <button
           type="button"

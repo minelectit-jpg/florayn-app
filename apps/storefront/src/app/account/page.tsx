@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import AccountDashboard from "@/components/account/account-dashboard"
 import { getAccountOrders, getCurrentCustomer, listAddresses } from "@/lib/customer"
 
-export const metadata = { title: "My account" }
+export const metadata = { title: "My account", robots: { index: false, follow: false } }
 export const dynamic = "force-dynamic"
 
 export default async function AccountPage() {
@@ -13,7 +13,7 @@ export default async function AccountPage() {
   const [orders, addresses] = await Promise.all([getAccountOrders(), listAddresses()])
 
   return (
-    <div className="py-8 md:py-12">
+    <div className="py-2 md:py-4">
       <AccountDashboard customer={customer} orders={orders} addresses={addresses} />
     </div>
   )

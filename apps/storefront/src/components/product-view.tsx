@@ -6,6 +6,7 @@ import type { MatchingProduct } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import LazyReveal from "@/components/lazy-reveal"
 import ProductBuyBox from "@/components/product-buy-box"
+import ProductDetailsSticky from "@/components/product-details-sticky"
 import YouWillLove from "@/components/you-will-love"
 import RecommendedForYou, {
   type RecommendedItem,
@@ -222,7 +223,7 @@ export default function ProductView({
         />
       </div>
 
-      <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
+      <ProductDetailsSticky>
         {/* Stock badge, above the title like florayn's "N in stock". Reflects
             the live (case type, device) blank; an untracked pair reads as in
             stock. */}
@@ -288,7 +289,7 @@ export default function ProductView({
 
         {tabs}
         {pairs}
-      </div>
+      </ProductDetailsSticky>
 
       {recommendedItems?.length ||
       featureBlocks?.length || manualFeaturedItems?.length ||

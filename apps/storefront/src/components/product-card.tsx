@@ -142,7 +142,13 @@ export default function ProductCard({
       <div className="fl-card__summary">
         <div className="fl-card__titles">
           <h3 className="fl-card__title">{designName}</h3>
-          {meta ? <p className="fl-card__meta">{meta}</p> : null}
+          {meta ? <p className="fl-card__meta">
+            {device && caseType ? <>
+              <span>{buildMetaLine({ device })}</span>
+              <span className="fl-card__meta-separator" aria-hidden="true"> • </span>
+              <span className="fl-card__case-type">{caseType}</span>
+            </> : meta}
+          </p> : null}
         </div>
 
         <div className="fl-card__price-row">

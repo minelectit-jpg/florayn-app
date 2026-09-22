@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import LoginFlow from "@/components/account/login-flow"
 import { getCurrentCustomer } from "@/lib/customer"
 
-export const metadata = { title: "Sign in" }
+export const metadata = { title: "Sign in", robots: { index: false, follow: false } }
 export const dynamic = "force-dynamic"
 
 export default async function AccountLoginPage() {
@@ -13,7 +13,7 @@ export default async function AccountLoginPage() {
   if (customer) redirect("/account")
 
   return (
-    <div className="py-12 md:py-20">
+    <div className="py-2 md:py-4">
       <LoginFlow />
     </div>
   )

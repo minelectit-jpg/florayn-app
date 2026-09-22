@@ -21,6 +21,11 @@ export const PRODUCT_TYPE_LABELS: Record<string, string> = {
   wallet: "Wallet",
 }
 
+/** Phone brands share a shop; all other model families remain separate. */
+export function formForDeviceFamily(family: string): string {
+  return family === "iphone" || family === "samsung" ? "phone" : family
+}
+
 /** The label for a form; a title-cased fallback keeps an unknown form usable. */
 export function productTypeLabel(form?: string | null): string {
   if (!form) return ""

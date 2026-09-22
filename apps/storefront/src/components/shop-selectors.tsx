@@ -7,6 +7,7 @@ import { ChevronDown } from "lucide-react"
 import CaseTypeModal from "@/components/case-type-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import type { CaseTypeRecord, DeviceRecord } from "@/lib/catalog"
+import { formForDeviceFamily } from "@/lib/product-forms"
 
 /**
  * The shop's two selectors, matching the live florayn.com UX: a "Select model"
@@ -62,10 +63,13 @@ export default function ShopSelectors({
     router.push(`/shop/${nextDevice}/${nextCase}/`)
   }
 
-  // The whole catalogue as drawer items, family-grouped in FAMILY_ORDER.
+  const currentForm = formForDeviceFamily(devices.find((d) => d.slug === curDevice)?.family ?? "iphone")
+
+  // Switching models stays in this product form, including every AirPods model.
   const modelItems: ModelItem[] = useMemo(
     () =>
       devices
+        .filter((d) => formForDeviceFamily(d.family) === currentForm)
         .map((d) => ({
           value: d.slug,
           label: d.name,
@@ -74,7 +78,7 @@ export default function ShopSelectors({
         }))
         .sort((a, b) => (a.rank === -1 ? 99 : a.rank) - (b.rank === -1 ? 99 : b.rank))
         .map(({ rank: _rank, ...item }) => item),
-    [devices]
+    [devices, currentForm]
   )
 
   return (

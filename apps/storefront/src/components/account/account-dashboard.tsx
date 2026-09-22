@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Heart, MapPin, Package, User } from "lucide-react"
+import { ArrowRight, Heart, LogOut, MapPin, Package, User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { formatPrice } from "@/lib/money"
@@ -40,8 +40,7 @@ export default function AccountDashboard({
   const [signingOut, startSignOut] = useTransition()
 
   const name =
-    [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim() ||
-    customer.email
+    [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim()
 
   function signOut() {
     startSignOut(async () => {
@@ -52,40 +51,44 @@ export default function AccountDashboard({
   }
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
-        <div className="space-y-1">
-          <p className="eyebrow">Account</p>
-          <h1 className="display text-[2rem] leading-tight md:text-[2.5rem]">
-            Hello, {name}
-          </h1>
-          <p className="text-sm text-ink-muted">{customer.email}</p>
+    <div className="fl-account">
+      <header className="fl-account__welcome">
+        <div className="fl-account__identity">
+          <span className="fl-account__avatar" aria-hidden="true">{name ? name.slice(0, 1).toUpperCase() : <User size={28} />}</span>
+          <div>
+            <p className="eyebrow text-purple-deep">Your Florayn</p>
+            <h1>{name ? `Hello, ${name}.` : "Welcome back."}</h1>
+            <p className="fl-account__email">{customer.email}</p>
+          </div>
         </div>
-        <Button variant="secondary" size="sm" onClick={signOut} disabled={signingOut}>
-          {signingOut ? "Signing out…" : "Sign out"}
-        </Button>
+        <Link href="/" className="fl-text-link">Find your next favourite <ArrowRight size={17} /></Link>
       </header>
-
-      <div className="grid gap-8 md:grid-cols-[200px_1fr]">
-        <nav className="flex gap-2 overflow-x-auto md:flex-col md:gap-1">
+      <div className="fl-account__layout">
+        <aside className="fl-account__sidebar">
+        <nav aria-label="Account sections" className="fl-account__nav">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`flex shrink-0 items-center gap-2 rounded-[10px] px-3.5 py-2.5 text-sm transition-colors ${
-                tab === id
-                  ? "bg-ink text-white"
-                  : "text-ink-muted hover:bg-surface hover:text-ink"
-              }`}
+              aria-current={tab === id ? "page" : undefined}
+              aria-controls="account-content"
+              className={tab === id ? "is-active" : ""}
             >
               <Icon size={16} aria-hidden="true" />
               {label}
+              {id === "orders" && orders.length > 0 ? <span className="fl-account__count">{orders.length}</span> : null}
             </button>
           ))}
         </nav>
-
-        <section className="min-w-0">
+        <div className="fl-account__support"><p>Here to help.</p><Link href="/contact/">Contact us <ArrowRight size={14} /></Link></div>
+        <button type="button" onClick={signOut} disabled={signingOut} className="fl-account__signout"><LogOut size={16} />{signingOut ? "Signing out…" : "Sign out"}</button>
+        </aside>
+        <section id="account-content" className="fl-account__content" aria-labelledby="account-section-title">
+          <div className="fl-account__section-heading">
+            <h2 id="account-section-title">{TABS.find((t) => t.id === tab)?.label}</h2>
+            <p>{tab === "orders" ? "Your favourites, on their way or already yours." : tab === "profile" ? "The little details that make this account yours." : tab === "addresses" ? "Keep your delivery details in one place." : "The designs you’ve saved on this device."}</p>
+          </div>
           {tab === "orders" ? <OrdersPanel orders={orders} /> : null}
           {tab === "profile" ? <ProfilePanel customer={customer} /> : null}
           {tab === "addresses" ? <AddressesPanel addresses={addresses} /> : null}
@@ -115,7 +118,7 @@ function OrdersPanel({ orders }: { orders: AccountOrder[] }) {
     return (
       <EmptyState
         title="No orders yet"
-        body="When you place an order it will show up here — along with anything imported from florayn.com."
+        body="Your orders will appear here. Find a design you love to get started."
         cta={{ href: "/", label: "Start shopping" }}
       />
     )
@@ -124,10 +127,11 @@ function OrdersPanel({ orders }: { orders: AccountOrder[] }) {
     <div className="space-y-3">
       {orders.map((o, i) => {
         const row = (
-          <div className="flex items-center justify-between gap-4 rounded-[14px] border border-line bg-paper px-5 py-4 transition-colors hover:border-ink/40">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">
+          <div className="fl-account-order">
+            <div className="fl-account-order__top">
+              <div className="flex flex-wrap items-center gap-2">
+                <Package size={17} className="text-ink-muted" aria-hidden="true" />
+                <span className="font-semibold">
                   Order {o.displayId != null ? `#${o.displayId}` : ""}
                 </span>
                 {o.legacy ? (
@@ -136,23 +140,18 @@ function OrdersPanel({ orders }: { orders: AccountOrder[] }) {
                   </span>
                 ) : null}
               </div>
-              {o.items ? (
-                <p className="truncate text-sm text-ink-muted">{o.items}</p>
-              ) : null}
-              <p className="text-xs text-ink-muted">
-                {formatDate(o.date)} · {titleCase(o.status)}
-              </p>
+              <span className="fl-order-status">{titleCase(o.status)}</span>
             </div>
-            <div className="shrink-0 text-right">
-              <p className="font-medium tabular-nums">
+            <div className="fl-account-order__body">
+              <div className="min-w-0">
+                <p className="text-xs text-ink-muted">Placed on {formatDate(o.date)}</p>
+                {o.items ? <p className="mt-2 text-sm leading-relaxed">{o.items}</p> : null}
+              </div>
+              <p className="shrink-0 text-lg font-semibold tabular-nums">
                 {formatPrice(o.total, o.currencyCode)}
               </p>
-              {o.href ? (
-                <span className="text-xs text-purple underline underline-offset-4">
-                  View
-                </span>
-              ) : null}
             </div>
+            {o.href ? <div className="fl-account-order__footer"><span>View order details</span><ArrowRight size={16} /></div> : null}
           </div>
         )
         return o.href ? (
@@ -176,13 +175,14 @@ function Field({
       <span className="text-sm font-medium">{label}</span>
       <input
         {...props}
-        className="w-full rounded-[10px] border border-line-strong bg-paper px-4 py-2.5 text-sm outline-none focus:border-ink disabled:bg-surface disabled:text-ink-muted"
+        className="fl-account-input"
       />
     </label>
   )
 }
 
 function ProfilePanel({ customer }: { customer: Customer }) {
+  const router = useRouter()
   const [firstName, setFirstName] = useState(customer.first_name ?? "")
   const [lastName, setLastName] = useState(customer.last_name ?? "")
   const [phone, setPhone] = useState(customer.phone ?? "")
@@ -194,33 +194,35 @@ function ProfilePanel({ customer }: { customer: Customer }) {
     start(async () => {
       const r = await updateProfile({ first_name: firstName, last_name: lastName, phone })
       setMsg(r.ok ? { ok: true, text: "Profile saved." } : { ok: false, text: r.error ?? "Could not save." })
+      if (r.ok) router.refresh()
     })
   }
 
   return (
     <form
-      className="max-w-md space-y-4"
+      className="fl-account-form max-w-xl space-y-5"
       onSubmit={(e) => {
         e.preventDefault()
         save()
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        <Field label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+        <Field label="First name" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        <Field label="Last name" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
       </div>
       <Field
         label="Phone"
         type="tel"
         inputMode="tel"
+        autoComplete="tel"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
       />
       <Field label="Email" value={customer.email} disabled readOnly />
       {msg ? (
-        <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>
+        <p role="status" className={`text-sm ${msg.ok ? "text-success" : "text-danger"}`}>{msg.text}</p>
       ) : null}
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" className="rounded-full min-h-12" disabled={pending}>
         {pending ? "Saving…" : "Save changes"}
       </Button>
     </form>
@@ -258,22 +260,26 @@ function AddressesPanel({ addresses }: { addresses: CustomerAddress[] }) {
   }
 
   function remove(id: string) {
+    setError(null)
     start(async () => {
-      await deleteAddress(id)
-      refresh()
+      const result = await deleteAddress(id)
+      if (!result.ok) setError(result.error ?? "Could not remove the address.")
+      else refresh()
     })
   }
 
   return (
     <div className="space-y-5">
+      {error ? <p role="alert" className="fl-form-error">{error}</p> : null}
       {addresses.length ? (
-        <ul className="space-y-3">
+        <ul className="grid gap-4 xl:grid-cols-2">
           {addresses.map((a) => (
             <li
               key={a.id}
-              className="flex items-start justify-between gap-4 rounded-[14px] border border-line bg-paper px-5 py-4"
+              className="fl-address-card"
             >
               <div className="space-y-0.5 text-sm">
+                <MapPin size={20} className="mb-4 text-purple" aria-hidden="true" />
                 <p className="font-medium">
                   {[a.first_name, a.last_name].filter(Boolean).join(" ") || "Saved address"}
                 </p>
@@ -294,12 +300,12 @@ function AddressesPanel({ addresses }: { addresses: CustomerAddress[] }) {
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-ink-muted">No saved addresses yet.</p>
+        <div className="fl-address-card"><MapPin size={24} className="text-purple" /><div><p className="font-medium">A place for your favourites.</p><p className="mt-1 text-sm text-ink-muted">Add your first delivery address below.</p></div></div>
       )}
 
       {adding ? (
         <form
-          className="max-w-md space-y-4 rounded-[14px] border border-line bg-surface/40 p-5"
+          className="fl-account-form max-w-xl space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
             submit()
@@ -307,17 +313,22 @@ function AddressesPanel({ addresses }: { addresses: CustomerAddress[] }) {
         >
           <Field
             label="Street address"
+            required
+            autoComplete="address-line1"
             value={form.address_1}
             onChange={(e) => setForm((f) => ({ ...f, address_1: e.target.value }))}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Area"
+              autoComplete="address-line2"
               value={form.area}
               onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))}
             />
             <Field
               label="City / District"
+              required
+              autoComplete="address-level2"
               value={form.city}
               onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
             />
@@ -325,21 +336,21 @@ function AddressesPanel({ addresses }: { addresses: CustomerAddress[] }) {
           <Field
             label="Phone"
             type="tel"
+            autoComplete="tel"
             value={form.phone}
             onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
           />
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <div className="flex gap-2">
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" className="rounded-full min-h-11" disabled={pending}>
               {pending ? "Saving…" : "Save address"}
             </Button>
-            <Button type="button" variant="secondary" onClick={() => setAdding(false)}>
+            <Button type="button" variant="secondary" className="rounded-full min-h-11" disabled={pending} onClick={() => setAdding(false)}>
               Cancel
             </Button>
           </div>
         </form>
       ) : (
-        <Button variant="secondary" onClick={() => setAdding(true)}>
+        <Button variant="secondary" className="rounded-full min-h-12" onClick={() => { setError(null); setAdding(true) }}>
           Add an address
         </Button>
       )}
@@ -399,7 +410,7 @@ function WishlistPanel() {
   return (
     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       {items.map((item) => (
-        <li key={item.handle} className="group space-y-2">
+        <li key={item.handle} className="group space-y-3 rounded-2xl border border-line p-3">
           <Link
             href={`/product/${item.handle}`}
             className="block aspect-square overflow-hidden rounded-[14px] border border-line bg-surface"
@@ -409,6 +420,8 @@ function WishlistPanel() {
               <img
                 src={item.thumbnail}
                 alt={item.title}
+                loading="lazy"
+                decoding="async"
                 className="size-full object-cover"
               />
             ) : null}
@@ -420,8 +433,8 @@ function WishlistPanel() {
             <button
               type="button"
               onClick={() => remove(item.handle)}
-              aria-label="Remove from wishlist"
-              className="shrink-0 text-ink-muted hover:text-red-600"
+              aria-label={`Remove ${item.title} from wishlist`}
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-purple-tint text-purple hover:text-danger"
             >
               <Heart size={16} fill="currentColor" />
             </button>

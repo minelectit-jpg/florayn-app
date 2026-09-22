@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { ArrowLeft, ArrowRight, Heart, LockKeyhole, Mail, MapPin, Package } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { requestLoginCode, verifyLoginCode } from "@/lib/customer"
@@ -9,7 +11,7 @@ import { requestLoginCode, verifyLoginCode } from "@/lib/customer"
 /**
  * Passwordless sign-in / sign-up: enter an email, receive a 6-digit code, enter
  * it. The same flow creates an account on first use - there is no password to
- * set. The emailed code IS the second factor.
+ * set. Email ownership is verified by the code.
  */
 export default function LoginFlow() {
   const router = useRouter()
@@ -55,18 +57,27 @@ export default function LoginFlow() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm">
-      <div className="space-y-2 text-center">
-        <p className="eyebrow">Account</p>
-        <h1 className="display text-[2rem] leading-tight">
-          {step === "email" ? "Sign in or create an account" : "Enter your code"}
-        </h1>
-        <p className="text-sm text-ink-muted">
-          {step === "email"
-            ? "No password needed — we'll email you a one-time code."
-            : notice}
+    <div className="fl-login">
+      <section className="fl-login__intro">
+        <Link href="/" className="fl-text-link"><ArrowLeft size={16} /> Back to shopping</Link>
+        <div className="fl-login__story">
+          <p className="eyebrow text-purple-deep">Your Florayn</p>
+          <h1>Good to have<br />you here.</h1>
+          <p>Your favourites, your orders.<br />A little space that’s all yours.</p>
+        </div>
+        <div className="fl-login__benefits">
+          <div><Package size={20} /><span><strong>Orders, all together</strong><small>Find your order details in one place.</small></span></div>
+          <div><MapPin size={20} /><span><strong>Your details, ready</strong><small>Manage your profile and delivery addresses.</small></span></div>
+          <div><Heart size={20} /><span><strong>Keep your favourites close</strong><small>Revisit designs saved on this device.</small></span></div>
+        </div>
+      </section>
+      <section className="fl-login__form" aria-labelledby="login-heading">
+        <div className="fl-surface-icon"><Mail size={24} aria-hidden="true" /></div>
+        <p className="eyebrow">One email. Your account.</p>
+        <h2 id="login-heading">{step === "email" ? "Sign in or join us" : "Check your inbox"}</h2>
+        <p className="fl-login__description" aria-live="polite">
+          {step === "email" ? "Enter your email to get started. We’ll send a one-time code — no password to remember." : notice}
         </p>
-      </div>
 
       {step === "email" ? (
         <form
@@ -86,16 +97,20 @@ export default function LoginFlow() {
               autoComplete="email"
               inputMode="email"
               required
+              disabled={pending}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "login-error" : undefined}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-[10px] border border-line-strong bg-paper px-4 py-3 text-sm outline-none focus:border-ink"
+              className="fl-account-input"
             />
           </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          <Button type="submit" size="lg" fullWidth disabled={pending}>
-            {pending ? "Sending…" : "Email me a code"}
+          {error ? <p id="login-error" role="alert" className="fl-form-error">{error}</p> : null}
+          <Button type="submit" size="lg" fullWidth className="rounded-full min-h-12" disabled={pending}>
+            {pending ? "Sending…" : "Email me a code"}<ArrowRight size={17} aria-hidden="true" />
           </Button>
+          <p className="text-center text-xs leading-relaxed text-ink-muted">New here? Your account is created when you verify your email.</p>
         </form>
       ) : (
         <form
@@ -118,19 +133,23 @@ export default function LoginFlow() {
               maxLength={6}
               required
               autoFocus
+              disabled={pending}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "login-error" : undefined}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="••••••"
-              className="w-full rounded-[10px] border border-line-strong bg-paper px-4 py-3 text-center text-lg tracking-[0.5em] outline-none focus:border-ink"
+              className="fl-account-input fl-login__code"
             />
           </div>
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          <Button type="submit" size="lg" fullWidth disabled={pending || code.length !== 6}>
-            {pending ? "Verifying…" : "Sign in"}
+          {error ? <p id="login-error" role="alert" className="fl-form-error">{error}</p> : null}
+          <Button type="submit" size="lg" fullWidth className="rounded-full min-h-12" disabled={pending || code.length !== 6}>
+            {pending ? "Verifying…" : "Verify & continue"}<ArrowRight size={17} aria-hidden="true" />
           </Button>
           <div className="flex items-center justify-between text-xs text-ink-muted">
             <button
               type="button"
+              disabled={pending}
               className="underline underline-offset-4 hover:text-ink"
               onClick={() => {
                 setStep("email")
@@ -152,6 +171,8 @@ export default function LoginFlow() {
           </div>
         </form>
       )}
+        <p className="fl-login__privacy"><LockKeyhole size={14} aria-hidden="true" /> Your code is private. Never share it with anyone.</p>
+      </section>
     </div>
   )
 }

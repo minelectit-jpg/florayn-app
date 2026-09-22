@@ -52,6 +52,10 @@ const bundle = { settings: { heading: "Choose a pack", single_label: "Single", f
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
 const carts = new Map()
 const orders = new Map()
+// Opt-in account UI checks. These fake codes never send email or contact Medusa.
+const accountFixture = process.env.UI_REFINEMENT_FIXTURE === "1"
+const fixtureCustomer = { id: "cus_fixture", email: "shopper@example.invalid", first_name: "Alex", last_name: "Rahman", phone: "01700000000" }
+const fixtureAddresses = [{ id: "addr_fixture", first_name: "Alex", last_name: "Rahman", address_1: "12 Fixture Road", city: "Dhaka", country_code: "bd", phone: "01700000000" }]
 const districts = ["Chattogram", "Dhaka", "Gazipur", "Narayanganj", "Rajshahi", "Sylhet"]
 const checkoutSettings = {
   heading: "Checkout", description: "Enter your delivery details to place your order.",
@@ -167,6 +171,32 @@ const server = http.createServer(async (req, res) => {
   let body = ""
   for await (const chunk of req) body += chunk
   const data = body ? JSON.parse(body) : {}
+  if (accountFixture && url.pathname === "/store/auth/otp/request") {
+    return send(res, { message: "Local fixture only. Use 123456." })
+  }
+  if (accountFixture && url.pathname === "/store/auth/otp/verify") {
+    return data.code === "123456" ? send(res, { token: "local-account-fixture" }) : send(res, { message: "Invalid or expired code." }, 400)
+  }
+  if (accountFixture && (url.pathname.startsWith("/store/customers/me") || url.pathname === "/store/orders")) {
+    if (req.headers.authorization !== "Bearer local-account-fixture") return send(res, { message: "Sign in" }, 401)
+    if (url.pathname === "/store/customers/me") {
+      if (req.method === "POST") for (const key of ["first_name", "last_name", "phone"]) if (typeof data[key] === "string") fixtureCustomer[key] = data[key]
+      return send(res, { customer: fixtureCustomer })
+    }
+    if (url.pathname === "/store/customers/me/addresses") {
+      if (req.method === "POST") fixtureAddresses.push({ id: `addr_${fixtureAddresses.length}`, ...data })
+      return send(res, { addresses: fixtureAddresses })
+    }
+    if (req.method === "DELETE" && url.pathname.startsWith("/store/customers/me/addresses/")) {
+      const index = fixtureAddresses.findIndex((a) => a.id === url.pathname.split("/").pop())
+      if (index >= 0) fixtureAddresses.splice(index, 1)
+      return send(res, { deleted: true })
+    }
+    if (url.pathname === "/store/orders") return send(res, { orders: [
+      { id: "order_test_preview", display_id: 2048, status: "pending", created_at: "2026-09-21T08:30:00Z", currency_code: "bdt", total: 1850, items: [{ title: "Blush Bloom", quantity: 1 }, { title: "Everyday Wrist Strap", quantity: 1 }] },
+      { id: "order_test_discount", display_id: 2049, status: "completed", created_at: "2026-09-18T08:30:00Z", currency_code: "bdt", total: 2600, items: [{ title: "Audit Midnight", quantity: 2 }] },
+    ] })
+  }
   if (url.pathname === "/__test/checkout" && req.method === "POST") {
     if (!data || typeof data !== "object" || Array.isArray(data) ||
         Object.keys(data).some((key) => !Object.hasOwn(checkoutControl, key)) ||
