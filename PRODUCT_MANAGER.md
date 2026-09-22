@@ -75,8 +75,10 @@ each selected variant's price and exact ID. The cart and checkout still own the
 final promotion calculation. Preserve visible failure feedback and the duplicate
 submission guard. A Matching Set can be available without any quantity tiers.
 
-Shop sorting applies to the displayed page and says so. Do not label catalog
-order as newest without actual creation dates and global ordering. Preserve the
+Keep the original shop filters, cards, spacing and sorting-menu appearance.
+Sorting applies to the displayed page, described by the control label. Do not
+label catalog order as newest without actual creation dates and global ordering.
+Preserve the
 first eight image preloads and bounded 32-product reads described in PERFORMANCE.md.
 
 ## Verification
