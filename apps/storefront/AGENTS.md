@@ -61,5 +61,5 @@ The CI workflow also verifies actual Next.js behavior with disposable Redis.
 - Use `npm run perf:check` for sequential HTTP checks and the opt-in `#perf`
   browser panel for document LCP/navigation readiness. HTTP response time is not
   a complete page-load measurement. Do not raise payload budgets without evidence.
-- The current deployment branch is `codex/durable-performance`, targeting only
+- The current deployment branch is `codex/product-shop-ui`, targeting only
   `new.florayn.com` and `api.new.florayn.com`. Keep `florayn.com` unchanged.

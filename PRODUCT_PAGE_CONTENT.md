@@ -5,6 +5,7 @@ Read before changing product selectors, content or reviews. Applies to new.flora
 ## Presentation
 
 - Keep the original shared ProductView layout and its measured sticky right column.
+- More designs shows four complete thumbnails and a partial fifth at narrow mobile widths, with native horizontal scrolling. Desktop keeps 108px thumbnails.
 - Case products show Model, More designs, then Case type. The model control has a 44px minimum height.
 - On mobile and desktop, four case-type image/name/price tiles occupy a row; more types scroll horizontally. Keep unsupported pairs disabled and preserve exact variant IDs, live stock and case-type pricing. Regular products keep their option swatches.
 - Bundle/pack remains opt-in, with the existing Admin-controlled badge. Its mobile cards are compact; estimated prices stay labelled estimates, and savings remain bold purple.
@@ -14,6 +15,20 @@ Read before changing product selectors, content or reviews. Applies to new.flora
 - Reviews are a separate visible section, linked directly below the product title. Never invent ratings, reviews, verified-purchase badges or review counts.
 
 ## Editing
+
+Admin > Product delivery edits the shared delivery cards below purchase actions:
+heading, enabled state, icons, card copy/order, and the optional help link. Empty
+cards or disabled state hide the section. These are display messages, not
+checkout rate controls; keep them consistent with Checkout settings.
+
+Admin > Footer edits brand/tagline, support copy/link, social links/order,
+copyright (supports {year}), and location note. Existing Footer links controls
+still manage ordered columns and links. Mobile columns collapse independently;
+desktop shows all links. All text is rendered safely as text, with validated
+navigation URLs. Both settings sections live in store metadata under
+`florayn_presentation`, use the core store update workflow, and invalidate the
+existing content cache domain. No migration is needed. Frontend/backend
+`storefront-presentation.ts` contracts must stay identical (covered by a test).
 
 Product Manager > open a product > Product page content edits headings, the review introduction, information rows and FAQs. The existing Description editor updates main copy. Choose the product form (phone, AirPods etc.) to customize its information/FAQ separately; all models of that form use it.
 
@@ -37,4 +52,3 @@ Migration20260923090000 creates only product_review and its three indexes. Apply
 Root npm test includes content validation, escaping, SSR FAQ visibility, review privacy, published/enabled checks, bounded aggregates and auth middleware. verify-product-manager-isolated.ts exercises real Medusa content saves, pending/approval/hiding/replies, persisted ratings, and duplicate constraints on disposable Postgres. Never create reviews or customer accounts on the deployed store for QA.
 
 The optional UI_REFINEMENT_FIXTURE supplies synthetic local reviews, five case types, customer sign-in and Admin content endpoints. Its responses never contact a real service or send email.
-

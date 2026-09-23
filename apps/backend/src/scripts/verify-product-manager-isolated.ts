@@ -20,6 +20,9 @@ import { DEFAULT_PRODUCT_CONTENT, PRODUCT_CONTENT_KEY } from "../lib/product-con
 import { submitProductReviewWorkflow, moderateProductReviewWorkflow } from "../workflows/product-reviews"
 import { publicReviews } from "../lib/product-reviews"
 import { CONTENT_MODULE } from "../modules/content"
+import { GET as getPresentation, POST as savePresentation } from "../api/admin/content/presentation/[section]/route"
+import { GET as publicContent } from "../api/store/content/route"
+import { DEFAULT_PRESENTATION, PRESENTATION_KEY } from "../lib/storefront-presentation"
 
 /** Runs after the checkout fixture, on its disposable database only. */
 export default async function verifyProductManager({ container }: ExecArgs) {
@@ -129,6 +132,29 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   assert.equal(status, 400)
   assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[RECOMMENDATION_KEY], settings)
   progress("persisted matching defaults, public projection, metadata preservation and family validation passed")
+  status = 200
+  const footer = { ...DEFAULT_PRESENTATION.footer, tagline: "Isolated footer copy", social: [], note: "", location: "" }
+  const delivery = { ...DEFAULT_PRESENTATION.delivery, heading: "Isolated delivery copy", cards: [{ icon: "truck", title: "Custom delivery", description: "Test information only." }], link_label: "", link_href: "" }
+  await savePresentation({ scope: container, params: { section: "footer" }, body: { settings: footer } } as any, res)
+  assert.equal(status, 200, response?.message)
+  await savePresentation({ scope: container, params: { section: "delivery" }, body: { settings: delivery } } as any, res)
+  assert.equal(status, 200, response?.message)
+  await getPresentation({ scope: container, params: { section: "footer" } } as any, res)
+  assert.deepEqual(response.settings, footer)
+  await publicContent({ scope: container } as any, res)
+  assert.equal(response.footerAppearance.tagline, footer.tagline)
+  assert.equal(response.footerNote, "")
+  assert.deepEqual(response.social, [])
+  await publicProductSections({ scope: container } as any, res)
+  assert.deepEqual(response.delivery, delivery)
+  const withPresentation = await stores.retrieveStore(store.id)
+  assert.equal(withPresentation.metadata?.recommendation_fixture_keep, "preserved")
+  assert.deepEqual(withPresentation.metadata?.[RECOMMENDATION_KEY], settings)
+  assert.deepEqual(withPresentation.metadata?.[PRESENTATION_KEY], { footer, delivery })
+  await savePresentation({ scope: container, params: { section: "delivery" }, body: { settings: { ...delivery, link_label: "Unsafe", link_href: "javascript:alert(1)" } } } as any, res)
+  assert.equal(status, 400)
+  assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[PRESENTATION_KEY], { footer, delivery })
+  progress("editable footer and delivery persisted, public reads matched, unsafe links rejected and unrelated settings preserved")
   // Exact variant selection, independent ordering, draft rejection, and clearing.
   const picks = { recommended: [large.id, small.id], featured: [small.id] }
   const req: any = { scope: container, params: { id: design.products[0].id }, body: picks }

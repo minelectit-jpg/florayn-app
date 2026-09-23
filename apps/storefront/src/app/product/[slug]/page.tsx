@@ -6,7 +6,7 @@ import ProductView from "@/components/product-view"
 import {
   type RecommendedItem,
 } from "@/components/recommended-for-you"
-import { ShippingNote } from "@/components/product-sections"
+import { ShippingNote } from "@/components/shipping-note"
 import ProductTabs from "@/components/product-tabs"
 import ProductReviews from "@/components/product-reviews"
 import { readProductContent } from "@/lib/product-content"
@@ -263,7 +263,7 @@ export default async function ProductPage({ params }: Params) {
           bundleConfig={null}
           caseTypeRecords={[]}
           matchingProduct={null}
-          shipping={<ShippingNote />}
+          shipping={<ShippingNote settings={productSections.delivery} />}
           tabs={
             <ProductTabs
               description={product.description}
@@ -422,7 +422,7 @@ export default async function ProductPage({ params }: Params) {
         bundleConfig={bundleConfig}
         caseTypeRecords={caseTypes}
         matchingProduct={matchingProduct}
-        shipping={<ShippingNote />}
+        shipping={<ShippingNote settings={productSections.delivery} />}
         tabs={
           <ProductTabs
             description={product.description}

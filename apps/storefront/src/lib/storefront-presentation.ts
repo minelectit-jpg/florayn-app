@@ -1,0 +1,82 @@
+export const PRESENTATION_KEY = "florayn_presentation"
+export const DELIVERY_ICONS = ["truck", "wallet", "map-pin", "refresh", "package", "heart", "shield", "phone"] as const
+export type DeliveryCard = { icon: typeof DELIVERY_ICONS[number]; title: string; description: string }
+export type DeliveryPresentation = { enabled: boolean; heading: string; cards: DeliveryCard[]; link_label: string; link_href: string }
+export type FooterPresentation = { brand: string; tagline: string; support_title: string; support_text: string; support_label: string; support_href: string; note: string; location: string; social: { label: string; href: string }[] }
+export type Presentation = { footer: FooterPresentation; delivery: DeliveryPresentation }
+export const DEFAULT_PRESENTATION: Presentation = {
+  footer: {
+    brand: "FLORAYN", tagline: "Made to match your everyday.",
+    support_title: "A little help? We're here.", support_text: "Find your fit, ask about an order, or get help with an exchange.",
+    support_label: "Talk to us", support_href: "/contact/",
+    note: "© {year} Florayn Store. All rights reserved.", location: "Bangladesh · BDT ৳",
+    social: [
+      { label: "Facebook", href: "https://www.facebook.com/FloraynFashion" },
+      { label: "Instagram", href: "https://www.instagram.com/floraynfashion" },
+      { label: "YouTube", href: "https://www.youtube.com/channel/UCTBJRe-E6ePw4sinG7HFAEQ" },
+    ],
+  },
+  delivery: {
+    enabled: true, heading: "Delivery & care",
+    cards: [
+      { icon: "truck", title: "Delivery in 1–3 days", description: "Delivered across Bangladesh." },
+      { icon: "wallet", title: "Cash on delivery", description: "Pay when your parcel arrives." },
+      { icon: "map-pin", title: "Delivery charges", description: "60৳ inside Dhaka · 100৳ outside." },
+      { icon: "refresh", title: "Easy exchanges", description: "Within 3 days of delivery." },
+    ],
+    link_label: "Delivery & exchange help", link_href: "/contact/",
+  },
+}
+
+/** Allow ordinary navigation, never executable or protocol-relative URLs. */
+export function safePresentationHref(value: string) {
+  if (!value || /[\s\u0000-\u001f\\]/.test(value)) return false
+  if (value.startsWith("/") && !value.startsWith("//")) return true
+  if (/^mailto:[^@?]+@[^@?]+(?:\?[^\s]*)?$/.test(value) || /^tel:\+?[\d()-]+$/.test(value)) return true
+  try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !!url.hostname && !url.username && !url.password } catch { return false }
+}
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Provide valid settings.")
+  return value as Record<string, unknown>
+}
+function text(value: unknown, name: string, max: number, required = false) {
+  if (typeof value !== "string" || value.length > max || (required && !value.trim())) throw new Error(`${name} must be ${required ? "non-empty text" : "text"} up to ${max} characters.`)
+  return value.trim()
+}
+function link(label: string, href: string) {
+  if (!!label !== !!href || (href && !safePresentationHref(href))) throw new Error("Provide both a link label and a safe website, email or phone link, or leave both blank.")
+}
+export function validateFooterPresentation(value: unknown): FooterPresentation {
+  const v = object(value)
+  const result = {
+    brand: text(v.brand, "Brand", 40, true), tagline: text(v.tagline, "Tagline", 180),
+    support_title: text(v.support_title, "Support heading", 80), support_text: text(v.support_text, "Support text", 240),
+    support_label: text(v.support_label, "Support link label", 60), support_href: text(v.support_href, "Support link", 500),
+    note: text(v.note, "Copyright note", 200), location: text(v.location, "Location note", 80), social: [] as FooterPresentation["social"],
+  }
+  link(result.support_label, result.support_href)
+  if (!Array.isArray(v.social) || v.social.length > 8) throw new Error("Use up to 8 social links.")
+  result.social = v.social.map((row) => { const r = object(row); const label = text(r.label, "Social label", 40, true); const href = text(r.href, "Social link", 500, true); link(label, href); return { label, href } })
+  return result
+}
+export function validateDeliveryPresentation(value: unknown): DeliveryPresentation {
+  const v = object(value)
+  if (typeof v.enabled !== "boolean") throw new Error("Choose whether to show delivery information.")
+  if (!Array.isArray(v.cards) || v.cards.length > 6) throw new Error("Use up to 6 information cards.")
+  const result = { enabled: v.enabled, heading: text(v.heading, "Heading", 80), link_label: text(v.link_label, "Help link label", 60), link_href: text(v.link_href, "Help link", 500), cards: v.cards.map((row) => {
+    const r = object(row)
+    if (!DELIVERY_ICONS.includes(r.icon as DeliveryCard["icon"])) throw new Error("Choose an available icon.")
+    return { icon: r.icon as DeliveryCard["icon"], title: text(r.title, "Card heading", 80, true), description: text(r.description, "Card description", 240) }
+  }) }
+  link(result.link_label, result.link_href)
+  return result
+}
+/** Missing old settings use defaults; deliberate blank text and empty lists remain blank. */
+export function readPresentation(value: unknown): Presentation {
+  const saved = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<Presentation> : {}
+  let footer = DEFAULT_PRESENTATION.footer
+  let delivery = DEFAULT_PRESENTATION.delivery
+  try { footer = validateFooterPresentation({ ...footer, ...saved.footer }) } catch { /* Safe legacy fallback. */ }
+  try { delivery = validateDeliveryPresentation({ ...delivery, ...saved.delivery }) } catch { /* Safe legacy fallback. */ }
+  return { footer, delivery }
+}

@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
 import { CONTENT_MODULE } from "../../../modules/content"
 import { buildMenu, getContent } from "../../../modules/content/config"
+import { readStorefrontPresentation } from "../../../lib/read-storefront-presentation"
 
 /**
  * GET /store/content - everything the shell and the home page need: the
@@ -9,8 +10,10 @@ import { buildMenu, getContent } from "../../../modules/content/config"
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)
-  const { sections, menuSections, items, footerNote, social } =
-    await getContent(service)
+  const [{ sections, menuSections, items }, { settings }] = await Promise.all([
+    getContent(service),
+    readStorefrontPresentation(req.scope),
+  ])
 
   res.json({
     sections: sections
@@ -27,7 +30,8 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       })),
     primary: buildMenu(menuSections, items, "primary"),
     footer: buildMenu(menuSections, items, "footer"),
-    footerNote,
-    social,
+    footerNote: settings.footer.note.replaceAll("{year}", String(new Date().getFullYear())),
+    social: settings.footer.social,
+    footerAppearance: settings.footer,
   })
 }

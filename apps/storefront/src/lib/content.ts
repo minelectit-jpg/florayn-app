@@ -1,4 +1,5 @@
 import { DEFAULT_RECOMMENDATIONS, type RecommendationSettings } from "./product-recommendations"
+import { DEFAULT_PRESENTATION, readPresentation, type DeliveryPresentation, type FooterPresentation } from "./storefront-presentation"
 /**
  * Home page sections, the header menu and the footer, all edited in the admin
  * rather than hardcoded here.
@@ -40,6 +41,7 @@ export type SiteContent = {
   primary: MenuSection[]
   footer: MenuSection[]
   footerNote: string
+  footerAppearance?: FooterPresentation
   social: { label: string; href: string }[]
 }
 
@@ -113,6 +115,7 @@ export type FeatureBlock = {
 }
 
 export type ProductSections = {
+  delivery: DeliveryPresentation
   recommendationDefaults: RecommendationSettings
   /** The "Features" band blocks, in order. */
   featureBlocks: FeatureBlock[]
@@ -131,15 +134,16 @@ export async function getProductSections(): Promise<ProductSections> {
       headers: { "x-publishable-api-key": KEY },
       next: { revalidate: 60, tags: ["content", "content:product-sections"] },
     })
-    if (!res.ok) return { featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
+    if (!res.ok) return { delivery: DEFAULT_PRESENTATION.delivery, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
     const json = (await res.json()) as Partial<ProductSections>
     return {
+      delivery: readPresentation({ delivery: json.delivery }).delivery,
       recommendationDefaults: { ...DEFAULT_RECOMMENDATIONS, ...json.recommendationDefaults },
       featureBlocks: json.featureBlocks ?? [],
       featuredPicks: json.featuredPicks ?? [],
     }
   } catch {
-    return { featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
+    return { delivery: DEFAULT_PRESENTATION.delivery, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
   }
 }
 

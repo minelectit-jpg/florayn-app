@@ -23,8 +23,8 @@ export type RelatedProduct = {
 }
 
 /**
- * MORE DESIGNS - other artwork in the same finish. A 108px drag-scroll strip
- * on the live page, 12px apart. Each thumbnail follows the customer's current
+ * MORE DESIGNS - other artwork in the same finish. Four thumbnails plus a
+ * partial next tile on mobile; 108px tiles on desktop. Each follows the current
  * choice: the same case type on the same device where that design offers it,
  * else the same device, else the design's own thumbnail.
  */
@@ -47,7 +47,7 @@ export function MoreDesigns({
   return (
     <section className="mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
-      <DragScroll className="flex gap-[12px] overflow-x-auto pb-2">
+      <DragScroll className="fl-more-designs">
         {currentName ? (
           <li className="shrink-0">
             {/* The current design, highlighted like the selected CASE TYPE tile.
@@ -55,14 +55,14 @@ export function MoreDesigns({
             <div
               title={currentName}
               aria-current="true"
-              className="block size-[108px] overflow-hidden rounded-[10px] border border-purple"
+              className="fl-more-designs__tile border-purple"
             >
               <span className="relative block size-full">
                 <ProductImage
                   src={currentImage ?? null}
                   alt={currentName}
                   label={currentName}
-                  sizes="108px"
+                  sizes="(max-width: 639px) 22vw, 108px"
                 />
               </span>
             </div>
@@ -90,7 +90,7 @@ export function MoreDesigns({
               <Link
                 href={href}
                 title={item.label}
-                className="block size-[108px] overflow-hidden rounded-[10px] border border-[#e2e2e2] transition-colors hover:border-purple"
+                className="fl-more-designs__tile border-[#e2e2e2] transition-colors hover:border-purple"
                 prefetch={false}
               >
                 <span className="relative block size-full">
@@ -98,7 +98,7 @@ export function MoreDesigns({
                     src={src}
                     alt={item.label}
                     label={item.label}
-                    sizes="108px"
+                    sizes="(max-width: 639px) 22vw, 108px"
                   />
                 </span>
               </Link>
@@ -176,30 +176,3 @@ export function CaseTypeTiles({
     </section>
   )
 }
-
-/**
- * The bordered delivery note that sits under the cart form on the live page.
- * The figures are our real shipping rules, not copy lifted from the live HTML.
- */
-export function ShippingNote() {
-  const lines = [
-    "Estimated delivery: 1-3 days.",
-    "We deliver all over Bangladesh.",
-    "Cash on Delivery available. Delivery charge 60৳ inside Dhaka, 100৳ outside.",
-    "Easy exchange within 3 days of delivery.",
-  ]
-
-  return (
-    <ul className="mt-6 space-y-2 rounded-[5px] border border-line px-5 py-4 text-sm text-ink-muted">
-      {lines.map((line) => (
-        <li key={line} className="flex gap-2">
-          <span aria-hidden="true" className="text-purple">
-            &bull;
-          </span>
-          <span>{line}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
-

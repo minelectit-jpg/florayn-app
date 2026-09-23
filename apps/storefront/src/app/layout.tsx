@@ -57,6 +57,7 @@ export default async function RootLayout({
           </main>
 
           <SiteFooter
+            appearance={content.footerAppearance}
             columns={content.footer}
             note={content.footerNote}
             social={content.social}

@@ -57,6 +57,21 @@ const carts = new Map()
 const orders = new Map()
 // Opt-in account UI checks. These fake codes never send email or contact Medusa.
 const accountFixture = process.env.UI_REFINEMENT_FIXTURE === "1"
+let presentation
+if (accountFixture) {
+  const ts = require("typescript"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm")
+  const source = fs.readFileSync(path.join(__dirname, "../../src/lib/storefront-presentation.ts"), "utf8")
+  const exports = {}
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports, URL })
+  presentation = structuredClone(exports.DEFAULT_PRESENTATION)
+  for (const name of ["Rose", "Ocean", "Forest", "Amber", "Cloud"]) products.push(makeProduct("audit-" + name.toLowerCase(), "Audit " + name))
+  content.footer = ["Customer care", "Explore", "About Florayn", "Popular models"].map((label, index) => ({
+    id: "footer_" + index, label, groups: [{ heading: null, links: [
+      { id: "contact_" + index, label: ["Contact us", "Phone cases", "Our story", "iPhone 17 Pro Max"][index], href: "/contact/", badge: null },
+      { id: "shop_" + index, label: ["Delivery & exchanges", "AirPods cases", "Privacy policy", "AirPods Pro 3"][index], href: "/shop/", badge: null },
+    ] }],
+  }))
+}
 const pageContentDefaults = { description_heading: "Made for your everyday", information_heading: "Product details", faq_heading: "Good to know", reviews_heading: "Customer reviews", reviews_intro: "Real experiences, shared by our customers.", reviews_enabled: true, facts: null, faqs: null }
 const fixtureReviews = accountFixture ? Array.from({ length: 8 }, (_, i) => ({ id: `review_fixture_${i}`, author: `Fixture shopper ${i + 1}`, rating: i % 2 ? 4 : 5, title: "Local review fixture", body: "This is a synthetic review for local layout verification only.", reply: i === 0 ? "Fixture reply from Florayn." : "", created_at: "2026-09-23T09:00:00.000Z", review_key: "design:audit-bloom", status: i === 7 ? "pending" : "approved", product_id: "prod_audit-bloom" })) : []
 const fixtureCustomer = { id: "cus_fixture", email: "shopper@example.invalid", first_name: "Alex", last_name: "Rahman", phone: "01700000000" }
@@ -176,6 +191,11 @@ const server = http.createServer(async (req, res) => {
   let body = ""
   for await (const chunk of req) body += chunk
   const data = body ? JSON.parse(body) : {}
+  if (accountFixture && /^\/admin\/content\/presentation\/(footer|delivery)$/.test(url.pathname)) {
+    const section = url.pathname.split("/").pop()
+    if (req.method === "POST") presentation[section] = data.settings
+    return send(res, { settings: presentation[section] })
+  }
   if (url.pathname === "/store/product-reviews") {
     if (req.method === "POST") {
       if (!accountFixture || req.headers.authorization !== "Bearer local-account-fixture") return send(res, { message: "Sign in to write a review." }, 401)
@@ -305,12 +325,12 @@ const server = http.createServer(async (req, res) => {
     case "/store/devices": return send(res, { devices })
     case "/store/case-types": return send(res, { case_types: caseTypes })
     case "/store/stock": return send(res, { stock: Object.fromEntries(Object.entries(stock).map(([key, quantity]) => [key, quantity + stockRevision])) })
-    case "/store/content": return send(res, { ...content, footerNote: `Local verification revision ${revision}` })
+    case "/store/content": return send(res, { ...content, ...(presentation ? { footerAppearance: presentation.footer, social: presentation.footer.social } : {}), footerNote: `Local verification revision ${revision}` })
     case "/store/bundles": return send(res, bundle)
     case "/store/districts": return send(res, { districts, count: districts.length, inside_dhaka: ["Dhaka"], shipping: { inside_dhaka: 60, outside_dhaka: 100 } })
     case "/store/checkout-settings": return send(res, { settings: checkoutSettings })
     case "/store/contact-settings": return send(res, { settings: { ...contactSettings, ...(contactRevision ? { title: `Contact revision ${contactRevision}` } : {}) } })
-    case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"] })
+    case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"], ...(presentation ? { delivery: presentation.delivery } : {}) })
     case "/store/content/gallery-videos": return send(res, { videos: {} })
     case "/store/seo": return send(res, { templates: { title: "{design} {device} Case", description: "{design} test case for {device}", heading: "{design} {device} Case", fit_copy_enabled: true }, overrides: [] })
     case "/store/shop-catalog": {

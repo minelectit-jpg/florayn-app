@@ -1,0 +1,67 @@
+@layer components {
+  .fl-more-designs { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; scrollbar-width:thin; }
+  .fl-more-designs > li { flex:0 0 calc((100% - 32px) / 4.35); min-width:0; }
+  .fl-more-designs__tile { display:block; width:100%; aspect-ratio:1; overflow:hidden; border-width:1px; border-radius:10px; }
+  .fl-more-designs__tile:focus-visible { outline:2px solid var(--color-purple); outline-offset:-3px; }
+  .fl-delivery { margin-top:24px; border:1px solid var(--color-line); border-radius:16px; overflow:hidden; background:var(--color-paper); }
+  .fl-delivery__heading { padding:17px 18px 0; font-size:15px; font-weight:600; letter-spacing:-.02em; }
+  .fl-delivery__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 16px; padding:18px; }
+  .fl-delivery__card { display:flex; align-items:flex-start; gap:10px; min-width:0; }
+  .fl-delivery__icon { display:grid; place-items:center; flex-shrink:0; width:34px; height:34px; border-radius:10px; background:var(--color-purple-tint); color:var(--color-purple-deep); }
+  .fl-delivery__card h3 { font-size:13px; font-weight:600; line-height:1.4; padding-top:1px; overflow-wrap:anywhere; }
+  .fl-delivery__card p { margin-top:4px; font-size:12px; line-height:1.6; color:var(--color-ink-muted); overflow-wrap:anywhere; white-space:pre-line; }
+  .fl-delivery__help { display:flex; align-items:center; justify-content:center; gap:7px; min-height:44px; padding:10px 16px; border-top:1px solid var(--color-line); font-size:12px; font-weight:500; color:var(--color-purple-deep); background:color-mix(in srgb,var(--color-purple-tint) 45%,white); }
+  .fl-delivery__help:hover { background:var(--color-purple-tint); }
+  .fl-footer { margin-top:80px; background:linear-gradient(180deg,#f8f6fc 0%,#fcfbfd 100%); border-top:1px solid #ece6f4; color:var(--color-ink); }
+  .fl-footer__inner { max-width:1470px; margin:auto; padding:48px 30px 22px; }
+  .fl-footer__top { display:flex; justify-content:space-between; align-items:center; gap:40px; padding-bottom:40px; border-bottom:1px solid var(--color-line); }
+  .fl-footer__brand { display:inline-block; max-width:100%; font-size:42px; font-weight:500; letter-spacing:.13em; line-height:1.2; overflow-wrap:anywhere; }
+  .fl-footer__tagline { margin-top:12px; max-width:380px; font-size:14px; color:var(--color-ink-muted); line-height:1.6; }
+  .fl-footer__support { display:flex; align-items:center; gap:30px; max-width:520px; }
+  .fl-footer__support h2 { font-size:18px; font-weight:600; letter-spacing:-.025em; }
+  .fl-footer__support p { margin-top:7px; font-size:13px; color:var(--color-ink-muted); line-height:1.7; }
+  .fl-footer__support-link { display:inline-flex; align-items:center; justify-content:center; gap:14px; padding:12px 18px; min-height:46px; flex-shrink:0; border-radius:100px; background:var(--color-ink); color:white; font-size:13px; font-weight:500; }
+  .fl-footer__support-link:hover { background:var(--color-purple-deep); }
+  .fl-footer__columns { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); column-gap:48px; row-gap:30px; padding:36px 0; }
+  .fl-footer__desktop-heading { margin-bottom:17px; font-size:14px; font-weight:600; }
+  .fl-footer__toggle { display:none; }
+  .fl-footer__panel ul { display:grid; gap:7px; }
+  .fl-footer__panel li a { display:inline-flex; align-items:baseline; gap:6px; padding:4px 0; font-size:13px; line-height:1.65; color:var(--color-ink-muted); overflow-wrap:anywhere; }
+  .fl-footer__panel li a:hover { color:var(--color-purple-deep); }
+  .fl-footer__group-heading { font-size:12px; font-weight:600; margin:15px 0 8px; }
+  .fl-footer__badge { font-size:10px; font-weight:600; color:var(--color-purple-deep); }
+  .fl-footer__bottom { display:flex; align-items:center; justify-content:space-between; gap:24px; padding-top:22px; border-top:1px solid var(--color-line); }
+  .fl-footer__notes { display:flex; flex-wrap:wrap; gap:8px 24px; color:var(--color-ink-muted); font-size:11px; line-height:1.6; }
+  .fl-footer__social { display:flex; align-items:center; gap:8px; }
+  .fl-footer__social a { display:grid; place-items:center; width:40px; height:40px; border:1px solid var(--color-line); border-radius:50%; background:white; }
+  .fl-footer__social a:hover { color:var(--color-purple-deep); border-color:var(--color-purple); }
+  .fl-footer a:focus-visible,.fl-footer button:focus-visible { outline:2px solid var(--color-purple); outline-offset:4px; }
+  @media (min-width:640px) {
+    .fl-more-designs { gap:12px; }
+    .fl-more-designs > li { flex-basis:108px; }
+  }
+  @media (max-width:767px) {
+    .fl-delivery__grid { gap:18px 14px; padding:16px; }
+    .fl-delivery__card { flex-direction:column; gap:8px; }
+    .fl-delivery__heading { padding:16px 16px 0; }
+    .fl-footer { margin-top:56px; }
+    .fl-footer__inner { padding:32px 20px 24px; }
+    .fl-footer__top { display:block; padding-bottom:24px; }
+    .fl-footer__brand { font-size:32px; }
+    .fl-footer__tagline { margin-top:8px; font-size:13px; }
+    .fl-footer__support { margin-top:24px; padding:18px; border:1px solid #e6dff0; border-radius:14px; background:#fff9; align-items:flex-start; flex-direction:column; gap:14px; max-width:none; }
+    .fl-footer__support h2 { font-size:16px; }
+    .fl-footer__support p { margin-top:5px; font-size:12px; }
+    .fl-footer__support-link { min-height:44px; padding:10px 16px; font-size:12px; }
+    .fl-footer__columns { display:block; padding:0; }
+    .fl-footer__column { border-bottom:1px solid var(--color-line); }
+    .fl-footer__desktop-heading { display:none; }
+    .fl-footer__toggle { display:flex; align-items:center; justify-content:space-between; width:100%; padding:18px 0; text-align:left; font-size:14px; font-weight:600; }
+    .fl-footer__panel { padding-bottom:18px; }
+    .fl-footer__column[data-open="false"] .fl-footer__panel { display:none; }
+    .fl-footer__panel li a { min-height:36px; align-items:center; }
+    .fl-footer__bottom { flex-direction:column-reverse; align-items:flex-start; gap:18px; border-top:0; padding-top:24px; }
+    .fl-footer__notes { flex-direction:column; gap:5px; font-size:11px; }
+    .fl-footer__social a { width:44px; height:44px; }
+  }
+}

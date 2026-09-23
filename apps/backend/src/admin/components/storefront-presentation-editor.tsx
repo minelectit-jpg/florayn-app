@@ -1,0 +1,147 @@
+import { Button, Container, Heading, Input, Label, Switch, Text, Textarea, toast } from "@medusajs/ui"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import { DELIVERY_ICONS, validateDeliveryPresentation, validateFooterPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
+import { contentApi } from "./menu-editor"
+import { ManagerSelect, useUnsaved } from "./product-manager/shared"
+
+function useSettings<T>(section: "footer" | "delivery") {
+  const [value, setValue] = useState<T | null>(null)
+  const [saved, setSaved] = useState<T | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const lock = useRef(false)
+  const dirty = JSON.stringify(value) !== JSON.stringify(saved)
+  useUnsaved(dirty)
+  const path = `/admin/content/presentation/${section}`
+  async function load() {
+    setLoading(true)
+    setError("")
+    try { const data = await contentApi(path); setValue(data.settings); setSaved(data.settings) }
+    catch (e: any) { setError(e.message) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { void load() }, [section])
+  async function save() {
+    if (lock.current || !value) return
+    lock.current = true
+    setSaving(true)
+    setError("")
+    try {
+      const settings = section === "footer" ? validateFooterPresentation(value) : validateDeliveryPresentation(value)
+      const data = await contentApi(path, { method: "POST", body: JSON.stringify({ settings }) })
+      setValue(data.settings)
+      setSaved(data.settings)
+      toast.success("Saved. Storefront content will refresh shortly.")
+    } catch (e: any) { setError(e.message); toast.error(e.message) }
+    finally { lock.current = false; setSaving(false) }
+  }
+  return { value, setValue, loading, saving, error, dirty, load, save, discard: () => { setValue(saved); setError("") } }
+}
+
+function Field({ label, value, onChange, max = 240, multiline = false, hint }: { label: string; value: string; onChange: (value: string) => void; max?: number; multiline?: boolean; hint?: string }) {
+  const id = useId()
+  return <div className="grid gap-2">
+    <Label htmlFor={id}>{label}</Label>
+    {multiline ? <Textarea id={id} value={value} maxLength={max} onChange={(e) => onChange(e.target.value)} /> : <Input id={id} value={value} maxLength={max} onChange={(e) => onChange(e.target.value)} />}
+    {hint && <Text size="small" className="text-ui-fg-subtle">{hint}</Text>}
+  </div>
+}
+
+function Frame({ title, description, state, children }: { title: string; description: string; state: ReturnType<typeof useSettings<any>>; children: ReactNode }) {
+  return <Container className="mb-6">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div><Heading level="h1">{title}</Heading><Text size="small" className="mt-2 text-ui-fg-subtle">{description}</Text></div>
+      <div className="flex items-center gap-2">
+        {state.dirty && <Text size="small" className="text-ui-fg-subtle">Unsaved changes</Text>}
+        <Button variant="secondary" disabled={!state.dirty || state.saving} onClick={state.discard}>Discard</Button>
+        <Button disabled={!state.value || !state.dirty || state.loading} isLoading={state.saving} onClick={state.save}>Save changes</Button>
+      </div>
+    </div>
+    {state.error && <div role="alert" className="mb-4 rounded-lg border border-ui-border-error p-3 text-ui-fg-error">{state.error}</div>}
+    {state.loading ? <Text>Loading settings...</Text> : !state.value ? <Button variant="secondary" onClick={state.load}>Retry loading</Button> :
+      <fieldset disabled={state.saving} className="grid gap-6">{children}</fieldset>}
+  </Container>
+}
+
+function RowActions({ index, length, move, remove }: { index: number; length: number; move: (delta: number) => void; remove: () => void }) {
+  return <div className="flex flex-wrap gap-2">
+    <Button size="small" variant="secondary" disabled={index === 0} onClick={() => move(-1)} aria-label={`Move item ${index + 1} up`}>Move up</Button>
+    <Button size="small" variant="secondary" disabled={index === length - 1} onClick={() => move(1)} aria-label={`Move item ${index + 1} down`}>Move down</Button>
+    <Button size="small" variant="danger" onClick={remove} aria-label={`Remove item ${index + 1}`}>Remove</Button>
+  </div>
+}
+function moved<T>(items: T[], index: number, delta: number) {
+  const next = [...items]
+  if (index + delta < 0 || index + delta >= items.length) return next
+  const item = next[index]
+  next[index] = next[index + delta]
+  next[index + delta] = item
+  return next
+}
+
+export function FooterPresentationEditor() {
+  const state = useSettings<FooterPresentation>("footer")
+  const value = state.value
+  const set = (patch: Partial<FooterPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
+  return <Frame title="Footer appearance" description="Brand, support message, social links and bottom notes. Edit the menu columns below." state={state}>
+    {value && <>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Brand name" value={value.brand} max={40} onChange={(brand) => set({ brand })} />
+        <Field label="Tagline" value={value.tagline} max={180} onChange={(tagline) => set({ tagline })} />
+        <Field label="Support heading" value={value.support_title} max={80} onChange={(support_title) => set({ support_title })} />
+        <Field label="Support message" value={value.support_text} multiline onChange={(support_text) => set({ support_text })} />
+        <Field label="Support button label" value={value.support_label} max={60} onChange={(support_label) => set({ support_label })} />
+        <Field label="Support button link" value={value.support_href} max={500} onChange={(support_href) => set({ support_href })} hint="For example /contact/. Leave both button fields blank to hide it." />
+        <Field label="Copyright note" value={value.note} max={200} onChange={(note) => set({ note })} hint="Use {year} for the current year. Leave blank to hide." />
+        <Field label="Location / currency note" value={value.location} max={80} onChange={(location) => set({ location })} hint="Display text only, not a currency selector. Leave blank to hide." />
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Social links</Heading>
+        <Text size="small" className="text-ui-fg-subtle">Use Facebook, Instagram or YouTube as the label for its icon. Other labels show a link icon.</Text>
+        {value.social.map((row, index) => <div key={index} className="grid gap-3 rounded-lg border border-ui-border-base p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={`Social ${index + 1} name`} value={row.label} max={40} onChange={(label) => set({ social: value.social.map((item, i) => i === index ? { ...item, label } : item) })} />
+            <Field label={`Social ${index + 1} URL`} value={row.href} max={500} onChange={(href) => set({ social: value.social.map((item, i) => i === index ? { ...item, href } : item) })} />
+          </div>
+          <RowActions index={index} length={value.social.length} move={(delta) => set({ social: moved(value.social, index, delta) })} remove={() => set({ social: value.social.filter((_, i) => i !== index) })} />
+        </div>)}
+        <div><Button variant="secondary" disabled={value.social.length >= 8} onClick={() => set({ social: [...value.social, { label: "", href: "" }] })}>Add social link</Button></div>
+      </div>
+    </>}
+  </Frame>
+}
+
+const iconNames: Record<string, string> = { truck: "Delivery truck", wallet: "Payment", "map-pin": "Location", refresh: "Exchange", package: "Package", heart: "Heart", shield: "Shield", phone: "Phone" }
+export function DeliveryPresentationEditor() {
+  const state = useSettings<DeliveryPresentation>("delivery")
+  const value = state.value
+  const set = (patch: Partial<DeliveryPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
+  return <Frame title="Product delivery" description="The information cards below the buy buttons on every product page." state={state}>
+    {value && <>
+      <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
+        <Text size="small">These fields change the displayed information only. Set actual shipping charges and delivery rules in Checkout settings, and keep this copy consistent with them.</Text>
+      </div>
+      <div className="flex items-center gap-3"><Switch id="show-product-delivery" checked={value.enabled} onCheckedChange={(enabled) => set({ enabled })} /><Label htmlFor="show-product-delivery">Show delivery information</Label></div>
+      <Field label="Section heading" value={value.heading} max={80} onChange={(heading) => set({ heading })} hint="Optional. Leave blank to show the cards without a heading." />
+      <div className="grid gap-4 md:grid-cols-2">
+        {value.cards.map((card, index) => <div key={index} className="grid content-start gap-4 rounded-lg border border-ui-border-base p-4">
+          <div className="flex items-center justify-between"><Heading level="h2">Card {index + 1}</Heading></div>
+          <div className="grid gap-2"><Label htmlFor={`delivery-icon-${index}`}>Icon</Label>
+            <ManagerSelect id={`delivery-icon-${index}`} value={card.icon} onValueChange={(icon) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, icon: icon as typeof card.icon } : item) })}>
+              {DELIVERY_ICONS.map((icon) => <option key={icon} value={icon}>{iconNames[icon]}</option>)}
+            </ManagerSelect>
+          </div>
+          <Field label={`Card ${index + 1} heading`} value={card.title} max={80} onChange={(title) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, title } : item) })} />
+          <Field label={`Card ${index + 1} description`} value={card.description} multiline onChange={(description) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, description } : item) })} />
+          <RowActions index={index} length={value.cards.length} move={(delta) => set({ cards: moved(value.cards, index, delta) })} remove={() => set({ cards: value.cards.filter((_, i) => i !== index) })} />
+        </div>)}
+      </div>
+      <div><Button variant="secondary" disabled={value.cards.length >= 6} onClick={() => set({ cards: [...value.cards, { icon: "package", title: "", description: "" }] })}>Add information card</Button></div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Help link label" value={value.link_label} max={60} onChange={(link_label) => set({ link_label })} />
+        <Field label="Help link URL" value={value.link_href} max={500} onChange={(link_href) => set({ link_href })} hint="For example /contact/. Leave both link fields blank to hide it." />
+      </div>
+    </>}
+  </Frame>
+}
