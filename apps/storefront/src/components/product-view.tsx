@@ -225,7 +225,7 @@ export default function ProductView({
 
   return (
     <div data-product-ready data-product-path={pagePath} data-product-hydrated={hydratedPath === pagePath}
-      className="grid grid-cols-1 items-start gap-4 md:gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+      className="grid grid-cols-1 items-start gap-3.5 md:gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
       <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery
           key={selected?.id ?? "default"}

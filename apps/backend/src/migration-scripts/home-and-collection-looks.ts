@@ -66,7 +66,7 @@ export default async function upgradeHomeAndCollectionLooks({
       }
 
       if (section.type === "marquee" && !(config.items ?? []).length) {
-        config.items = [section.title || "3 To 5 Days Delivery", "Cash On Delivery Across Bangladesh"]
+        config.items = [section.title || "1–3 Days Delivery", "Cash On Delivery Across Bangladesh"]
         changed = true
       }
 

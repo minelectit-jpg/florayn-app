@@ -76,7 +76,7 @@ export default function YouWillLove({
         <span aria-hidden="true" />
       </div>
 
-      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title}>
+      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title} indicator>
         {shown.map((item, i) => {
           const pair = device && caseType ? `${device}|${caseType}` : ""
           const image =

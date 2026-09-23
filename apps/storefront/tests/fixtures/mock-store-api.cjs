@@ -90,7 +90,7 @@ const contactSettings = {
   faq_eyebrow: "FAQs", faq_title: "Common questions", faq_description: "A few helpful answers before you get in touch.",
   help_title: "Still have a question?", help_description: "Call or email us about your order, device compatibility or an exchange.",
   faqs: [
-    { id: "delivery", question: "How long does delivery take?", answer: "Three to five days across Bangladesh." },
+    { id: "delivery", question: "How long does delivery take?", answer: "One to three days across Bangladesh." },
     { id: "payment", question: "How do I pay?", answer: "Cash on delivery. You pay the courier when the parcel reaches you." },
   ],
 }

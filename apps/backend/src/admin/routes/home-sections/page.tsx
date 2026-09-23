@@ -150,7 +150,7 @@ function ConfigEditor({
           itemLabel="Message"
           max={8}
           blank={() => ({ text: "" })}
-          fields={[{ key: "text", label: "Message", wide: true, placeholder: "3 To 5 Days Delivery" }]}
+          fields={[{ key: "text", label: "Message", wide: true, placeholder: "1–3 Days Delivery" }]}
         />
       )
     case "tile_grid":

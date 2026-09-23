@@ -3,7 +3,7 @@ import Skeleton from "@/components/skeleton"
 export default function LoadingProduct() {
   return (
     <div className="fl-pdp mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
-      <div className="grid grid-cols-1 gap-4 md:gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px]">
+      <div className="grid grid-cols-1 gap-3.5 md:gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px]">
         <Skeleton className="aspect-square w-full rounded-[10px]" />
         <div className="space-y-4 md:space-y-6">
           <Skeleton className="h-8 w-4/5 rounded" />

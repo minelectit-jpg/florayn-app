@@ -43,7 +43,7 @@ export const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
   help_title: "Still have a question?",
   help_description: "Call or email us about your order, device compatibility or an exchange.",
   faqs: [
-    { id: "delivery", question: "How long does delivery take?", answer: "Three to five days across Bangladesh. Delivery is 60৳ inside Dhaka and 100৳ outside, and free once your order reaches 3,400৳." },
+    { id: "delivery", question: "How long does delivery take?", answer: "One to three days across Bangladesh. Delivery is 60৳ inside Dhaka and 100৳ outside, and free once your order reaches 3,400৳." },
     { id: "exchanges", question: "Can I exchange a case?", answer: "Yes - within three days of delivery, as long as the case is unused and in its packaging. Message us first so we can arrange the pickup." },
     { id: "payment", question: "How do I pay?", answer: "Cash on delivery. You pay the courier when the parcel reaches you." },
     { id: "devices", question: "My device is not listed.", answer: "Tell us which model you have. Not every design is cut for every body, but we can say what is available and when a new one is coming." },

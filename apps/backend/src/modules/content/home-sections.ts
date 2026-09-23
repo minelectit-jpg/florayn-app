@@ -117,7 +117,7 @@ export function blankHomeSection(type: string) {
   const configs: Record<string, Json> = {
     category_pills: { items: [] },
     hero: { slides: [] },
-    marquee: { items: ["3 To 5 Days Delivery"] },
+    marquee: { items: ["1–3 Days Delivery"] },
     tile_grid: { columns: 2, tiles: [] },
     product_carousel: { limit: 5, collection: null },
     collection_grid: { slugs: [], limit: 12 },

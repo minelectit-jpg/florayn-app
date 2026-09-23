@@ -330,7 +330,7 @@ export default function ProductBuyBox({
           with the current value beside the label. */}
       {simple ? (
         matrix.caseTypes.length > 1 ? (
-          <section className="mt-4 md:mt-6">
+          <section className="mt-3.5 md:mt-6">
             <p className="fl-pdp-label">
               {(optionLabel ?? "Options").toUpperCase()}
               <span className="ml-2 font-normal normal-case tracking-normal text-ink-muted">
@@ -368,7 +368,7 @@ export default function ProductBuyBox({
       matrix.caseTypes.length > 1 ? (
         <section className="mt-3.5 md:mt-5">
           <p className="fl-pdp-label">CASE TYPE</p>
-          <DragScroll className="fl-case-tiles">
+          <DragScroll className="fl-case-tiles" indicator>
             {matrix.caseTypes.map((ct) => {
               const fits = (matrix.caseTypesByDevice[device] ?? []).includes(ct)
               const isCurrent = ct === caseType
@@ -421,7 +421,7 @@ export default function ProductBuyBox({
 
       {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
       {!bundleMode ? <>
-      <div className="mt-4 flex items-stretch gap-[10px] md:mt-5">
+      <div className="mt-3.5 flex items-stretch gap-[10px] md:mt-5">
         <div className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
             type="button"

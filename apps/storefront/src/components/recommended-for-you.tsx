@@ -183,7 +183,7 @@ export default function RecommendedForYou({
         <span aria-hidden="true" />
       </div>
 
-      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title}>
+      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title} indicator>
         {items.map((item, i) => (
           <li key={`${item.id}-${i}`}>
             <RecommendedCard item={item} sizes={single ? SINGLE_SIZES : PAIR_SIZES} />

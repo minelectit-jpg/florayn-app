@@ -28,7 +28,7 @@
  .fl-acc { margin-top:24px; border:1px solid var(--color-line-strong); border-radius:10px; overflow:hidden; background:var(--color-paper); }
  .fl-acc__item + .fl-acc__item { border-top:1px solid var(--color-line); }
  .fl-acc__item[id] { scroll-margin-top:170px; }
- .fl-acc__row { display:flex; align-items:center; gap:12px; min-height:48px; padding:12px 16px; list-style:none; cursor:pointer; color:var(--color-ink); }
+ .fl-acc__row { display:flex; align-items:center; gap:12px; min-height:42px; padding:9px 14px; list-style:none; cursor:pointer; color:var(--color-ink); }
  .fl-acc__row::-webkit-details-marker { display:none; }
  .fl-acc__row:focus-visible { outline:2px solid var(--color-purple); outline-offset:-2px; }
  .fl-acc__icon { flex:none; color:var(--color-ink-faint); transition:color .2s; }
@@ -37,7 +37,7 @@
  .fl-acc__plus { flex:none; color:var(--color-ink-faint); transition:transform .2s var(--ease-brand); }
  .fl-acc__item[open] > .fl-acc__row .fl-acc__plus { transform:rotate(45deg); }
  .fl-acc__item[open] > .fl-acc__row .fl-acc__icon { color:var(--color-purple); }
- .fl-acc__panel { padding:0 16px 16px; font-size:14px; line-height:1.7; color:var(--color-ink-muted); overflow-wrap:anywhere; }
+ .fl-acc__panel { padding:2px 14px 14px; font-size:14px; line-height:1.7; color:var(--color-ink-muted); overflow-wrap:anywhere; }
  .fl-acc__text { display:grid; gap:10px; white-space:pre-line; }
  .fl-acc__faq details + details { border-top:1px solid var(--color-line); }
  .fl-acc__faq summary { display:flex; align-items:center; gap:10px; min-height:44px; padding:10px 0; list-style:none; cursor:pointer; color:var(--color-ink); }
@@ -113,6 +113,11 @@
  .fl-reviews--inline .fl-reviews__distribution { max-width:260px; margin:14px auto 0; }
  .fl-reviews--inline .fl-review-form__fields { grid-template-columns:1fr; }
 
+ /* ---- Slider bar under horizontal rails (see DragScroll `indicator`) ----- */
+ .fl-scrollbar { position:relative; height:3px; margin-top:10px; overflow:hidden; border-radius:3px; background:var(--color-line); }
+ .fl-scrollbar[data-hidden] { display:none; }
+ .fl-scrollbar > span { position:absolute; top:0; left:0; width:30%; height:100%; border-radius:3px; background:var(--color-ink-muted); will-change:transform; }
+
  /* ---- Strips under the gallery ------------------------------------------ */
  .fl-pdp-strips { display:flex; flex-direction:column; gap:24px; }
  .fl-pdp-strip__head { display:flex; align-items:center; gap:14px; }
@@ -149,6 +154,12 @@
   .fl-pdp-title { font-size:clamp(14px, calc((100vw - 30px) / (var(--title-chars, 32) * .5)), 22px); line-height:1.3; white-space:nowrap; }
   .fl-pdp-price { font-size:22px; line-height:28px; }
   .fl-pdp-stock { margin-top:4px; }
-  .fl-more-designs { padding-bottom:4px; }
-  .fl-case-tiles { padding-bottom:4px; }
+  /* One gap between every section on a phone: 14px (utility classes in the
+     components use mt-3.5 / gap-3.5 for the same value). */
+  .fl-offers { margin-top:14px; }
+  .fl-acc { margin-top:14px; }
+  .fl-pdp-strips { gap:14px; }
 }
+/* Rails show the slider bar instead of a native scrollbar, on every device. */
+.fl-more-designs, .fl-case-tiles, .fl-pdp-rail { padding-bottom:2px; scrollbar-width:none; }
+.fl-more-designs::-webkit-scrollbar, .fl-case-tiles::-webkit-scrollbar, .fl-pdp-rail::-webkit-scrollbar { display:none; }

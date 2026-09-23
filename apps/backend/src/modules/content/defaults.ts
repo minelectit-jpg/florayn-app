@@ -13,8 +13,23 @@
 
 import { SITE_IMAGES as IMG } from "./site-images"
 
-const shop = (device: string, caseType = "signature") =>
-  `/shop/?filter_device=${device}&filter_case-type=${caseType}&filter=1`
+// Clean shop paths; the old ?filter_device= form only redirects to these.
+const shop = (device: string, caseType = "signature") => `/shop/${device}/${caseType}/`
+
+/**
+ * Where the home page's accessory pills and tiles lead. Watch bands and wallets
+ * are case products with their own landing pages; StickPad and the phone charm
+ * are single products.
+ */
+export const ACCESSORY_LINKS: Record<string, string> = {
+  "watch bands": "/collection/watch-bands/",
+  "card holder": "/collection/card-wallets/?device=Card%20Wallet",
+  "magsafe wallets": "/collection/card-wallets/?device=MagSafe%20Wallet",
+  "phone charms": "/product/leather-chain-phone-charm/",
+  stickpad: "/product/stickpad-pro/",
+  stickypad: "/product/stickpad-pro/",
+}
+const accessory = (label: string) => ACCESSORY_LINKS[label.toLowerCase()]
 
 /**
  * Every home section type the storefront renders, with what its `config`
@@ -141,10 +156,10 @@ export const DEFAULT_HOME_SECTIONS = [
       items: [
         pill("Phone Case", shop("iphone-17-pro-max")),
         pill("Earbuds Case", shop("airpods-pro-3", "signature-earbuds")),
-        pill("Watch Bands", "/collection/signature/"),
-        pill("Card Holder", "/collection/signature/"),
-        pill("Phone Charms", "/collection/signature/"),
-        pill("StickPad", "/collection/signature/"),
+        pill("Watch Bands", accessory("Watch Bands")),
+        pill("Card Holder", accessory("Card Holder")),
+        pill("Phone Charms", accessory("Phone Charms")),
+        pill("StickPad", accessory("StickPad")),
         pill("Ring Holder", null, "Coming Soon"),
         pill("Fake Nails", null, "Coming Soon"),
       ],
@@ -172,8 +187,8 @@ export const DEFAULT_HOME_SECTIONS = [
     type: "marquee",
     position: 2,
     is_visible: true,
-    title: "3 To 5 Days Delivery",
-    config: { items: ["3 To 5 Days Delivery", "Cash On Delivery Across Bangladesh"] },
+    title: "1–3 Days Delivery",
+    config: { items: ["1–3 Days Delivery", "Cash On Delivery Across Bangladesh"] },
   },
   {
     key: "primary-tiles",
@@ -207,10 +222,10 @@ export const DEFAULT_HOME_SECTIONS = [
     config: {
       columns: 4,
       tiles: [
-        tile("StickyPad", "/collection/signature/"),
-        tile("Phone Charms", "/collection/signature/"),
-        tile("Watch Bands", "/collection/signature/"),
-        tile("Magsafe Wallets", "/collection/signature/"),
+        tile("StickyPad", accessory("StickyPad")),
+        tile("Phone Charms", accessory("Phone Charms")),
+        tile("Watch Bands", accessory("Watch Bands")),
+        tile("Magsafe Wallets", accessory("Magsafe Wallets")),
       ],
     },
   },

@@ -47,7 +47,7 @@ export function MoreDesigns({
   return (
     <section className="mt-3.5 md:mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
-      <DragScroll className="fl-more-designs">
+      <DragScroll className="fl-more-designs" indicator>
         {currentName ? (
           <li className="shrink-0">
             {/* The current design, highlighted like the selected CASE TYPE tile.
