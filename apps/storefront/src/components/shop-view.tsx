@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import Link from "next/link"
+import Link from "@/components/audience-link"
 
 import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
@@ -14,6 +14,7 @@ import {
   type ShopDesign,
   type ShopCard,
 } from "@/lib/catalog"
+import { fitsAudience, withAudience, type Audience } from "@/lib/audience"
 import { listProducts, type StoreProduct, type StoreVariant } from "@/lib/medusa"
 
 /** Designs per page. A full grid is 4 across, so this is 8 rows on desktop. */
@@ -59,15 +60,17 @@ function handleFor(slug: string, form: string): string {
 export async function shopMetadata({
   deviceSlug,
   caseTypeSlug,
+  audience = "women",
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
+  audience?: Audience
 }): Promise<Metadata> {
   const devices = await getDeviceCatalog()
   const device = devices.find((d) => d.slug === deviceSlug)
   return {
-    title: device ? `${device.name} Cases` : "Shop",
-    alternates: { canonical: pathFor(device?.slug, caseTypeSlug) },
+    title: `${device ? `${device.name} Cases` : "Shop"}${audience === "men" ? " for Men" : ""}`,
+    alternates: { canonical: withAudience(pathFor(device?.slug, caseTypeSlug), audience) },
   }
 }
 
@@ -76,17 +79,21 @@ export default async function ShopView({
   caseTypeSlug,
   page = 1,
   routePath = "/shop/",
+  audience = "women",
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
   page?: number
   routePath?: string
+  /** Women or Men: only that mode's designs (and the ones for both) are listed. */
+  audience?: Audience
 }) {
-  const [devices, caseTypes, catalog] = await Promise.all([
+  const [devices, caseTypes, fullCatalog] = await Promise.all([
     getDeviceCatalog(),
     getCaseTypes(),
     getShopCatalog(deviceSlug),
   ])
+  const catalog = fullCatalog.filter((d) => fitsAudience(d.audience, audience))
 
   const device = devices.find((d) => d.slug === deviceSlug) ?? null
   const targetForm = device ? formForFamily(device.family) : "phone"

@@ -1,5 +1,5 @@
 import { ArrowRight, ArrowUpRight, BadgeCheck, Star } from "lucide-react"
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import type { CSSProperties } from "react"
 
 import ArtImage from "@/components/art-image"

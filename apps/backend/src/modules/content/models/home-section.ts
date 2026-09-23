@@ -23,6 +23,8 @@ const HomeSection = model.define("home_section", {
   cta_href: model.text().nullable(),
   /** Section-specific payload: tiles, slides, quotes. */
   config: model.json().nullable(),
+  /** Which home page it belongs to: "women" (the root) or "men" (/men). */
+  audience: model.text().default("women"),
   position: model.number().default(0),
   is_visible: model.boolean().default(true),
 })

@@ -2,7 +2,8 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
 import { getDesignDetail } from "../../../../lib/design-admin"
-import { editDesignMeta } from "../../../../lib/edit-design"
+import { editDesignMeta, type DesignMetaPatch } from "../../../../lib/edit-design"
+import { isAudienceTag } from "../../../../lib/audience"
 
 /**
  * GET /admin/designs/:slug - one design's full shape (products, options and
@@ -23,8 +24,9 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 }
 
 /**
- * PATCH /admin/designs/:slug - edit a design's name / theme / publish status
- * across all its products. Never changes price, variants, or the slug/URL.
+ * PATCH /admin/designs/:slug - edit a design's name / theme / publish status /
+ * audience (women | men | both) across all its products. Never changes price,
+ * variants, or the slug/URL.
  */
 export const PATCH = async (req: MedusaRequest, res: MedusaResponse) => {
   const { slug } = req.params
@@ -37,8 +39,14 @@ export const PATCH = async (req: MedusaRequest, res: MedusaResponse) => {
     theme?: unknown
     status?: unknown
     description?: unknown
+    audience?: unknown
   }
-  const patch: { name?: string; theme?: string; description?: string; status?: "published" | "draft" } = {}
+  const patch: DesignMetaPatch = {}
+  if (body.audience !== undefined && !isAudienceTag(body.audience)) {
+    res.status(400).json({ message: "Choose Women, Men or Both." })
+    return
+  }
+  if (isAudienceTag(body.audience)) patch.audience = body.audience
   if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim() || body.name.length > 200)) {
     res.status(400).json({ message: "Enter a product name within 200 characters." })
     return

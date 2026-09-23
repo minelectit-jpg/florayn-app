@@ -95,3 +95,14 @@ test("editing an unknown design throws", async () => {
   const { container } = makeContainer()
   await assert.rejects(() => editDesignMeta(container, "nope", { status: "draft" }), /No design found/)
 })
+
+test("setting who a design is for tags every product of it and keeps the rest of its metadata", async () => {
+  const { container, state } = makeContainer()
+  await editDesignMeta(container, "timeless", { audience: "men" })
+  assert.equal(state.productUpdates.length, 2)
+  for (const u of state.productUpdates) {
+    assert.equal(u.metadata.audience, "men")
+    assert.equal(u.metadata.design_slug, "timeless")
+    assert.ok(!("title" in u) && !("status" in u), "only the audience changes")
+  }
+})

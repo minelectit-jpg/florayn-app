@@ -28,6 +28,7 @@ function loadSource(relativePath, dependencies, globals = {}) {
     require(name) {
       if (Object.hasOwn(dependencies, name)) return dependencies[name]
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "Fragment" }
+      if (name === "@/lib/audience") return audienceLib()
       if (name.startsWith("@/components/")) return { __esModule: true, default: name }
       throw new Error(`Unexpected dependency: ${name}`)
     },
@@ -36,6 +37,10 @@ function loadSource(relativePath, dependencies, globals = {}) {
 }
 
 const uncachedReact = { cache: (fn) => fn }
+let audienceModule
+function audienceLib() {
+  return (audienceModule ??= loadSource("lib/audience.ts", {}))
+}
 const { buildVariantMatrix } = loadSource("lib/variant-matrix.ts", {})
 const productForms = loadSource("lib/product-forms.ts", {})
 
@@ -44,8 +49,8 @@ test("home prices each carousel separately and can source one from a collection"
     id: `${prefix}-${i}`, handle: `${prefix}-${i}`, metadata: { design_slug: `${prefix}-${i}`, form: "phone" },
   }))
   const calls = []
-  const { default: HomePage } = loadSource("app/page.tsx", {
-    "@/lib/content": { getSiteContent: async () => ({
+  const { default: HomePage } = loadSource("components/pages/home-page.tsx", {
+    "@/lib/content": { collectionsFor: (cards) => cards, getSiteContent: async () => ({
       sections: [
         { key: "new", type: "product_carousel", config: { limit: 4 } },
         { key: "bugs", type: "product_carousel", config: { limit: 2, collection: "bug-life" } },
@@ -66,7 +71,7 @@ test("home prices each carousel separately and can source one from a collection"
       },
     },
   })
-  const tree = await HomePage()
+  const tree = await HomePage({ audience: "women" })
   const [first, second] = tree.props.children
   assert.equal(Array.from(first.props.products, (p) => p.id).join(","), "any-0,any-1,any-2,any-3")
   assert.equal(Array.from(second.props.products, (p) => p.id).join(","), "bug-0,bug-1")
@@ -74,14 +79,44 @@ test("home prices each carousel separately and can source one from a collection"
   assert.equal(first.props.collections[0].slug, "bug-life", "collection cards reach every section")
 })
 
-function collectionFixture() {
+test("the Men home fills its rows with men's and shared designs only, and only collections that have them", async () => {
+  const tags = ["women", "men", "both", "women", "men", "women", undefined, "men"]
+  const pool = tags.map((audience, i) => ({ id: `d-${i}`, handle: `d-${i}`, metadata: { design_slug: `d-${i}`, form: "phone", ...(audience ? { audience } : {}) } }))
+  const limits = []
+  const { default: HomePage } = loadSource("components/pages/home-page.tsx", {
+    "@/lib/content": {
+      collectionsFor: (cards, audience) => cards.filter((c) => !c.audiences || c.audiences.includes(audience)),
+      getSiteContent: async (audience) => {
+        assert.equal(audience, "men", "the Men home reads the Men sections")
+        return {
+          sections: [{ key: "new", type: "product_carousel", config: { limit: 4 } }],
+          collections: [{ slug: "blooms", audiences: ["women"] }, { slug: "checkmate", audiences: ["women", "men"] }, { slug: "legacy" }],
+        }
+      },
+    },
+    "@/lib/medusa": {
+      CARD_FIELDS: "id",
+      listProducts: async (query) => {
+        if (!query.id) { limits.push(query.limit); return { products: pool, count: pool.length } }
+        return { products: query.id.map((id) => ({ id })), count: query.id.length }
+      },
+    },
+  })
+  const tree = await HomePage({ audience: "men" })
+  const [row] = tree.props.children
+  assert.equal(Array.from(row.props.products, (p) => p.id).join(","), "d-1,d-2,d-4,d-6")
+  assert.equal(limits[0], 96, "Men looks further back to fill its row")
+  assert.equal(row.props.collections.map((c) => c.slug).join(","), "checkmate,legacy")
+})
+
+function collectionFixture(audience = "women", tags = {}) {
   const phone = { name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
   const airpods = [
     { name: "AirPods 4", slug: "airpods-4", family: "airpods" },
     { name: "AirPods Pro 3", slug: "airpods-pro-3", family: "airpods" },
   ]
   const product = (id, form, devices, caseType) => ({
-    id, handle: id, title: id, thumbnail: `${id}.webp`, metadata: { design_slug: id.split("-")[0], form },
+    id, handle: id, title: id, thumbnail: `${id}.webp`, metadata: { design_slug: id.split("-")[0], form, ...(tags[id.split("-")[0]] ? { audience: tags[id.split("-")[0]] } : {}) },
     options: [
       { id: "device", title: "Device", values: devices.map((value) => ({ value })) },
       { id: "case", title: "Case Type", values: [{ value: caseType }] },
@@ -101,10 +136,10 @@ function collectionFixture() {
     design_slugs: [], blocks: [{ type: "banner", heading: "Bug Life AirPods Cases", cta_href: "/collection/bug-life/?form=airpods#shop" }],
   }
   const hydrated = []
-  const { default: CollectionPage } = loadSource("app/collection/[slug]/page.tsx", {
+  const { default: CollectionPage } = loadSource("components/pages/collection-page.tsx", {
     react: uncachedReact,
     "next/cache": { unstable_cache: (fn) => fn },
-    "next/navigation": { notFound: () => { throw new Error("unexpected 404") } },
+    "next/navigation": { notFound: () => { throw new Error("unexpected 404") }, redirect: (to) => { throw new Error(`redirect ${to}`) } },
     "@/lib/catalog": { getDeviceCatalog: async () => [phone, ...airpods] },
     "@/lib/content": { getCollectionPage: async () => landing },
     "@/lib/variant-matrix": { buildVariantMatrix },
@@ -118,9 +153,26 @@ function collectionFixture() {
       hydrateCollectionProducts: async (list, device) => { hydrated.push(device); return { products: list } },
     },
   })
-  const render = (query) => CollectionPage({ params: Promise.resolve({ slug: "bug-life" }), searchParams: Promise.resolve(query) })
+  const render = (query) => CollectionPage({ params: Promise.resolve({ slug: "bug-life" }), searchParams: Promise.resolve(query), audience })
   return { render, hydrated, landing }
 }
+
+test("a Men collection lists only designs for men, and says so when it has none", async () => {
+  const men = collectionFixture("men", { bee: "women", moth: "men" })
+  const tree = await men.render({})
+  const [, filters, grid] = tree.props.children
+  assert.equal(filters.props.forms.map((f) => f.value).join(","), "airpods", "no men's phone case here, so no phone tab")
+  assert.equal(Array.from(grid.props.children, (card) => card.props.product.id).join(","), "moth-airpods")
+
+  const none = collectionFixture("men", { bee: "women", moth: "women" })
+  const empty = await none.render({})
+  assert.match(JSON.stringify(empty.props.children[2]), /no designs for/)
+
+  const women = collectionFixture("women", { bee: "women", moth: "men" })
+  const [, womenFilters] = (await women.render({})).props.children
+  assert.equal(womenFilters.props.forms.map((f) => f.value).join(","), "phone,airpods")
+  await assert.rejects(women.render({ filter_gender: "men" }), { message: "redirect /men/collection/bug-life/" }, "florayn.com's Men links land on /men")
+})
 
 test("a collection opens on phone cases, themed, with its banners under the grid", async () => {
   const { render, landing } = collectionFixture()

@@ -25,7 +25,7 @@ function loadSource(relativePath) {
       console,
       require(name) {
         if (name === "react/jsx-runtime") return { jsx, jsxs: jsx }
-        if (name === "next/link") return { __esModule: true, default: (p) => ({ __link: true, props: p }) }
+        if (name === "next/link" || name === "@/components/audience-link") return { __esModule: true, default: (p) => ({ __link: true, props: p }) }
         if (name.startsWith("@/")) return { __esModule: true, default: name }
         throw new Error(`Unexpected dependency: ${name}`)
       },

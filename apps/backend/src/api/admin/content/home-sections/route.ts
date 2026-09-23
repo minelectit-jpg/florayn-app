@@ -8,6 +8,11 @@ import {
   normaliseHomeConfig,
 } from "../../../../modules/content/home-sections"
 
+/** The home page a section belongs to; rows from before the split are Women. */
+function sectionAudience(section: any): "women" | "men" {
+  return section?.audience === "men" ? "men" : "women"
+}
+
 /** A key no other section uses: "<base>", then "<base>-2", "<base>-3"... */
 function uniqueKey(base: string, taken: Set<string>): string {
   const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section"
@@ -20,12 +25,15 @@ function uniqueKey(base: string, taken: Set<string>): string {
 /**
  * POST /admin/content/home-sections
  *
- *   { order: string[] }                      reorder, ids top to bottom
- *   { action: "create", type, after_id? }    add a blank section of a type
- *   { action: "duplicate", id }              copy a section, right below it
+ *   { order: string[] }                              reorder, ids top to bottom
+ *   { action: "create", type, audience?, after_id? } add a blank section of a type
+ *   { action: "duplicate", id, audience? }           copy a section, right below it,
+ *                                                    or to the end of the other
+ *                                                    home page ("Copy to Men")
  *
- * New and copied sections start hidden so they can be filled in before they
- * appear on the site.
+ * Women and Men each have their own home page; a section belongs to one
+ * (audience, Women unless asked). New and copied sections start hidden so they
+ * can be filled in before they appear on the site.
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)
@@ -33,8 +41,13 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   if (body.action === "create" || body.action === "duplicate") {
     const { sections } = await getContent(service)
-    const ordered = [...sections].sort((a: any, b: any) => a.position - b.position)
-    const taken = new Set<string>(ordered.map((s: any) => s.key))
+    const taken = new Set<string>(sections.map((s: any) => s.key))
+    const source = body.action === "duplicate" ? sections.find((s: any) => s.id === body.id) : null
+    if (body.action === "duplicate" && !source) return res.status(404).json({ message: "Section not found." })
+    const audience = body.audience === "men" || body.audience === "women" ? body.audience : sectionAudience(source)
+    const ordered = sections
+      .filter((s: any) => sectionAudience(s) === audience)
+      .sort((a: any, b: any) => a.position - b.position)
 
     let row: Record<string, unknown>
     let afterId: string | null = null
@@ -44,17 +57,18 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       }
       const blank = blankHomeSection(body.type)
       row = {
-        key: uniqueKey(body.type, taken),
+        key: uniqueKey(audience === "men" ? `men-${body.type}` : body.type, taken),
+        audience,
         type: body.type,
         title: blank.title,
         config: normaliseHomeConfig(body.type, blank.config),
       }
       afterId = typeof body.after_id === "string" ? body.after_id : null
     } else {
-      const source = ordered.find((s: any) => s.id === body.id)
-      if (!source) return res.status(404).json({ message: "Section not found." })
+      const moved = sectionAudience(source) !== audience
       row = {
-        key: uniqueKey(`${source.key}-copy`, taken),
+        key: uniqueKey(moved ? `${audience}-${source.key.replace(/^(?:men|women)-/, "")}` : `${source.key}-copy`, taken),
+        audience,
         type: source.type,
         title: source.title,
         subtitle: source.subtitle,
@@ -63,7 +77,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         cta_href: source.cta_href,
         config: normaliseHomeConfig(source.type, source.config),
       }
-      afterId = source.id
+      afterId = moved ? null : source.id
     }
 
     const index = afterId ? ordered.findIndex((s: any) => s.id === afterId) : -1

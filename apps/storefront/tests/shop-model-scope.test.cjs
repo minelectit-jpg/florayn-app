@@ -17,6 +17,7 @@ function load(relative, dependencies = {}) {
   return exports
 }
 const forms = load("lib/product-forms.ts")
+const audience = load("lib/audience.ts")
 const devices = [
   { slug: "iphone-17-pro-max", name: "iPhone 17 Pro Max", family: "iphone" },
   { slug: "galaxy-s26", name: "Samsung S26", family: "samsung" },
@@ -40,6 +41,8 @@ for (const [slug, expected] of [
       "@/lib/product-forms": forms,
       "@/components/model-drawer": ({ items: value }) => { items = value; return null },
       "@/components/case-type-modal": () => null,
+      "@/components/use-audience": { useAudience: () => "women" },
+      "@/lib/audience": audience,
     }).default
     renderToStaticMarkup(React.createElement(Component, { deviceSlug: slug, devices, caseTypes: [] }))
     assert.deepEqual(Array.from(items, (item) => item.value), expected)

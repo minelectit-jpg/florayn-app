@@ -1,28 +1,44 @@
 "use client"
 
-import Link from "next/link"
 import { ArrowLeft, LockKeyhole, UserRound } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
+import Link from "@/components/audience-link"
+import AudienceToggle from "@/components/audience-toggle"
 import { useCart } from "@/components/cart-provider"
 import MegaPanel from "@/components/mega-menu"
 import ShoppingBagIcon from "@/components/shopping-bag-icon"
+import { useAudience } from "@/components/use-audience"
+import { stripAudience } from "@/lib/audience"
 import type { CaseTypeInfo, MenuSection } from "@/lib/content"
 
+/** Home, shop and collection pages carry the phone tab bar; a product page stays compact. */
+const TAB_BAR_PAGES = /^\/(?:$|shop(?:\/|$)|collections?(?:\/|$))/
+
 /**
- * The header, matching the live site's arrangement: the WOMEN/MEN pill on the
- * left, the wordmark centred, actions on the right, and the navigation on its
- * own row underneath. Below lg the nav row becomes a drawer.
+ * The header, matching the live site's arrangement: the WOMEN/MEN switch on
+ * the left, the wordmark centred, actions on the right, and the navigation on
+ * its own row underneath. Below lg the nav row becomes a drawer and the switch
+ * becomes a full-width tab bar under the header.
+ *
+ * Women and Men each have their own navigation; the one shown follows the
+ * shopper's mode, and every link keeps them in it.
  */
 export default function SiteHeader({
   menu,
+  menMenu,
   caseTypes = [],
 }: {
   menu: MenuSection[]
+  /** The Men navigation. Falls back to the Women one while it is empty. */
+  menMenu?: MenuSection[]
   caseTypes?: CaseTypeInfo[]
 }) {
   const pathname = usePathname()
+  const audience = useAudience()
+  const nav = audience === "men" && menMenu?.length ? menMenu : menu
+  const showTabBar = TAB_BAR_PAGES.test(stripAudience(pathname || "/"))
   const { summary, openDrawer } = useCart()
   const itemCount = summary?.itemCount ?? 0
 
@@ -87,13 +103,7 @@ export default function SiteHeader({
           <span aria-hidden="true">&#9776;</span>
         </button>
 
-        {/* The live site's audience pill. Presentational until sections exist. */}
-        <div className="hidden shrink-0 items-center rounded-full bg-ink p-1 text-[11px] font-semibold lg:flex">
-          <span className="rounded-full bg-ink px-3 py-1.5 text-white">
-            WOMEN
-          </span>
-          <span className="px-3 py-1.5 text-white/55">MEN</span>
-        </div>
+        <AudienceToggle variant="pill" className="hidden shrink-0 lg:grid" />
 
         <Link
           href="/"
@@ -135,7 +145,7 @@ export default function SiteHeader({
         onMouseLeave={() => setOpenMenu(null)}
       >
         <ul className="mx-auto flex w-full max-w-[1470px] items-center justify-center gap-8 px-[30px]">
-          {menu.map((section) => {
+          {nav.map((section) => {
             const hasPanel = section.groups.some((g) => g.links.length)
             const isOpen = openMenu === section.id
             const content = (
@@ -176,7 +186,7 @@ export default function SiteHeader({
           })}
         </ul>
 
-        {menu.map((section) => {
+        {nav.map((section) => {
           if (openMenu !== section.id) return null
           return (
             <div
@@ -192,6 +202,9 @@ export default function SiteHeader({
       </nav>
 
     </header>
+
+      {/* The phone tab bar scrolls away with the page instead of sticking. */}
+      {showTabBar ? <AudienceToggle variant="tabs" className="lg:hidden" /> : null}
 
       {/* Mobile drawer */}
       {mobileOpen ? (
@@ -215,9 +228,11 @@ export default function SiteHeader({
               </button>
             </div>
 
+            <AudienceToggle variant="tabs" />
+
             <nav className="flex-1 overflow-y-auto px-2 py-2">
               <ul>
-                {menu.map((section) => {
+                {nav.map((section) => {
                   const hasPanel = section.groups.some((g) => g.links.length)
                   const isOpen = expanded === section.id
                   return (

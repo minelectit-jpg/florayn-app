@@ -49,7 +49,7 @@ function stepHarness(product) {
   load("workflows/product-manager.ts", {
     "@medusajs/framework/utils": utils,
     "@medusajs/framework/workflows-sdk": { createStep: (name, fn) => { steps[name] = fn; return fn }, createWorkflow: () => ({}), StepResponse: class { constructor(value) { this.value = value } }, WorkflowResponse: class {}, transform: () => ({}) },
-    "@medusajs/medusa/core-flows": {}, "../lib/product-manager-input": validation, "../lib/rebuild-cards": { rebuildCards: async () => {} },
+    "@medusajs/medusa/core-flows": {}, "../lib/product-manager-input": validation, "../lib/rebuild-cards": { rebuildCards: async () => {} }, "../lib/audience": load("lib/audience.ts"),
   })
   const container = { resolve: () => ({ graph: async () => ({ data: [product] }) }) }
   return (patch) => steps["prepare-manager-variant-edit"](patch, { container }).then((v) => plain(v.value))
@@ -68,6 +68,18 @@ test("variant editing preserves IDs, unrelated metadata and galleries while refr
   assert.equal(result.productUpdate.thumbnail, "https://images.invalid/replacement.webp")
   assert.deepEqual(result.productUpdate.images.map((i) => i.url), ["https://images.invalid/replacement.webp", "https://images.invalid/two.webp"])
   assert.equal(p.variants[0].metadata.images[0], "https://images.invalid/old.webp", "input objects are never mutated")
+})
+test("a simple product's colour can be limited to Women or Men without losing its gallery", async () => {
+  const p = product(); const prepare = stepHarness(p)
+  const result = await prepare({ productId: p.id, variants: [{ id: "v1", audience: "women", images: ["https://images.invalid/new.webp"] }, { id: "v2", audience: "men" }] })
+  assert.equal(result.variants[0].metadata.audience, "women")
+  assert.deepEqual(result.variants[0].metadata.images, ["https://images.invalid/new.webp"])
+  assert.equal(result.variants[0].metadata.keep, "yes")
+  assert.equal(result.variants[1].metadata.audience, "men")
+  assert.deepEqual(result.variants[1].metadata.images, ["https://images.invalid/two.webp"])
+  await assert.rejects(prepare({ productId: p.id, variants: [{ id: "v1", audience: "kids" }] }), /Women, Men or Both/)
+  const casePhone = product(); casePhone.options = [{ title: "Case Type" }]
+  await assert.rejects(stepHarness(casePhone)({ productId: "p1", variants: [{ id: "v1", audience: "men" }] }), /on the product, not per variant/)
 })
 test("phone price overrides, foreign variants, duplicate IDs and empty published galleries cannot be saved", async () => {
   const p = product(); p.options = [{ title: "Case Type" }]
@@ -91,7 +103,7 @@ test("regular inventory endpoint uses the selected published product and exact v
   assert.deepEqual(result.stock, { "variant:zero": 0, "variant:ready": 4 })
 })
 test("unified list includes regular products using bounded reads of variant IDs only", async () => {
-  const { listLiveDesigns } = load("lib/design-admin.ts", { "@medusajs/framework/utils": { Modules: {}, ContainerRegistrationKeys: { QUERY: "query" } } })
+  const { listLiveDesigns } = load("lib/design-admin.ts", { "@medusajs/framework/utils": { Modules: {}, ContainerRegistrationKeys: { QUERY: "query" } }, "./audience": load("lib/audience.ts") })
   const result = await listLiveDesigns({ resolve: () => ({ graph: async (q) => {
     assert.equal(q.pagination.take, 100)
     assert.ok(q.fields.includes("variants.id"))

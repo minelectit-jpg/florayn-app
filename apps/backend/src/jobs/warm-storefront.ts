@@ -56,6 +56,10 @@ export default async function warmStorefront(container: MedusaContainer) {
       "/shop/iphone-17-pro-max/signature/",
       "/shop/iphone-16-pro-max/signature/",
       "/shop/airpods-pro-3/signature-earbuds/",
+      // The Men site (/men) has its own home and shop pages.
+      "/men/",
+      "/men/shop/iphone-17-pro-max/signature/",
+      "/men/shop/airpods-pro-3/signature-earbuds/",
     ]
     for (const p of products) {
       const meta = (p.metadata ?? {}) as Record<string, any>
@@ -64,6 +68,8 @@ export default async function warmStorefront(container: MedusaContainer) {
       if (!devs || !p.handle) continue
       const caseParam = form === "airpods" ? "signature-earbuds" : "signature"
       for (const dv of devs) urls.push(`/product/${p.handle}-${dv}/?case=${caseParam}`)
+      // A men's design is mostly opened from the Men site: warm its main phone page there.
+      if (form === "phone" && meta.audience !== "women") urls.push(`/men/product/${p.handle}-${devs[0]}/?case=${caseParam}`)
     }
 
     nextUrlIndex %= urls.length

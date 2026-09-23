@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useState } from "react"
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { Plus, Minus } from "lucide-react"
 import type { MenuSection } from "@/lib/content"
 import { safePresentationHref } from "@/lib/storefront-presentation"

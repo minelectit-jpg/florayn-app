@@ -3,6 +3,7 @@ import { createStep, createWorkflow, StepResponse, WorkflowResponse, transform }
 import { createProductsWorkflow, createProductVariantsWorkflow, createInventoryLevelsWorkflow, updateProductsWorkflow, updateProductVariantsWorkflow, updateProductOptionValuesOnProductStep } from "@medusajs/medusa/core-flows"
 import { regularInput, imageUrls, money } from "../lib/product-manager-input"
 import { rebuildCards } from "../lib/rebuild-cards"
+import { isAudienceTag } from "../lib/audience"
 
 const prepareRegular = createStep("prepare-regular-product", async (raw: Record<string, unknown>, { container }) => {
   const input = regularInput(raw)
@@ -54,7 +55,7 @@ export const createRegularProductWorkflow = createWorkflow("create-regular-produ
   return new WorkflowResponse(transform(products, (rows) => ({ slug: rows[0].handle, id: rows[0].id })))
 })
 
-type VariantEdit = { productId: string; variants: { id: string; sku?: string; images?: string[]; price?: number }[] }
+type VariantEdit = { productId: string; variants: { id: string; sku?: string; images?: string[]; price?: number; audience?: string }[] }
 const prepareVariantEdit = createStep("prepare-manager-variant-edit", async (input: VariantEdit, { container }) => {
   if (!Array.isArray(input.variants) || !input.variants.length || input.variants.length > 200) throw new MedusaError(MedusaError.Types.INVALID_DATA, "Select between 1 and 200 variants.")
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
@@ -80,6 +81,11 @@ const prepareVariantEdit = createStep("prepare-manager-variant-edit", async (inp
       const images = imageUrls(patch.images)
       if (product.status === "published" && !images.length) throw new MedusaError(MedusaError.Types.INVALID_DATA, "Keep at least one image for a published variant, or move the product to draft first.")
       update.metadata = { ...(variant.metadata ?? {}), images }
+    }
+    if (patch.audience !== undefined) {
+      if (caseProduct) throw new MedusaError(MedusaError.Types.INVALID_DATA, "A case design is for Women, Men or both as a whole. Set it on the product, not per variant.")
+      if (!isAudienceTag(patch.audience)) throw new MedusaError(MedusaError.Types.INVALID_DATA, "Choose Women, Men or Both.")
+      update.metadata = { ...(update.metadata ?? variant.metadata ?? {}), audience: patch.audience }
     }
     if (patch.price !== undefined) {
       if (caseProduct) throw new MedusaError(MedusaError.Types.INVALID_DATA, "Case products use the shared case-type price. Edit that price in Case Types.")

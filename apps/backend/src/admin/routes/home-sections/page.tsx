@@ -33,7 +33,13 @@ type Section = {
   config: Record<string, any> | null
   position: number
   is_visible: boolean
+  /** "women" (the root home page) or "men" (/men). */
+  audience?: string | null
 }
+
+type Audience = "women" | "men"
+const audienceOf = (section: Section): Audience => (section.audience === "men" ? "men" : "women")
+const AUDIENCE_LABEL: Record<Audience, string> = { women: "Women", men: "Men" }
 
 type PageOption = { slug: string; title: string }
 
@@ -261,6 +267,8 @@ const HomeSectionsPage = () => {
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [newType, setNewType] = useState("banner")
+  const [audience, setAudience] = useState<Audience>("women")
+  const other: Audience = audience === "men" ? "women" : "men"
   const lock = useRef(false)
   useUnsaved(dirty)
 
@@ -286,7 +294,12 @@ const HomeSectionsPage = () => {
       .catch(() => undefined)
   }, [])
 
-  const ordered = [...sections].sort((a, b) => a.position - b.position)
+  const ordered = sections.filter((s) => audienceOf(s) === audience).sort((a, b) => a.position - b.position)
+
+  const switchAudience = (next: Audience) => {
+    if (next === audience || !leaveEditor()) return
+    setEditing(null); setDirty(false); setAudience(next)
+  }
 
   async function run(fn: () => Promise<void>) {
     if (lock.current) return
@@ -313,7 +326,7 @@ const HomeSectionsPage = () => {
 
   const add = () => run(async () => {
     if (!leaveEditor()) return
-    const d = await post("/admin/content/home-sections", { action: "create", type: newType, after_id: editing?.id })
+    const d = await post("/admin/content/home-sections", { action: "create", type: newType, audience, after_id: editing?.id })
     setSections(d.sections)
     const created = d.sections.find((s: Section) => s.id === d.created_id)
     setEditing(created ?? null)
@@ -328,6 +341,16 @@ const HomeSectionsPage = () => {
     setEditing(d.sections.find((s: Section) => s.id === d.created_id) ?? null)
     setDirty(false)
     toast.success("Copied below the original (hidden until you switch it on).")
+  })
+
+  const copyToOther = (section: Section) => run(async () => {
+    if (!leaveEditor()) return
+    await post("/admin/content/home-sections", { action: "duplicate", id: section.id, audience: other })
+    const d = await api("/admin/content")
+    setSections(d.sections ?? [])
+    setEditing(null)
+    setDirty(false)
+    toast.success(`Copied to the ${AUDIENCE_LABEL[other]} home page (hidden until you switch it on there).`)
   })
 
   const remove = (section: Section) => run(async () => {
@@ -368,6 +391,16 @@ const HomeSectionsPage = () => {
             <Text size="small" className="text-ui-fg-subtle">
               The bands of the home page, top to bottom. Edit pictures and words, reorder, hide, copy or add sections. New and copied sections start hidden.
             </Text>
+            <nav aria-label="Which home page" className="mt-3 flex flex-wrap gap-2">
+              {(["women", "men"] as const).map((value) => (
+                <Button key={value} size="small" variant={audience === value ? "primary" : "secondary"} disabled={busy} onClick={() => switchAudience(value)}>
+                  {value === "women" ? "Women (new.florayn.com)" : "Men (/men)"} · {sections.filter((s) => audienceOf(s) === value).length}
+                </Button>
+              ))}
+            </nav>
+            <Text size="xsmall" className="text-ui-fg-subtle mt-2">
+              Enter links without /men (for example /shop/iphone-17-pro-max/signature/). The Men site adds /men itself.
+            </Text>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <div className="w-56">
@@ -377,7 +410,7 @@ const HomeSectionsPage = () => {
             </div>
             <Button size="small" onClick={add} disabled={busy}>+ Add section</Button>
             {storefront ? (
-              <a href={`${storefront}/`} target="_blank" rel="noreferrer noopener">
+              <a href={`${storefront}${audience === "men" ? "/men/" : "/"}`} target="_blank" rel="noreferrer noopener">
                 <Button size="small" variant="secondary">View site</Button>
               </a>
             ) : null}
@@ -388,6 +421,12 @@ const HomeSectionsPage = () => {
           {editing ? " It is added below the section you are editing." : " It is added at the bottom."}
         </Text>
       </Container>
+
+      {!ordered.length ? (
+        <Container>
+          <Text size="small">The {AUDIENCE_LABEL[audience]} home page has no sections yet. Add one above, or use "Copy to {AUDIENCE_LABEL[audience]}" on the other home page.</Text>
+        </Container>
+      ) : null}
 
       {ordered.map((section, index) => {
         const open = editing?.id === section.id
@@ -417,6 +456,7 @@ const HomeSectionsPage = () => {
                   {open ? "Close" : "Edit"}
                 </Button>
                 <Button size="small" variant="transparent" disabled={busy} onClick={() => duplicate(section)}>Duplicate</Button>
+                <Button size="small" variant="transparent" disabled={busy} onClick={() => copyToOther(section)}>Copy to {AUDIENCE_LABEL[other]}</Button>
                 <Button size="small" variant="transparent" disabled={busy} onClick={() => remove(section)}>Delete</Button>
               </div>
             </div>

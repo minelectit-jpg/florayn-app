@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { useMemo, useState } from "react"
 
 import ProductImage from "@/components/product-image"

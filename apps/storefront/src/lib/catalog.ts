@@ -1,3 +1,4 @@
+import type { AudienceTag } from "./audience"
 import { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } from "./medusa"
 
 /**
@@ -149,6 +150,8 @@ export type ShopDesign = {
   caseTypes: string[]
   /** Forms it is sold in (phone, airpods, …). */
   forms: string[]
+  /** Who it is for; absent (an older backend) means both. */
+  audience?: AudienceTag
 }
 
 /**

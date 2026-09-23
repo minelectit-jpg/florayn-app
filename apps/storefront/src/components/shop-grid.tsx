@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { useMemo, useRef, useState, type ReactNode } from "react"
 
 import ProductCard from "@/components/product-card"

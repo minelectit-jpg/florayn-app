@@ -60,6 +60,22 @@ export const SITE_IMAGES = {
   checkmateCard: `${R2}/collections/checkmate/card-300120e5.webp`,
   garageHero: `${R2}/collections/garage/hero-dcf6ac72.webp`,
   garageHeroMobile: `${R2}/collections/garage/hero-mobile-94d309f9.webp`,
+
+  // florayn.com/men's own pictures, for the Men home page.
+  menIconPhoneCase: `${R2}/home/men/icon-phone-case-bafa2048.webp`,
+  menIconEarbudsCase: `${R2}/home/men/icon-earbuds-case-6d9dc1c2.webp`,
+  menIconWatchBands: `${R2}/home/men/icon-watch-bands-2a636b27.webp`,
+  menIconCardHolder: `${R2}/home/men/icon-card-holder-3eff24cf.webp`,
+  menIconStickPad: `${R2}/home/men/icon-stickpad-a51b93cf.webp`,
+  menIconWallet: `${R2}/home/men/icon-wallet-bb5c46f8.webp`,
+  menHeroNewest: `${R2}/home/men/hero-newest-17191553.webp`,
+  menHeroNewestMobile: `${R2}/home/men/hero-newest-mobile-06672621.webp`,
+  menTilePhoneCase: `${R2}/home/men/tile-phone-case-b56fe361.webp`,
+  menTileEarbudsCase: `${R2}/home/men/tile-earbuds-case-a59b639d.webp`,
+  menTileStickPad: `${R2}/home/men/tile-stickpad-85bb0d5b.webp`,
+  menTileWallets: `${R2}/home/men/tile-wallets-c974139c.webp`,
+  menTileWatchBands: `${R2}/home/men/tile-watch-bands-c956dc7f.webp`,
+  menTileMagsafeWallets: `${R2}/home/men/tile-magsafe-wallets-d57b0325.webp`,
 } as const
 
 /**

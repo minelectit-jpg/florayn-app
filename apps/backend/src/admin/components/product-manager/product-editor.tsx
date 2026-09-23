@@ -6,7 +6,7 @@ import RecommendationsEditor from "./recommendations-editor"
 import PageContentEditor from "./page-content-editor"
 import ReviewsEditor from "./reviews-editor"
 import AddRegularVariant from "./add-regular-variant"
-import { api, post, Gallery, CatalogCreate, ManagerSelect, useUnsaved, type Detail, type Product, type CatalogOption } from "./shared"
+import { api, post, Gallery, CatalogCreate, ManagerSelect, useUnsaved, AUDIENCE_OPTIONS, type AudienceTag, type Detail, type Product, type CatalogOption } from "./shared"
 
 export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, onPricing }: { slug: string; onBack: () => void; onChanged: () => void; onDuplicate: (d: Detail) => void; onPricing: () => void }) {
   const [d, setD] = useState<Detail | null>(null)
@@ -14,6 +14,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const [name, setName] = useState("")
   const [theme, setTheme] = useState("")
   const [description, setDescription] = useState("")
+  const [audience, setAudience] = useState<AudienceTag>("both")
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [cases, setCases] = useState<CatalogOption[]>([])
@@ -35,7 +36,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const [contentDirty, setContentDirty] = useState(false)
   const [contentBusy, setContentBusy] = useState(false)
   const lock = useRef(false)
-  const dirty = !!d && (name !== d.name || theme !== (d.theme ?? "") || description !== d.products[0]?.description)
+  const dirty = !!d && (name !== d.name || theme !== (d.theme ?? "") || description !== d.products[0]?.description || audience !== (d.audience ?? "both"))
   useUnsaved(dirty || images.length > 0)
   async function catalog() {
     try { const [c, v] = await Promise.all([api("/admin/case-types"), api("/admin/devices")]); setCases(c.case_types); setDevices(v.devices) }
@@ -46,7 +47,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
     try {
       const r = await api(`/admin/designs/${encodeURIComponent(slug)}`)
       setD(r.design)
-      if (reset) { setName(r.design.name); setTheme(r.design.theme ?? ""); setDescription(r.design.products[0]?.description ?? "") }
+      if (reset) { setName(r.design.name); setTheme(r.design.theme ?? ""); setDescription(r.design.products[0]?.description ?? ""); setAudience(r.design.audience ?? "both") }
     } catch (e: any) { setError(e.message) }
   }, [slug])
   useEffect(() => { void load(true); void catalog() }, [load])
@@ -58,7 +59,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
   const leave = (next: () => void) => { if (variantBusy || addBusy || recommendationBusy || contentBusy) return; if ((!dirty && !images.length && !variantDirty && !addDirty && !recommendationDirty && !contentDirty) || window.confirm("Discard unsaved product changes?")) next() }
   const openVariants = (product: Product, ids: string[]) => { if (variantBusy) return; if (!variantDirty || window.confirm("Discard unsaved variant or stock changes?")) setEditing({ product, ids }) }
   const saveMeta = () => run(async () => {
-    const patch = { ...(name !== d?.name ? { name } : {}), ...(theme !== (d?.theme ?? "") ? { theme } : {}), ...(description !== d?.products[0]?.description ? { description } : {}) }
+    const patch = { ...(name !== d?.name ? { name } : {}), ...(theme !== (d?.theme ?? "") ? { theme } : {}), ...(description !== d?.products[0]?.description ? { description } : {}), ...(audience !== (d?.audience ?? "both") ? { audience } : {}) }
     await api(`/admin/designs/${encodeURIComponent(slug)}`, { method: "PATCH", body: JSON.stringify(patch) })
     toast.success("Product saved."); await load(true); onChanged()
   })
@@ -85,7 +86,7 @@ export default function ProductEditor({ slug, onBack, onChanged, onDuplicate, on
     <Container className="flex flex-wrap items-center justify-between gap-3"><div><Button size="small" variant="transparent" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => leave(onBack)}>← All products</Button><Heading level="h1">{d.name}</Heading><Text size="xsmall" className="text-ui-fg-muted">/product/{d.products[0]?.handle}/</Text></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setPreview(!preview)}>Preview</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => leave(() => onDuplicate(d))}>Duplicate</Button><Button variant="secondary" disabled={busy || uploading || variantBusy || addBusy || recommendationBusy || contentBusy} onClick={() => changeStatus(published ? "draft" : "published")}>{published ? "Move to draft" : "Publish"}</Button><Button isLoading={busy} disabled={!dirty || uploading || recommendationBusy || contentBusy} onClick={saveMeta}>Save changes</Button></div></Container>
     {preview && <ContentPreview name={name} description={description} variants={d.products.flatMap((p) => p.variants.map((v) => ({ label: v.title, images: v.images.length ? v.images : p.images, price: v.price })))} />}
     {error && <Text role="alert" className="text-ui-fg-error">{error}</Text>}
-    <Container className="grid gap-4"><div className="flex flex-wrap gap-2">{d.products.map((p) => <Badge key={p.id} color={p.status === "published" ? "green" : "grey"}>{p.form} · {p.status}</Badge>)}{dirty && <Badge color="orange">Unsaved changes</Badge>}</div><div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="edit-name">Name</Label><Input id="edit-name" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} /></div><div><Label htmlFor="edit-theme">Collection</Label><Input id="edit-theme" value={theme} onChange={(e) => setTheme(e.target.value)} /></div></div><div><Label htmlFor="edit-description">Description</Label><Textarea id="edit-description" maxLength={20000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+    <Container className="grid gap-4"><div className="flex flex-wrap gap-2">{d.products.map((p) => <Badge key={p.id} color={p.status === "published" ? "green" : "grey"}>{p.form} · {p.status}</Badge>)}{dirty && <Badge color="orange">Unsaved changes</Badge>}</div><div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="edit-name">Name</Label><Input id="edit-name" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} /></div><div><Label htmlFor="edit-theme">Collection</Label><Input id="edit-theme" value={theme} onChange={(e) => setTheme(e.target.value)} /></div><div><Label htmlFor="edit-audience">Shown for</Label><ManagerSelect id="edit-audience" aria-label="Shown for" value={audience} onValueChange={(value) => setAudience(value as AudienceTag)}>{AUDIENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</ManagerSelect><Text size="xsmall" className="text-ui-fg-muted">{d.kind === "regular" ? "Where this product is listed. Each colour can also be limited under Variants." : "Women only hides it from the Men site (/men); Men only hides it from the Women site."}</Text></div></div><div><Label htmlFor="edit-description">Description</Label><Textarea id="edit-description" maxLength={20000} rows={4} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="flex flex-wrap items-center gap-3">{d.products.filter((p) => p.status === "published").map((p) => <a key={p.id} className="text-sm text-ui-fg-interactive underline" href={`https://new.florayn.com/product/${encodeURIComponent(p.handle)}/`} target="_blank" rel="noreferrer">View {p.form} on storefront ↗</a>)}{!published && <Text size="small" className="text-ui-fg-muted">Drafts stay private. Review their images and details here before publishing.</Text>}{d.kind === "design" && <Button size="small" variant="secondary" onClick={() => leave(onPricing)}>Manage shared case-type prices</Button>}</div>
     </Container>
     <Container className="grid gap-4"><div className="flex flex-wrap items-center justify-between gap-3"><Heading level="h2">Variants</Heading><Input className="max-w-sm" aria-label="Search variants" placeholder="Search model, case type or SKU" value={variantSearch} onChange={(e) => { setVariantSearch(e.target.value); setVariantPage(0) }} /></div>

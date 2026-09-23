@@ -1,9 +1,17 @@
 import { Button, Input, Select, Text, toast } from "@medusajs/ui"
 import { Children, isValidElement, useEffect, useRef, useState, type ReactNode } from "react"
 
-export type Variant = { id: string; title: string; sku: string | null; caseType: string | null; device: string | null; caseTypeSlug: string | null; deviceSlug: string | null; image: string | null; images: string[]; price: number | null; options: Record<string, string>; inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[] }
+/** Who a design or colour is for: the Women site, the Men site (/men) or both. */
+export type AudienceTag = "women" | "men" | "both"
+export const AUDIENCE_OPTIONS: { value: AudienceTag; label: string }[] = [
+  { value: "both", label: "Women and Men" },
+  { value: "women", label: "Women only" },
+  { value: "men", label: "Men only" },
+]
+export const audienceLabel = (value?: string | null) => AUDIENCE_OPTIONS.find((o) => o.value === value)?.label ?? "Women and Men"
+export type Variant = { id: string; title: string; audience?: AudienceTag; sku: string | null; caseType: string | null; device: string | null; caseTypeSlug: string | null; deviceSlug: string | null; image: string | null; images: string[]; price: number | null; options: Record<string, string>; inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[] }
 export type Product = { id: string; handle: string; title: string; form: string; status: string; thumbnail: string | null; description: string; images: string[]; options: { title: string; values: string[] }[]; caseTypes: string[]; devices: string[]; variants: Variant[] }
-export type Detail = { slug: string; name: string; theme: string | null; kind: "design" | "regular"; collection: { id: string; title: string } | null; products: Product[] }
+export type Detail = { slug: string; name: string; theme: string | null; kind: "design" | "regular"; audience?: AudienceTag; collection: { id: string; title: string } | null; products: Product[] }
 export type CatalogOption = { slug: string; name: string; family?: string; price?: number }
 // Use Medusa's themed popup: Windows native option menus can inherit light
 // text from dark mode while painting their own white background.

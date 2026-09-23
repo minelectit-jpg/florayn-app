@@ -28,7 +28,7 @@ function loadSource(relativePath) {
     exports,
     console,
     require(name) {
-      if (name === "next/link") return { __esModule: true, default: ({ prefetch, scroll, ...props }) => React.createElement("a", props) }
+      if (name === "next/link" || name === "@/components/audience-link") return { __esModule: true, default: ({ prefetch, scroll, ...props }) => React.createElement("a", props) }
       if (name === "@/components/quick-add") return {
         __esModule: true,
         default: ({ variantId }) => React.createElement("button", { "data-variant": variantId }, "Add"),

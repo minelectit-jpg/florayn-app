@@ -20,6 +20,7 @@ const collection = { id: "col_test", title: "Test Collection", handle: "test-col
 if (process.env.UI_REFINEMENT_FIXTURE === "1") {
   for (const [name, slug] of [["Elite Clear", "elite-clear"], ["Armor Clear", "armor-clear"], ["Alcantara", "alcantara"]]) caseTypes.push({ ...caseTypes[0], id: `case_${slug}`, name, slug, price: 1950 })
 }
+const FIXTURE_AUDIENCE = process.env.UI_REFINEMENT_FIXTURE === "1" ? { "audit-midnight": "men", "audit-rose": "women" } : {}
 function makeProduct(slug, title, form = "phone") {
   const handle = form === "phone" ? slug : `${slug}-${form}`
   const productDevices = devices.filter((device) => form === "phone" ? device.family === "iphone" : device.family === "airpods")
@@ -37,7 +38,7 @@ function makeProduct(slug, title, form = "phone") {
     manage_inventory: false,
   })))
   const card = { pairs: Object.fromEntries(variants.map((v) => [`${v.options[1].value}|${v.options[0].value}`, { variantId: v.id, price: v.calculated_price.calculated_amount, image }])) }
-  return { id: `prod_${handle}`, title, handle, description: "Local test product only.", subtitle: form === "phone" ? "Phone Case" : "AirPods Case", thumbnail: image, images: [{ id: `img_${handle}`, url: image }], collection, categories: [], options, variants, metadata: { design_name: title, design_slug: slug, form, card } }
+  return { id: `prod_${handle}`, title, handle, description: "Local test product only.", subtitle: form === "phone" ? "Phone Case" : "AirPods Case", thumbnail: image, images: [{ id: `img_${handle}`, url: image }], collection, categories: [], options, variants, metadata: { design_name: title, design_slug: slug, form, card, ...(FIXTURE_AUDIENCE[slug] ? { audience: FIXTURE_AUDIENCE[slug] } : {}) } }
 }
 const products = [makeProduct("audit-bloom", "Audit Bloom"), makeProduct("audit-midnight", "Audit Midnight"), makeProduct("audit-bloom", "Audit Bloom", "airpods"), makeProduct("audit-midnight", "Audit Midnight", "airpods")]
 const content = {
@@ -51,6 +52,21 @@ if (process.env.UI_REFINEMENT_FIXTURE === "1") products.push({
  variants: [{ id: "variant_stickpad", title: "Rose", options: [{ option_id: "color", value: "Rose" }], metadata: { images: [image] }, calculated_price: { calculated_amount: 350, currency_code: "bdt" }, manage_inventory: false }],
  metadata: { florayn_manual_recommendations: { recommended: [products[0].variants[0].id], featured: [products[3].variants[0].id] } },
 })
+// Women / Men: a men's design, a women's design, the rest for both, and the
+// Men home page and menu the /men pages read.
+if (accountFixtureEnabled()) {
+  const stickpad = products.find((p) => p.handle === "audit-stickpad")
+  stickpad.variants[0].metadata.audience = "women"
+  stickpad.variants.push({ id: "variant_stickpad_night", title: "Night", options: [{ option_id: "color", value: "Night" }], metadata: { images: [image], audience: "men" }, calculated_price: { calculated_amount: 350, currency_code: "bdt" }, manage_inventory: false })
+}
+function accountFixtureEnabled() { return process.env.UI_REFINEMENT_FIXTURE === "1" }
+const menContent = {
+  sections: [
+    { key: "men-pills", type: "category_pills", config: { items: [{ label: "Phone Case", href: "/shop/iphone-17-pro-max/signature/" }, { label: "StickPad", href: "/product/audit-stickpad/" }] } },
+    { key: "men-releases", type: "product_carousel", title: "Men releases", config: { limit: 5 } },
+  ],
+  primary: [{ id: "menu_men_phone", label: "Men's Phone Cases", href: "/shop/iphone-17-pro-max/signature/", groups: [] }],
+}
 const bundle = { settings: { heading: "Choose a pack", single_label: "Single", free_shipping_threshold: 3000, scope: "cases", is_active: true, matching_set_enabled: true, matching_set_discount: 250, matching_set_default_airpods: "AirPods Pro 3" }, tiers: [{ id: "tier_two", quantity: 2, badge: null, discount_amount: 200, min_pct: 0, max_pct: 0 }] }
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
 const carts = new Map()
@@ -325,7 +341,7 @@ const server = http.createServer(async (req, res) => {
     case "/store/devices": return send(res, { devices })
     case "/store/case-types": return send(res, { case_types: caseTypes })
     case "/store/stock": return send(res, { stock: Object.fromEntries(Object.entries(stock).map(([key, quantity]) => [key, quantity + stockRevision])) })
-    case "/store/content": return send(res, { ...content, ...(presentation ? { footerAppearance: presentation.footer, social: presentation.footer.social } : {}), footerNote: `Local verification revision ${revision}` })
+    case "/store/content": return send(res, { ...content, ...(url.searchParams.get("audience") === "men" ? menContent : {}), primaryMen: menContent.primary, ...(presentation ? { footerAppearance: presentation.footer, social: presentation.footer.social } : {}), footerNote: `Local verification revision ${revision}` })
     case "/store/bundles": return send(res, bundle)
     case "/store/districts": return send(res, { districts, count: districts.length, inside_dhaka: ["Dhaka"], shipping: { inside_dhaka: 60, outside_dhaka: 100 } })
     case "/store/checkout-settings": return send(res, { settings: checkoutSettings })
@@ -341,7 +357,7 @@ const server = http.createServer(async (req, res) => {
       const bySlug = new Map()
       for (const p of products.filter((p) => p.metadata.design_slug)) {
         if (targetForm && p.metadata.form !== targetForm) continue
-        const entry = bySlug.get(p.metadata.design_slug) ?? { slug: p.metadata.design_slug, name: p.title, caseTypes: [], forms: [] }
+        const entry = bySlug.get(p.metadata.design_slug) ?? { slug: p.metadata.design_slug, name: p.title, caseTypes: [], forms: [], audience: p.metadata.audience ?? "both" }
         for (const c of caseTypes.filter((c) => c.forms.includes(p.metadata.form))) if (!entry.caseTypes.includes(c.slug)) entry.caseTypes.push(c.slug)
         if (!entry.forms.includes(p.metadata.form)) entry.forms.push(p.metadata.form)
         bySlug.set(p.metadata.design_slug, entry)

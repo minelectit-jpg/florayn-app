@@ -1,4 +1,6 @@
-export const CACHE_DOMAINS = ["products", "catalog", "content", "bundles", "seo", "stock"] as const
+import { stripAudience, withAudience } from "./audience"
+
+export const CACHE_DOMAINS =["products", "catalog", "content", "bundles", "seo", "stock"] as const
 
 export type RevalidationPlan = { tags: string[]; paths: string[]; cacheTags: string[]; all: boolean }
 
@@ -33,8 +35,15 @@ export function revalidationPlan(input: unknown): RevalidationPlan {
   const all = body.all === true
   if (!all && tags.length + handles.length + requestedPaths.length === 0) throw new Error("No invalidation targets")
   const mergedTags = [...new Set([...(all ? CACHE_DOMAINS : []), ...tags, ...handles.map((handle) => `product:${handle}`)])]
-  // Implicit pathname tags retain a trailing slash when the request does.
-  const paths = [...new Set(requestedPaths.flatMap((path) => {
+  // A page that exists in both modes is refreshed in both: "/shop/x/" also
+  // refreshes "/men/shop/x/". Implicit pathname tags retain a trailing slash
+  // when the request does.
+  const modePaths = requestedPaths.flatMap((path) => {
+    const women = stripAudience(path)
+    const men = withAudience(women, "men")
+    return men === women ? [path] : [women, men]
+  })
+  const paths = [...new Set(modePaths.flatMap((path) => {
     if (path === "/") return [path]
     const normalized = path.replace(/\/+$/, "")
     return [normalized, `${normalized}/`]

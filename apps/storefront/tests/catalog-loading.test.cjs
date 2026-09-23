@@ -28,6 +28,7 @@ function loadSource(relativePath, dependencies, globals = {}) {
     require(name) {
       if (Object.hasOwn(dependencies, name)) return dependencies[name]
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx }
+      if (name === "@/lib/audience") return audienceLib()
       if (name.startsWith("@/components/")) return { __esModule: true, default: name }
       throw new Error(`Unexpected dependency: ${name}`)
     },
@@ -36,6 +37,10 @@ function loadSource(relativePath, dependencies, globals = {}) {
 }
 
 const uncachedReact = { cache: (fn) => fn }
+let audienceModule
+function audienceLib() {
+  return (audienceModule ??= loadSource("lib/audience.ts", {}))
+}
 
 test("sitemaps cover a catalog larger than 600 products without pricing or phantom devices", async () => {
   const devices = Array.from({ length: 9 }, (_, i) => ({
@@ -65,7 +70,9 @@ test("sitemaps cover a catalog larger than 600 products without pricing or phant
     },
   })
   const urls = await getSitemapUrls()
-  assert.equal(urls.length, 3 + 9 + 621 * 9)
+  // Five fixed pages (Women and Men home and shop, contact), each model's shop in both modes.
+  assert.equal(urls.length, 5 + 9 * 2 + 621 * 9)
+  assert.ok(urls.includes("/men/shop/model-3/"))
   assert.ok(urls.includes("/product/design-620-model-7/"))
   assert.ok(!urls.includes("/product/design-0-model-8/"))
   assert.equal(urls.filter((url) => url === "/product/design-0-model-0/").length, 1)
@@ -82,8 +89,8 @@ test("home prices only selected phone designs and keeps carousel order and real 
   }))
   const expected = [1, 3, 5, 7, 9].map((i) => candidates[i])
   let pricedCount = 0
-  const { default: HomePage } = loadSource("app/page.tsx", {
-    "@/lib/content": { getSiteContent: async () => ({ sections: [{ key: "picks", type: "product_carousel", config: { limit: 5 } }] }) },
+  const { default: HomePage } = loadSource("components/pages/home-page.tsx", {
+    "@/lib/content": { collectionsFor: (cards) => cards, getSiteContent: async () => ({ sections: [{ key: "picks", type: "product_carousel", config: { limit: 5 } }], collections: [] }) },
     "@/lib/medusa": {
       CARD_FIELDS: "id,title,handle,metadata,*variants,*variants.calculated_price",
       listProducts: async (query, options) => {
@@ -99,7 +106,7 @@ test("home prices only selected phone designs and keeps carousel order and real 
       },
     },
   })
-  const result = await HomePage()
+  const result = await HomePage({ audience: "women" })
   const cards = result.props.children[0].props.products
   assert.equal(pricedCount, 5)
   assert.deepEqual(Array.from(cards, (p) => p.id), expected.map((p) => p.id))
@@ -125,10 +132,10 @@ test("collection loads compatibility before hydrating selected-device prices and
     "next/cache": { unstable_cache: (fn) => fn },
     "@/lib/medusa": {},
   })
-  const { default: CollectionPage } = loadSource("app/collection/[slug]/page.tsx", {
+  const { default: CollectionPage } = loadSource("components/pages/collection-page.tsx", {
     react: uncachedReact,
     "next/cache": { unstable_cache: (fn) => fn },
-    "next/navigation": { notFound: () => { throw new Error("unexpected 404") } },
+    "next/navigation": { notFound: () => { throw new Error("unexpected 404") }, redirect: () => { throw new Error("unexpected redirect") } },
     "@/lib/catalog": { getDeviceCatalog: async () => [{ name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }] },
     "@/lib/collection-products": {
       COLLECTION_FIELDS,
@@ -152,7 +159,7 @@ test("collection loads compatibility before hydrating selected-device prices and
       },
     },
   })
-  const result = await CollectionPage({ params: Promise.resolve({ slug: "alcantara" }), searchParams: Promise.resolve({ device: "iPhone 17 Pro Max" }) })
+  const result = await CollectionPage({ params: Promise.resolve({ slug: "alcantara" }), searchParams: Promise.resolve({ device: "iPhone 17 Pro Max" }), audience: "women" })
   const card = result.props.children[2].props.children[0]
   assert.equal(card.props.device, "iPhone 17 Pro Max")
   assert.equal(card.props.product.variants[0].calculated_price.calculated_amount, 1900)
@@ -165,6 +172,7 @@ test("shop Quick Add resolves the chosen device and construction without invokin
   const caseType = { name: "Signature", slug: "signature", price: 1400 }
   const { default: ShopView } = loadSource("components/shop-view.tsx", {
     "next/link": { __esModule: true, default: "Link" },
+    "@/components/audience-link": { __esModule: true, default: "Link" },
     "@/lib/catalog": {
       getDeviceCatalog: async () => [device],
       getCaseTypes: async () => [caseType],
@@ -199,6 +207,7 @@ test("shop uses uploaded exact-pair renders without changing variant selection, 
   const armor = "https://images.invalid/uploads/01JZUPLOAD01/armor.webp"
   const { default: ShopView } = loadSource("components/shop-view.tsx", {
     "next/link": { __esModule: true, default: "Link" },
+    "@/components/audience-link": { __esModule: true, default: "Link" },
     "@/lib/catalog": {
       getDeviceCatalog: async () => [device], getCaseTypes: async () => cases,
       getShopCatalog: async () => ["uploaded", "legacy"].map((slug) => ({ slug, name: slug, forms: ["phone"], caseTypes: cases.map((c) => c.slug) })),
@@ -294,6 +303,7 @@ test("shop narrows model and case compatibility before counts and pagination", a
   ]
   const { default: ShopView } = loadSource("components/shop-view.tsx", {
     "next/link": { __esModule: true, default: "Link" },
+    "@/components/audience-link": { __esModule: true, default: "Link" },
     "@/lib/catalog": {
       getDeviceCatalog: async () => [device], getCaseTypes: async () => caseTypes,
       getShopCatalog: async (slug) => {
@@ -321,6 +331,31 @@ test("shop narrows model and case compatibility before counts and pagination", a
   assert.deepEqual(Array.from(selectors.caseTypes, (ct) => ct.slug), ["signature", "armor-black"])
 })
 
+test("the Men shop lists men's and shared designs and hides women-only ones; Women the reverse", async () => {
+  const device = { id: "d", name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
+  const catalog = [
+    { slug: "rose", name: "Rose", forms: ["phone"], caseTypes: ["signature"], audience: "women" },
+    { slug: "checker", name: "Checker", forms: ["phone"], caseTypes: ["signature"], audience: "men" },
+    { slug: "getaway", name: "Getaway", forms: ["phone"], caseTypes: ["signature"], audience: "both" },
+    { slug: "legacy", name: "Legacy", forms: ["phone"], caseTypes: ["signature"] },
+  ]
+  const { default: ShopView, shopMetadata } = loadSource("components/shop-view.tsx", {
+    "@/components/audience-link": { __esModule: true, default: "Link" },
+    "@/lib/catalog": {
+      getDeviceCatalog: async () => [device], getCaseTypes: async () => [{ name: "Signature", slug: "signature", price: 1400 }],
+      getShopCatalog: async () => catalog,
+      getShopCards: async (handles) => handles.map((handle) => ({ handle, variantId: `v-${handle}`, image: null, imagesByCaseType: {} })),
+      shopCardImage: () => "x.webp",
+    },
+    "@/lib/medusa": { listProducts: async () => ({ products: [] }) },
+  })
+  const listed = async (audience) => Array.from((await ShopView({ deviceSlug: device.slug, caseTypeSlug: "signature", audience })).props.children[1].props.products, (p) => p.handle)
+  assert.deepEqual(await listed("men"), ["checker", "getaway", "legacy"])
+  assert.deepEqual(await listed("women"), ["rose", "getaway", "legacy"])
+  const meta = await shopMetadata({ deviceSlug: device.slug, caseTypeSlug: "signature", audience: "men" })
+  assert.equal(meta.alternates.canonical, "/men/shop/iphone-17-pro-max/signature/")
+})
+
 test("shop scopes case types by form: Signature Earbuds shows only on AirPods, and a mismatched URL falls back", async () => {
   const phone = { name: "iPhone 17 Pro Max", slug: "iphone-17-pro-max", family: "iphone" }
   const airpods = { name: "AirPods Pro 3", slug: "airpods-pro-3", family: "airpods" }
@@ -334,6 +369,7 @@ test("shop scopes case types by form: Signature Earbuds shows only on AirPods, a
   ]
   const deps = (device) => ({
     "next/link": { __esModule: true, default: "Link" },
+    "@/components/audience-link": { __esModule: true, default: "Link" },
     "@/lib/catalog": {
       getDeviceCatalog: async () => [phone, airpods],
       getCaseTypes: async () => caseTypes,
@@ -393,9 +429,9 @@ test("collection starts independent reads early and prices only final featured m
   }))
   const { buildVariantMatrix } = loadSource("lib/variant-matrix.ts", {})
   const pricedCalls = []
-  const { default: CollectionPage } = loadSource("app/collection/[slug]/page.tsx", {
+  const { default: CollectionPage } = loadSource("components/pages/collection-page.tsx", {
     react: uncachedReact, "next/cache": { unstable_cache: (fn) => fn },
-    "next/navigation": { notFound: () => { throw new Error("unexpected 404") } },
+    "next/navigation": { notFound: () => { throw new Error("unexpected 404") }, redirect: () => { throw new Error("unexpected redirect") } },
     "@/lib/catalog": { getDeviceCatalog: async () => { events.push("devices"); return [device, { name: "iPhone 16", slug: "iphone-16", family: "iphone" }] } },
     "@/lib/content": { getCollectionPage: async () => { events.push("landing"); return { design_slugs: ["d2", "d0"] } } },
     "@/lib/variant-matrix": { buildVariantMatrix },
@@ -413,7 +449,7 @@ test("collection starts independent reads early and prices only final featured m
       },
     },
   })
-  const render = (sort = "featured") => CollectionPage({ params: Promise.resolve({ slug: "fixture" }), searchParams: Promise.resolve({ sort }) })
+  const render = (sort = "featured") => CollectionPage({ params: Promise.resolve({ slug: "fixture" }), searchParams: Promise.resolve({ sort }), audience: "women" })
   const initial = render()
   await new Promise((resolve) => setImmediate(resolve))
   assert.deepEqual(events, ["devices", "landing", "group"])

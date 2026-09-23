@@ -1,0 +1,28 @@
+/*
+ * The WOMEN / MEN switch (components/audience-toggle.tsx). One highlight slides
+ * between the two options: a dark pill in the desktop header, an underline on
+ * the phone tab bar. Layered as components so utilities (hidden, lg:grid)
+ * still decide where each variant shows.
+ */
+@layer components {
+  .fl-audience { position:relative; display:grid; grid-template-columns:1fr 1fr; isolation:isolate; user-select:none; }
+  .fl-audience__option { position:relative; z-index:1; display:grid; place-items:center; font-weight:600; text-transform:uppercase; white-space:nowrap; color:var(--color-ink-muted); transition:color .3s ease; -webkit-tap-highlight-color:transparent; }
+  .fl-audience__option:hover { color:var(--color-ink); }
+  .fl-audience__option:focus-visible { outline:2px solid var(--color-purple); outline-offset:2px; }
+  .fl-audience__thumb { position:absolute; z-index:0; pointer-events:none; transition:transform .38s cubic-bezier(.65,0,.35,1); }
+  .fl-audience[data-audience="men"] .fl-audience__thumb { transform:translateX(100%); }
+
+  .fl-audience--pill { padding:4px; border-radius:999px; background:var(--color-surface); box-shadow:inset 0 0 0 1px var(--color-line); }
+  .fl-audience--pill .fl-audience__option { min-width:76px; height:32px; padding:0 14px; border-radius:999px; font-size:11px; letter-spacing:.09em; }
+  .fl-audience--pill .fl-audience__option[aria-current] { color:#fff; }
+  .fl-audience--pill .fl-audience__thumb { top:4px; bottom:4px; left:4px; width:calc(50% - 4px); border-radius:999px; background:var(--color-ink); box-shadow:0 6px 14px -6px rgba(26,22,37,.55); }
+
+  .fl-audience--tabs { border-bottom:1px solid var(--color-line); background:var(--color-paper); }
+  .fl-audience--tabs .fl-audience__option { height:46px; font-size:14px; letter-spacing:.07em; }
+  .fl-audience--tabs .fl-audience__option[aria-current] { color:var(--color-ink); }
+  .fl-audience--tabs .fl-audience__thumb { left:0; bottom:-1px; width:50%; height:2px; border-radius:2px; background:var(--color-ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fl-audience__thumb, .fl-audience__option { transition:none; }
+  }
+}

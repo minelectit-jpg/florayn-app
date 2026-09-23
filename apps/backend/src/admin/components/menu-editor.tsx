@@ -53,7 +53,7 @@ export default function MenuEditor({
   /** Show the group-heading field; the footer has no groups. */
   useGroups,
 }: {
-  menu: "primary" | "footer"
+  menu: "primary" | "primary-men" | "footer"
   title: string
   description: string
   useGroups: boolean

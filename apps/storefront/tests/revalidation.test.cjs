@@ -21,13 +21,15 @@ function load(relativePath, dependencies = {}, globals = {}) {
   return exports
 }
 const plain = (value) => JSON.parse(JSON.stringify(value))
-const helpers = load("lib/revalidation.ts")
+const audience = load("lib/audience.ts")
+const helpers = load("lib/revalidation.ts", { "./audience": audience })
 
 test("explicit domain and handle invalidation never implicitly invalidates root", () => {
   const plan = plain(helpers.revalidationPlan({ tags: ["stock"], handles: ["legends"], paths: ["/product/legends/"] }))
   assert.equal(plan.all, false)
   assert.deepEqual(plan.tags, ["stock", "product:legends"])
-  assert.deepEqual(plan.paths, ["/product/legends", "/product/legends/"])
+  // A page with a Men counterpart is refreshed in both modes.
+  assert.deepEqual(plan.paths, ["/product/legends", "/product/legends/", "/men/product/legends", "/men/product/legends/"])
   assert.ok(!plan.cacheTags.includes("_N_T_/layout"))
   assert.ok(!plan.tags.includes("products"))
 })
@@ -120,7 +122,7 @@ test("native storefront data requests carry their invalidation domain tags", asy
     },
   }
   const medusa = { MEDUSA_BACKEND_URL: "http://unused.invalid", MEDUSA_PUBLISHABLE_KEY: "test-public-key" }
-  const content = load("lib/content.ts", { "./product-recommendations": load("lib/product-recommendations.ts"), "./storefront-presentation": load("lib/storefront-presentation.ts", {}, { URL }) }, globals)
+  const content = load("lib/content.ts", { "./audience": audience, "./product-recommendations": load("lib/product-recommendations.ts"), "./storefront-presentation": load("lib/storefront-presentation.ts", {}, { URL }) }, globals)
   const catalog = load("lib/catalog.ts", { "./medusa": medusa }, globals)
   const bundles = load("lib/bundles.ts", {}, globals)
   const seo = load("lib/seo-copy.ts", {}, globals)

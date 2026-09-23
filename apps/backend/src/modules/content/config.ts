@@ -3,6 +3,7 @@ import { normaliseBlocks, normaliseTemplate, normaliseTheme } from "./collection
 import {
   DEFAULT_FEATURE_BLOCKS,
   DEFAULT_HOME_SECTIONS,
+  DEFAULT_MEN_HOME_SECTIONS,
   DEFAULT_MENU,
   FOOTER_NOTE,
   SOCIAL_LINKS,
@@ -21,7 +22,7 @@ export async function getContent(service: any) {
   )
 
   if (!sections?.length) {
-    await service.createHomeSections(DEFAULT_HOME_SECTIONS as any)
+    await service.createHomeSections([...DEFAULT_HOME_SECTIONS, ...menHomeSections(DEFAULT_HOME_SECTIONS)] as any)
     sections = await service.listHomeSections({}, { order: { position: "ASC" } })
   }
 
@@ -67,6 +68,74 @@ export async function getContent(service: any) {
     footerNote: FOOTER_NOTE,
     social: SOCIAL_LINKS,
   }
+}
+
+/**
+ * The Men home page to seed: its own sections, plus a copy of the Women
+ * testimonials band (the same customers) at the end.
+ */
+export function menHomeSections(women: any[]): any[] {
+  const quotes = women.find((s) => s.type === "testimonials")
+  return [
+    ...DEFAULT_MEN_HOME_SECTIONS,
+    ...(quotes ? [{
+      key: "men-testimonials", audience: "men", type: "testimonials", position: DEFAULT_MEN_HOME_SECTIONS.length,
+      is_visible: quotes.is_visible ?? true, title: quotes.title ?? null, subtitle: quotes.subtitle ?? null,
+      eyebrow: quotes.eyebrow ?? null, config: quotes.config ?? {},
+    }] : []),
+  ]
+}
+
+/** The Men header navigation's menu name; "primary" is the Women (root) one. */
+export const MEN_MENU = "primary-men"
+
+/**
+ * Which modes each collection has published designs for, from one grouped SQL
+ * read of product.metadata->>audience (no product metadata is loaded). A
+ * product without a tag counts for both.
+ */
+export async function collectionAudiences(knex: any, collectionIds: string[]): Promise<Map<string, ("women" | "men")[]>> {
+  const result = new Map<string, ("women" | "men")[]>()
+  if (!knex || !collectionIds.length) return result
+  const rows: { collection_id: string; audience: string | null }[] = await knex("product")
+    .select("collection_id", knex.raw("metadata->>'audience' as audience"))
+    .whereIn("collection_id", collectionIds)
+    .andWhere("status", "published")
+    .whereNull("deleted_at")
+    .groupBy("collection_id", knex.raw("metadata->>'audience'"))
+  for (const row of rows) {
+    const modes = new Set(result.get(row.collection_id) ?? [])
+    if (row.audience !== "men") modes.add("women")
+    if (row.audience !== "women") modes.add("men")
+    result.set(row.collection_id, (["women", "men"] as const).filter((m) => modes.has(m)))
+  }
+  return result
+}
+
+/**
+ * Copy one menu (sections and links, visibility kept) into an empty one, e.g.
+ * the Women header into the Men header as its starting point. Does nothing
+ * and returns 0 when the target already has sections.
+ */
+export async function copyMenu(service: any, from: string, to: string): Promise<number> {
+  const sections = await service.listMenuSections({}, { order: { position: "ASC" } })
+  if (sections.some((s: any) => s.menu === to)) return 0
+  const items = await service.listMenuItems({}, { order: { position: "ASC" } })
+  let copied = 0
+  for (const section of sections.filter((s: any) => s.menu === from)) {
+    const created = await service.createMenuSections({
+      menu: to, label: section.label, href: section.href, position: section.position, is_visible: section.is_visible,
+    })
+    const sectionId = Array.isArray(created) ? created[0].id : created.id
+    const links = items.filter((i: any) => i.section_id === section.id)
+    if (links.length) {
+      await service.createMenuItems(links.map((i: any) => ({
+        section_id: sectionId, group: i.group, label: i.label, href: i.href, badge: i.badge, position: i.position, is_visible: i.is_visible,
+      })))
+    }
+    copied++
+  }
+  return copied
 }
 
 /** Shapes the flat rows into the nested menu the storefront renders. */
@@ -148,7 +217,7 @@ export async function getCollectionPages(service: any) {
  * collections index: name, picture and colours. A page without a card image
  * falls back to its hero, then to one of the collection's own product renders.
  */
-export async function getCollectionCards(service: any, productModule: any) {
+export async function getCollectionCards(service: any, productModule: any, knex?: any) {
   const pages = (await getCollectionPages(service))
     .filter((p: any) => p.is_visible)
     .map(shapeCollectionPage)
@@ -165,6 +234,7 @@ export async function getCollectionCards(service: any, productModule: any) {
     .map((p: any) => byHandle.get(p.collection_slug)?.id)
     .filter(Boolean)
   const artwork = new Map<string, string>()
+  const audiences = await collectionAudiences(knex, (collections ?? []).map((c: any) => c.id)).catch(() => new Map())
   if (needArt.length) {
     const products = await productModule.listProducts(
       { collection_id: needArt },
@@ -187,6 +257,8 @@ export async function getCollectionCards(service: any, productModule: any) {
       image,
       /** A product render (white ground), shown contained rather than cropped. */
       artwork: image ? null : (collection ? artwork.get(collection.id) ?? null : null),
+      /** Modes with designs in it; absent when unknown (the storefront then shows it in both). */
+      ...(collection && audiences.has(collection.id) ? { audiences: audiences.get(collection.id) } : {}),
       theme: {
         bg: page.theme.bg,
         text: page.theme.text,

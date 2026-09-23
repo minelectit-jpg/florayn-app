@@ -5,7 +5,9 @@ import { listProducts, type StoreProduct } from "@/lib/medusa"
 
 export const SITEMAP_CHUNK_SIZE = 5000
 const PRODUCT_BATCH_SIZE = 200
-const STATIC_URLS = ["/", "/shop/", "/contact/"]
+// The Men landing pages list different designs, so they are pages of their own.
+// Men product URLs are not listed: they canonicalise to the root product page.
+const STATIC_URLS = ["/", "/shop/", "/contact/", "/men/", "/men/shop/"]
 
 /** Shared by the sitemap index and chunks so their URL counts cannot drift. */
 export function buildSitemapUrls(
@@ -14,7 +16,10 @@ export function buildSitemapUrls(
 ): string[] {
   const urls = new Set(STATIC_URLS)
   const slugByName = new Map(devices.map((device) => [device.name, device.slug]))
-  for (const device of devices) urls.add(`/shop/${device.slug}/`)
+  for (const device of devices) {
+    urls.add(`/shop/${device.slug}/`)
+    urls.add(`/men/shop/${device.slug}/`)
+  }
 
   for (const product of products) {
     urls.add(`/product/${product.handle}/`)

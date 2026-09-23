@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "@/components/audience-link"
 
 import DragScroll from "@/components/drag-scroll"
 import Price from "@/components/price"

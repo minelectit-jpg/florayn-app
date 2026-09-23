@@ -50,7 +50,7 @@ export default async function RootLayout({
         <BuildWatcher buildId={getBuildId()} />
         <PerformanceAuditLoader />
         <CartProvider>
-          <SiteHeader menu={content.primary} caseTypes={caseTypes} />
+          <SiteHeader menu={content.primary} menMenu={content.primaryMen} caseTypes={caseTypes} />
 
           <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-6 md:px-[30px] md:py-16">
             {children}

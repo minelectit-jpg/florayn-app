@@ -4,6 +4,7 @@ import { Modules, ProductStatus } from "@medusajs/framework/utils"
 import { DESIGNS } from "../../../modules/catalog/data/designs"
 import { CATALOG_MODULE } from "../../../modules/catalog"
 import { CASE_TYPES } from "../../../modules/catalog/data/case-types"
+import { mergeAudienceTags, readAudienceTag, type AudienceTag } from "../../../lib/audience"
 
 const manifestBySlug = new Map(DESIGNS.map((design) => [design.slug, design]))
 
@@ -17,6 +18,8 @@ const manifestBySlug = new Map(DESIGNS.map((design) => [design.slug, design]))
  * card from this list and a page-sized product lookup. Uploaded designs use
  * their persisted card image URLs; legacy designs retain their manifest data.
  * Optional ?device=<slug> narrows compatibility before storefront pagination.
+ * Each design says who it is for (audience: women | men | both) so the Women
+ * and Men shops can each list their own.
  * This endpoint never computes per-variant prices or returns device matrices.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -50,7 +53,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const bySlug = new Map<
     string,
-    { slug: string; name: string; caseTypes: string[]; forms: string[] }
+    { slug: string; name: string; caseTypes: string[]; forms: string[]; audience: AudienceTag; _tags: AudienceTag[] }
   >()
 
   for (const p of products) {
@@ -93,14 +96,17 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
           : manifest?.name ?? p.title ?? slug,
         caseTypes: [],
         forms: [],
+        audience: "both",
+        _tags: [],
       }
       bySlug.set(slug, entry)
     }
+    entry._tags.push(readAudienceTag(meta))
     for (const caseType of productCaseTypes) {
       if (!entry.caseTypes.includes(caseType)) entry.caseTypes.push(caseType)
     }
     if (!entry.forms.includes(form)) entry.forms.push(form)
   }
 
-  res.json({ designs: [...bySlug.values()] })
+  res.json({ designs: [...bySlug.values()].map(({ _tags, ...design }) => ({ ...design, audience: mergeAudienceTags(_tags) })) })
 }

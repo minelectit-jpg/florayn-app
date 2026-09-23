@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { useEffect } from "react"
 
 /**

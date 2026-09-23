@@ -30,7 +30,7 @@ function load(react) {
   vm.runInNewContext(code, { exports, require(name) {
     if (name === "react") return react
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "Fragment" }
-    if (name === "next/link") return { __esModule: true, default: "Link" }
+    if (name === "next/link" || name === "@/components/audience-link") return { __esModule: true, default: "Link" }
     if (name.startsWith("@/components/")) return { __esModule: true, default: name }
     throw new Error(`Unexpected dependency: ${name}`)
   } }, { filename })

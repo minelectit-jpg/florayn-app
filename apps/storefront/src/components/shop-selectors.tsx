@@ -5,8 +5,10 @@ import { useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 
 import CaseTypeModal from "@/components/case-type-modal"
+import { useAudience } from "@/components/use-audience"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import type { CaseTypeRecord, DeviceRecord } from "@/lib/catalog"
+import { withAudience } from "@/lib/audience"
 import { formForDeviceFamily } from "@/lib/product-forms"
 
 /**
@@ -46,6 +48,7 @@ export default function ShopSelectors({
   caseTypeImages?: Record<string, string>
 }) {
   const router = useRouter()
+  const audience = useAudience()
   const [openModel, setOpenModel] = useState(false)
   const [openCase, setOpenCase] = useState(false)
 
@@ -60,7 +63,7 @@ export default function ShopSelectors({
   function go(nextDevice: string, nextCase: string) {
     setOpenModel(false)
     setOpenCase(false)
-    router.push(`/shop/${nextDevice}/${nextCase}/`)
+    router.push(withAudience(`/shop/${nextDevice}/${nextCase}/`, audience))
   }
 
   const currentForm = formForDeviceFamily(devices.find((d) => d.slug === curDevice)?.family ?? "iphone")

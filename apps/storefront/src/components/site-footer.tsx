@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { ArrowUpRight, ExternalLink } from "lucide-react"
 import type { MenuSection } from "@/lib/content"
 import { readPresentation, safePresentationHref, type FooterPresentation } from "@/lib/storefront-presentation"

@@ -86,7 +86,8 @@ test("warm requests remain sequential and spaced after body completion, with exi
     },
   })
   await warmer.run()
-  assert.equal(warmer.requests.length, 11)
+  // 7 home/shop pages (Women and Men), 2 Women + 1 Men phone page, 5 AirPods pages.
+  assert.equal(warmer.requests.length, 15)
   assert.equal(warmer.maximumActive(), 1)
   for (let i = 1; i < warmer.requests.length; i++) {
     assert.equal(warmer.requests[i].start - warmer.requests[i - 1].end, 250)
@@ -100,7 +101,10 @@ test("warm requests remain sequential and spaced after body completion, with exi
   }
   assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/example-phone-iphone-17-pro-max/?case=signature")))
   assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/example-airpods-airpods-pro/?case=signature-earbuds")))
-  assert.match(warmer.logs.at(-1), /processed=11\/11 remaining=0/)
+  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/men/")))
+  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/men/product/example-phone-iphone-17-pro-max/?case=signature")))
+  assert.ok(!warmer.requests.some((entry) => entry.url.includes("/men/product/example-airpods")), "AirPods stay on the Women warm list only")
+  assert.match(warmer.logs.at(-1), /processed=15\/15 remaining=0/)
 })
 
 test("a timeout, HTTP error and body failure do not prevent later URLs from warming", async () => {
@@ -117,10 +121,10 @@ test("a timeout, HTTP error and body failure do not prevent later URLs from warm
     },
   })
   await warmer.run()
-  assert.equal(warmer.requests.length, 6)
+  assert.equal(warmer.requests.length, 10)
   assert.equal(warmer.maximumActive(), 1)
   assert.equal(warmer.requests[0].end, 10_000)
-  assert.match(warmer.logs.at(-1), /processed=6\/6 remaining=0/)
+  assert.match(warmer.logs.at(-1), /processed=10\/10 remaining=0/)
   assert.match(warmer.logs.at(-1), /bad=3/)
 })
 
@@ -156,16 +160,24 @@ test("budget exhaustion resumes at the next URL and eventually reaches the catal
   await warmer.run()
   assert.ok(warmer.clock.now() <= PASS_BUDGET_MS)
   const firstCount = warmer.requests.length
-  assert.ok(firstCount < 2004)
-  assert.match(warmer.logs.at(-1), new RegExp(`processed=${firstCount}/2004 remaining=${2004 - firstCount}`))
-  const nextProductIndex = Math.floor((firstCount - 4) / 2)
-  const nextDevice = (firstCount - 4) % 2 ? "iphone-16-pro-max" : "iphone-17-pro-max"
+  // 7 fixed pages, then per design two Women phone pages and one Men phone page.
+  const total = 7 + 1000 * 3
+  assert.ok(firstCount < total)
+  assert.match(warmer.logs.at(-1), new RegExp(`processed=${firstCount}/${total} remaining=${total - firstCount}`))
+  const nextProductIndex = Math.floor((firstCount - 7) / 3)
+  const nextPath = [
+    `/product/design-${nextProductIndex}-iphone-17-pro-max/`,
+    `/product/design-${nextProductIndex}-iphone-16-pro-max/`,
+    `/men/product/design-${nextProductIndex}-iphone-17-pro-max/`,
+  ][(firstCount - 7) % 3]
   await warmer.run()
-  assert.equal(warmer.requests[firstCount].url, `https://new.florayn.com/product/design-${nextProductIndex}-${nextDevice}/?case=signature`)
+  assert.equal(warmer.requests[firstCount].url, `https://new.florayn.com${nextPath}?case=signature`)
+  // With the Men pages the catalogue needs a fourth pass to reach its tail.
   await warmer.run()
-  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/product/design-999-iphone-16-pro-max/?case=signature")))
+  await warmer.run()
+  assert.ok(warmer.requests.some((entry) => entry.url.endsWith("/men/product/design-999-iphone-17-pro-max/?case=signature")))
   assert.equal(warmer.maximumActive(), 1)
-  assert.ok(warmer.clock.now() <= 3 * PASS_BUDGET_MS)
+  assert.ok(warmer.clock.now() <= 4 * PASS_BUDGET_MS)
 })
 
 test("a request near the pass deadline gets a shortened abort timeout", async () => {
@@ -183,7 +195,7 @@ test("a request near the pass deadline gets a shortened abort timeout", async ()
   await warmer.run()
   assert.equal(warmer.requests.length, 2)
   assert.equal(warmer.clock.now(), PASS_BUDGET_MS)
-  assert.match(warmer.logs.at(-1), /processed=2\/4 remaining=2/)
+  assert.match(warmer.logs.at(-1), /processed=2\/7 remaining=5/)
 })
 
 test("a catalog-read failure releases the overlap guard", async () => {
@@ -195,6 +207,6 @@ test("a catalog-read failure releases the overlap guard", async () => {
   await assert.rejects(warmer.run(), /catalog unavailable/)
   fail = false
   await warmer.run()
-  assert.equal(warmer.requests.length, 4)
+  assert.equal(warmer.requests.length, 7)
   assert.equal(warmer.listCalls(), 2)
 })

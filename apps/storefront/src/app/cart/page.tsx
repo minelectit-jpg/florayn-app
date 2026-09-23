@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "@/components/audience-link"
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, ShoppingBag, Tag, Truck, Wallet } from "lucide-react"
 
 import CartLineItem from "@/components/cart-line-item"

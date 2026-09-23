@@ -40,6 +40,7 @@ function catalogRoute() {
     "../../../modules/catalog": { CATALOG_MODULE: "catalog" },
     "../../../modules/catalog/data/designs": { DESIGNS: [legacy] },
     "../../../modules/catalog/data/case-types": seedCases,
+    "../../../lib/audience": load("lib/audience.ts"),
   })
 }
 
@@ -176,7 +177,7 @@ test("a newly uploaded non-manifest design is indexed before success and enters 
   assert.ok(phone.variants.every((variant) => variant.inventory_items[0].inventory_item_id.startsWith("blank-")))
   assert.equal(h.links.length, 2)
   const catalog = await h.storefrontCatalog()
-  assert.deepEqual(catalog.designs, [{ slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"] }])
+  assert.deepEqual(catalog.designs, [{ slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"], audience: "both" }])
   const { response } = await requestCards(h.rows, { handles: phone.handle, device: "iPhone 17 Pro Max", case_type: "Signature" })
   assert.deepEqual(response.cards, [{
     handle: phone.handle,
@@ -233,15 +234,15 @@ test("device-filtered shop catalogue respects sparse uploaded pairs across model
   delete h.pairs.alcantara["iphone-17-pro-max"]
   await h.publish()
   assert.deepEqual((await h.storefrontCatalog("iphone-17-pro-max")).designs, [
-    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature"], forms: ["phone"] },
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature"], forms: ["phone"], audience: "both" },
   ])
   assert.deepEqual((await h.storefrontCatalog("iphone-16-pro-max")).designs, [], "a design with no matching model must not occupy a page slot")
   assert.deepEqual((await h.storefrontCatalog("airpods-pro-3")).designs, [
-    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["alcantara"], forms: ["airpods"] },
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["alcantara"], forms: ["airpods"], audience: "both" },
   ])
   assert.deepEqual((await h.storefrontCatalog("unknown-device")).designs, [])
   assert.deepEqual((await h.storefrontCatalog()).designs, [
-    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"] },
+    { slug: "future-canvas", name: "Future Canvas", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"], audience: "both" },
   ], "the no-query response remains compatible with existing clients")
 })
 
@@ -271,9 +272,9 @@ test("shop metadata fallback admits older uploads and preserves legacy ordering 
   } } : { listCaseTypes: async () => cases } }
   await catalogRoute().GET({ scope }, { json: (body) => { result = plain(body) } })
   assert.deepEqual(result.designs, [
-    { slug: "legacy-design", name: "Legacy Design", caseTypes: ["signature", "armor-black"], forms: ["phone"] },
-    { slug: "old-upload", name: "Older upload", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"] },
-    { slug: "new-upload", name: "New upload", caseTypes: ["signature"], forms: ["phone"] },
+    { slug: "legacy-design", name: "Legacy Design", caseTypes: ["signature", "armor-black"], forms: ["phone"], audience: "both" },
+    { slug: "old-upload", name: "Older upload", caseTypes: ["signature", "alcantara"], forms: ["phone", "airpods"], audience: "both" },
+    { slug: "new-upload", name: "New upload", caseTypes: ["signature"], forms: ["phone"], audience: "both" },
   ])
 })
 
@@ -301,8 +302,8 @@ test("device catalogue narrowing keeps missing-card legacy fallback, uses DB dev
   await catalogRoute().GET({ scope, query: { device: "future-db-device" } }, res)
   assert.equal(status, 200)
   assert.deepEqual(response.designs, [
-    { slug: "legacy-design", name: "Legacy Design", caseTypes: ["signature", "armor-black"], forms: ["phone"] },
-    { slug: "db-device-design", name: "db-device-design", caseTypes: ["signature"], forms: ["phone"] },
+    { slug: "legacy-design", name: "Legacy Design", caseTypes: ["signature", "armor-black"], forms: ["phone"], audience: "both" },
+    { slug: "db-device-design", name: "db-device-design", caseTypes: ["signature"], forms: ["phone"], audience: "both" },
   ])
   for (const device of [[], "", "../private", "x".repeat(201)]) {
     const before = reads

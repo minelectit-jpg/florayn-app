@@ -6,6 +6,7 @@ import {
 import { createCollectionsWorkflow, updateProductsWorkflow } from "@medusajs/medusa/core-flows"
 
 import { CATALOG_MODULE } from "../modules/catalog"
+import type { AudienceTag } from "./audience"
 import { slugify } from "./create-uploaded-design"
 import { rebuildCards } from "./rebuild-cards"
 
@@ -24,6 +25,8 @@ export type DesignMetaPatch = {
   /** published | draft, applied to every product of the design. */
   status?: "published" | "draft"
   description?: string
+  /** Who it is for: shown on the Women site, the Men site (/men) or both. */
+  audience?: AudienceTag
 }
 
 /**
@@ -86,7 +89,8 @@ export async function editDesignMeta(
       meta.design_name = name
     }
     if (themeGiven) meta.theme = themeName || null
-    if (name || themeGiven) u.metadata = meta
+    if (patch.audience) meta.audience = patch.audience
+    if (name || themeGiven || patch.audience) u.metadata = meta
     if (statusVal) u.status = statusVal
     if (themeGiven) u.collection_id = collectionId ?? null
     if (patch.description !== undefined) u.description = patch.description

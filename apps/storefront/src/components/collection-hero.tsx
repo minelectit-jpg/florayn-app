@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "@/components/audience-link"
 
 import ArtImage from "@/components/art-image"
 import type { CollectionPage } from "@/lib/content"

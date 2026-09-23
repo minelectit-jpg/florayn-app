@@ -37,6 +37,7 @@ const utils = {
 }
 const { listLiveDesigns, getDesignDetail } = load("lib/design-admin.ts", {
   "@medusajs/framework/utils": utils,
+  "./audience": load("lib/audience.ts"),
 })
 
 test("listLiveDesigns groups products by design, counting forms + variants", async () => {

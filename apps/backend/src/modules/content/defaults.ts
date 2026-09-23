@@ -28,6 +28,8 @@ export const ACCESSORY_LINKS: Record<string, string> = {
   "phone charms": "/product/leather-chain-phone-charm/",
   stickpad: "/product/stickpad-pro/",
   stickypad: "/product/stickpad-pro/",
+  wallet: "/collection/card-wallets/",
+  wallets: "/collection/card-wallets/",
 }
 const accessory = (label: string) => ACCESSORY_LINKS[label.toLowerCase()]
 
@@ -258,6 +260,101 @@ export const DEFAULT_HOME_SECTIONS = [
       ],
     },
   },
+]
+
+/**
+ * The Men home page (/men), as florayn.com/men has it: its own photos and
+ * shortcuts (no Phone Charms or Ring Holder), the same promises strip, and a
+ * New Releases row and collection cards that the storefront fills with men's
+ * designs only. Links are plain; the Men site adds /men to them itself.
+ * The testimonials band is copied from the Women page when it is created.
+ */
+const menPill = (label: string, href: string, image: string) => ({ label, href, image })
+const menTile = (label: string, href: string, image: string) => ({ label, href, image })
+
+export const DEFAULT_MEN_HOME_SECTIONS = [
+  {
+    key: "men-category-pills",
+    audience: "men",
+    type: "category_pills",
+    position: 0,
+    is_visible: true,
+    config: {
+      items: [
+        menPill("Phone Case", shop("iphone-17-pro-max"), IMG.menIconPhoneCase),
+        menPill("Earbuds Case", shop("airpods-pro-3", "signature-earbuds"), IMG.menIconEarbudsCase),
+        menPill("Watch Bands", accessory("Watch Bands"), IMG.menIconWatchBands),
+        menPill("Card Holder", accessory("Card Holder"), IMG.menIconCardHolder),
+        menPill("StickPad", accessory("StickPad"), IMG.menIconStickPad),
+        menPill("Wallet", accessory("Wallet"), IMG.menIconWallet),
+      ],
+    },
+  },
+  {
+    key: "men-hero",
+    audience: "men",
+    type: "hero",
+    position: 1,
+    is_visible: true,
+    cta_label: "Shop Collection",
+    config: {
+      slides: [
+        { ...NEWEST_SLIDE, image: IMG.menHeroNewest, mobile_image: IMG.menHeroNewestMobile },
+        slide("NEW COLLECTIONS", "Carry A Masterpiece In Your Hands", "/collection/van-gogh-dreams/"),
+      ],
+    },
+  },
+  {
+    key: "men-delivery-marquee",
+    audience: "men",
+    type: "marquee",
+    position: 2,
+    is_visible: true,
+    title: "1–3 Days Delivery",
+    config: { items: ["1–3 Days Delivery", "Cash On Delivery Across Bangladesh"] },
+  },
+  {
+    key: "men-primary-tiles",
+    audience: "men",
+    type: "tile_grid",
+    position: 3,
+    is_visible: true,
+    config: {
+      columns: 2,
+      tiles: [
+        menTile("Phone Case", shop("iphone-17-pro-max"), IMG.menTilePhoneCase),
+        menTile("EarBuds Case", shop("airpods-pro-3", "signature-earbuds"), IMG.menTileEarbudsCase),
+      ],
+    },
+  },
+  {
+    key: "men-new-releases",
+    audience: "men",
+    type: "product_carousel",
+    position: 4,
+    is_visible: true,
+    title: "New Releases",
+    cta_label: "See More",
+    cta_href: shop("iphone-17-pro-max"),
+    config: { limit: 5 },
+  },
+  {
+    key: "men-secondary-tiles",
+    audience: "men",
+    type: "tile_grid",
+    position: 5,
+    is_visible: true,
+    config: {
+      columns: 4,
+      tiles: [
+        menTile("StickyPad", accessory("StickyPad"), IMG.menTileStickPad),
+        menTile("Wallets", accessory("Wallets"), IMG.menTileWallets),
+        menTile("Watch Bands", accessory("Watch Bands"), IMG.menTileWatchBands),
+        menTile("Magsafe Wallets", accessory("Magsafe Wallets"), IMG.menTileMagsafeWallets),
+      ],
+    },
+  },
+  { ...COLLECTION_GRID_SECTION, key: "men-shop-by-collection", audience: "men", position: 6 },
 ]
 
 type SeedItem = {

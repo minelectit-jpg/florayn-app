@@ -15,7 +15,7 @@ function load(file, deps = {}) {
 }
 const contract = load("lib/storefront-presentation.ts")
 const link = { __esModule: true, default: ({ prefetch, ...props }) => React.createElement("a", props) }
-const deps = { "@/lib/storefront-presentation": contract, "next/link": link }
+const deps = { "@/lib/storefront-presentation": contract, "next/link": link, "@/components/audience-link": link }
 const ShippingNote = load("components/shipping-note.tsx", deps).ShippingNote
 const FooterLinks = load("components/footer-links.tsx", deps).default
 const Footer = load("components/site-footer.tsx", { ...deps, "./footer-links": { __esModule: true, default: FooterLinks } }).default

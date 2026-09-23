@@ -108,6 +108,9 @@ content. Keep Contact cache invalidation scoped and preserve editable blanks.
 Read `HOME_COLLECTIONS.md` before changing the home page, collection landing
 pages, their admin editors or the product card's colours.
 
+Read `WOMEN_MEN.md` before changing the header switch, `/men` routes, links in
+content/menus/cards, or anything that lists designs. Keep the mode in the URL.
+
 Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
 layout; verify real commerce changes using the isolated Medusa integration CI.

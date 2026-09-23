@@ -1,4 +1,4 @@
-import Link from "next/link"
+import Link from "@/components/audience-link"
 
 import Price from "@/components/price"
 import ProductImage from "@/components/product-image"

@@ -1,6 +1,6 @@
 import { Button, Heading, Input, Label, Text, toast } from "@medusajs/ui"
 import { useEffect, useRef, useState } from "react"
-import { Gallery, post, useUnsaved, type Product, type Variant } from "./shared"
+import { AUDIENCE_OPTIONS, Gallery, ManagerSelect, post, useUnsaved, type AudienceTag, type Product, type Variant } from "./shared"
 
 export default function VariantEditor({ product, variants, slug, onSaved, onClose, onDirtyChange, onBusyChange }: { product: Product; variants: Variant[]; slug: string; onSaved: () => void; onClose: () => void; onDirtyChange: (value: boolean) => void; onBusyChange: (value: boolean) => void }) {
   const single = variants.length === 1 ? variants[0] : null
@@ -9,10 +9,12 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
   const [price, setPrice] = useState(single?.price == null ? "" : String(single.price))
   const [images, setImages] = useState(single?.images ?? [])
   const [replaceImages, setReplaceImages] = useState(Boolean(single))
+  // "" leaves each selected colour as it is; only a regular product has per-colour audiences.
+  const [audience, setAudience] = useState<AudienceTag | "">(single ? single.audience ?? "both" : "")
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const lock = useRef(false)
-  const dirty = sku !== (single?.sku ?? "") || price !== (single?.price == null ? "" : String(single.price)) || JSON.stringify(images) !== JSON.stringify(single?.images ?? [])
+  const dirty = sku !== (single?.sku ?? "") || price !== (single?.price == null ? "" : String(single.price)) || JSON.stringify(images) !== JSON.stringify(single?.images ?? []) || (!caseProduct && audience !== (single ? single.audience ?? "both" : ""))
   const inventories = [...new Map(variants.flatMap((v) => v.inventory.map((item) => [item.id, item] as const))).values()]
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [allStock, setAllStock] = useState("")
@@ -30,6 +32,7 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
         id: v.id, ...(single ? { sku } : {}),
         ...(!caseProduct && price.trim() ? { price: Number(price) } : {}),
         ...(replaceImages ? { images } : {}),
+        ...(!caseProduct && audience && audience !== (v.audience ?? "both") ? { audience } : {}),
       })) })
       toast.success("Variants saved."); onSaved()
       if (!Object.keys(quantities).length) onClose()
@@ -60,6 +63,7 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
     <fieldset disabled={busy || uploading} className="grid gap-4">
       {single && <div><Label htmlFor="variant-sku">SKU</Label><Input id="variant-sku" value={sku} onChange={(e) => setSku(e.target.value)} /></div>}
       {caseProduct ? <Text size="small">Price is shared by case type across all designs. Use the Case-type pricing tab to change it.</Text> : <div><Label htmlFor="variant-price">{single ? "Price (BDT)" : "Set price for selected variants (optional)"}</Label><Input id="variant-price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} /></div>}
+      {!caseProduct && <div><Label htmlFor="variant-audience">{single ? "Shown for" : "Shown for (selected colours)"}</Label><ManagerSelect id="variant-audience" aria-label="Shown for" value={audience} onValueChange={(value) => setAudience(value as AudienceTag | "")}>{!single && <option value="">Keep each as it is</option>}{AUDIENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</ManagerSelect><Text size="xsmall" className="text-ui-fg-muted">Men only hides this colour on the Women site, and Women only hides it on the Men site (/men).</Text></div>}
       {!single && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={replaceImages} onChange={(e) => setReplaceImages(e.target.checked)} />Replace galleries for every selected variant</label>}
       {replaceImages && <Gallery images={images} onChange={setImages} slug={slug} onBusy={setUploading} />}
       <div><Button onClick={saveVariants} isLoading={busy}>Save variant changes</Button></div>

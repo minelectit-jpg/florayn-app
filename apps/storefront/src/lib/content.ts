@@ -1,3 +1,4 @@
+import type { Audience } from "./audience"
 import { DEFAULT_RECOMMENDATIONS, type RecommendationSettings } from "./product-recommendations"
 import { DEFAULT_PRESENTATION, readPresentation, type DeliveryPresentation, type FooterPresentation } from "./storefront-presentation"
 /**
@@ -46,11 +47,22 @@ export type CollectionCard = {
   /** A product render on white, shown contained when there is no picture. */
   artwork: string | null
   theme: Pick<CollectionTheme, "bg" | "text" | "accent" | "accent_text" | "hero_bg" | "hero_text">
+  /** The modes this collection has products for. Absent (an older backend) means both. */
+  audiences?: Audience[]
+}
+
+/** The collection cards that have something to show in this mode. */
+export function collectionsFor(cards: CollectionCard[], audience: Audience): CollectionCard[] {
+  return cards.filter((card) => !card.audiences || card.audiences.includes(audience))
 }
 
 export type SiteContent = {
+  /** The home page of the mode that was asked for. */
   sections: HomeSection[]
+  /** The header navigation of the mode that was asked for. */
   primary: MenuSection[]
+  /** The Men navigation, always sent so the one header can switch without a refetch. */
+  primaryMen?: MenuSection[]
   footer: MenuSection[]
   footerNote: string
   footerAppearance?: FooterPresentation
@@ -68,9 +80,10 @@ const EMPTY: SiteContent = {
   collections: [],
 }
 
-export async function getSiteContent(): Promise<SiteContent> {
+/** Home sections, menus and footer for one mode (Women unless asked). */
+export async function getSiteContent(audience: Audience = "women"): Promise<SiteContent> {
   try {
-    const res = await fetch(`${BACKEND}/store/content`, {
+    const res = await fetch(`${BACKEND}/store/content${audience === "men" ? "?audience=men" : ""}`, {
       headers: { "x-publishable-api-key": KEY },
       next: { revalidate: 60, tags: ["content", "content:site"] },
     })

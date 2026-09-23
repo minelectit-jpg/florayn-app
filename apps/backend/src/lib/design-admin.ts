@@ -1,5 +1,7 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
+import { mergeAudienceTags, readAudienceTag, type AudienceTag } from "./audience"
+
 /**
  * Read helpers for the Design Manager admin screen. A "design" is one or more
  * Structure-B products (one per form: phone / airpods / watch / wallet) sharing
@@ -18,6 +20,8 @@ export type DesignSummary = {
   /** published | draft | mixed — across the design's products. */
   status: "published" | "draft" | "mixed"
   kind?: "design" | "regular"
+  /** Who it is for (Women site, Men site or both). */
+  audience?: AudienceTag
 }
 
 /** Every live design, grouped from its products, newest first. */
@@ -89,14 +93,15 @@ export async function listLiveDesigns(container: any, includeRegular = false): P
 /** Read variant IDs only: the list must not hydrate every gallery and price. */
 async function listManagedProducts(container: any): Promise<DesignSummary[]> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
-  const groups = new Map<string, DesignSummary & { statuses: Set<string> }>()
+  const groups = new Map<string, DesignSummary & { statuses: Set<string>; tags: AudienceTag[] }>()
   for (let skip = 0; ; skip += 100) {
     const { data } = await query.graph({ entity: "product", fields: ["id", "handle", "title", "thumbnail", "status", "metadata", "variants.id"], pagination: { take: 100, skip, order: { id: "ASC" } } })
     for (const p of data as any[]) {
       const slug = p.metadata?.design_slug || p.handle
       if (!slug) continue
       const form = p.metadata?.form ?? (p.metadata?.design_slug ? "phone" : "regular")
-      const row: DesignSummary & { statuses: Set<string> } = groups.get(slug) ?? { slug, name: p.metadata?.design_name ?? p.title, theme: p.metadata?.theme ?? null, thumbnail: p.thumbnail ?? null, kind: p.metadata?.design_slug ? "design" : "regular", forms: [], productCount: 0, variantCount: 0, status: "draft", statuses: new Set<string>() }
+      const row: DesignSummary & { statuses: Set<string>; tags: AudienceTag[] } = groups.get(slug) ?? { slug, name: p.metadata?.design_name ?? p.title, theme: p.metadata?.theme ?? null, thumbnail: p.thumbnail ?? null, kind: p.metadata?.design_slug ? "design" : "regular", forms: [], productCount: 0, variantCount: 0, status: "draft", statuses: new Set<string>(), tags: [] }
+      row.tags.push(readAudienceTag(p.metadata))
       if (!row.forms.includes(form)) row.forms.push(form)
       row.productCount++; row.variantCount += p.variants?.length ?? 0; row.statuses.add(p.status)
       row.thumbnail ||= p.thumbnail ?? null
@@ -104,7 +109,7 @@ async function listManagedProducts(container: any): Promise<DesignSummary[]> {
     }
     if (data.length < 100) break
   }
-  return [...groups.values()].map(({ statuses, ...row }) => ({ ...row, status: statuses.size > 1 ? "mixed" : statuses.has("published") ? "published" : "draft" })).sort((a, b) => a.name.localeCompare(b.name)) as DesignSummary[]
+  return [...groups.values()].map(({ statuses, tags, ...row }) => ({ ...row, audience: mergeAudienceTags(tags), status: statuses.size > 1 ? "mixed" : statuses.has("published") ? "published" : "draft" })).sort((a, b) => a.name.localeCompare(b.name)) as DesignSummary[]
 }
 
 export type DesignVariantDetail = {
@@ -119,6 +124,8 @@ export type DesignVariantDetail = {
   options: Record<string, string>
   caseTypeSlug: string | null
   deviceSlug: string | null
+  /** A simple product's colour can be for one mode only. */
+  audience: AudienceTag
   inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[]
 }
 
@@ -144,6 +151,7 @@ export type DesignDetail = {
   collection: { id: string; title: string } | null
   products: DesignProductDetail[]
   kind: "design" | "regular"
+  audience: AudienceTag
 }
 
 /** One design's full shape (its products, options and variants) for the editor. */
@@ -208,6 +216,7 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
         options: Object.fromEntries((v.options ?? []).map((o: any) => [optTitleById.get(o.option_id) ?? o.option_id, o.value])),
         caseTypeSlug: v.metadata?.case_type_slug ?? null,
         deviceSlug: v.metadata?.device_slug ?? null,
+        audience: readAudienceTag(v.metadata),
         inventory: (v.inventory_items ?? []).flatMap((link: any) => link.inventory ? [{
           id: link.inventory.id,
           shared: Boolean(link.inventory.metadata?.is_blank),
@@ -236,6 +245,7 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
     kind: first.metadata?.design_slug ? "design" : "regular",
     name: (first.metadata?.design_name as string) ?? first.title,
     theme: (first.metadata?.theme as string) ?? null,
+    audience: mergeAudienceTags(mine.map((p: any) => readAudienceTag(p.metadata))),
     collection: first.collection ? { id: first.collection.id, title: first.collection.title } : null,
     products: productDetails,
   }
