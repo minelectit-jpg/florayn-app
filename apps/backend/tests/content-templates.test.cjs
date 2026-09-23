@@ -300,3 +300,36 @@ test("the content upgrade fills pictures and looks without overwriting owner edi
   await run({ container: { resolve: (key) => key === "logger" ? { info: () => {} } : service } })
   assert.equal(JSON.stringify(state), before, "a second run changes nothing")
 })
+
+test("the follow-up fix moves Bug Life decor to the storefront and drops only the seeded headline", async () => {
+  const load4 = loader()
+  const { BUG_LIFE_DECOR, LEGACY_BUG_LIFE_DECOR_PREFIX } = load4("modules/content/site-images.ts")
+  const legacy = ["bee-1", "ant-2"].map((n) => `${LEGACY_BUG_LIFE_DECOR_PREFIX}${n}.svg`)
+  const state = {
+    home: [{ id: "h", key: "hero", type: "hero", position: 0, config: { slides: [
+      { heading: "Bug Life", href: "/collection/bug-life/", image: "a" },
+      { heading: "Florayn Blooms", href: "/collection/florayn-blooms/" },
+    ] } }],
+    pages: [
+      { id: "bl", collection_slug: "bug-life", theme: { bg: "#efebdd", decor: legacy } },
+      { id: "x", collection_slug: "leopard", theme: { decor: legacy } },
+    ],
+  }
+  const service = contentService(state)
+  const run = load4("migration-scripts/content-fixes-2026-09-24.ts").default
+  await run({ container: { resolve: (key) => key === "logger" ? { info: () => {} } : service } })
+  assert.equal(state.pages[0].theme.decor.join(","), BUG_LIFE_DECOR.join(","))
+  assert.ok(BUG_LIFE_DECOR.every((u) => u.startsWith("/decor/bug-life/")))
+  assert.equal(state.pages[0].theme.bg, "#efebdd")
+  assert.equal(state.pages[1].theme.decor.join(","), legacy.join(","), "only the Bug Life page")
+  assert.equal(state.home[0].config.slides[0].heading, null)
+  assert.equal(state.home[0].config.slides[0].image, "a")
+  assert.equal(state.home[0].config.slides[1].heading, "Florayn Blooms")
+
+  // An owner's own headline or decor is not touched.
+  state.home[0].config.slides[0].heading = "Meet the bugs"
+  state.pages[0].theme.decor = ["https://cdn.example/owner.svg"]
+  const before = JSON.stringify(state)
+  await run({ container: { resolve: (key) => key === "logger" ? { info: () => {} } : service } })
+  assert.equal(JSON.stringify(state), before)
+})

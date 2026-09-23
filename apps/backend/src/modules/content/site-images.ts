@@ -62,13 +62,15 @@ export const SITE_IMAGES = {
   garageHeroMobile: `${R2}/collections/garage/hero-mobile-94d309f9.webp`,
 } as const
 
-/** The hand-drawn bugs scattered over the Bug Life hero on florayn.com. */
-export const BUG_LIFE_DECOR = [
-  `${R2}/collections/bug-life/decor-bee-236947d3.svg`,
-  `${R2}/collections/bug-life/decor-butterfly-6db70265.svg`,
-  `${R2}/collections/bug-life/decor-dragonfly-42b403ef.svg`,
-  `${R2}/collections/bug-life/decor-ladybug-34cead13.svg`,
-  `${R2}/collections/bug-life/decor-beetle-740cdd03.svg`,
-  `${R2}/collections/bug-life/decor-ant-a4ab53bd.svg`,
-  `${R2}/collections/bug-life/decor-sprig-da621ea9.svg`,
-]
+/**
+ * The hand-drawn bugs scattered over the Bug Life hero on florayn.com. Served
+ * by the storefront itself (apps/storefront/public/decor/bug-life) rather than
+ * the r2.dev development host, which answers over HTTP/1.1 one connection per
+ * file. The same files are also in R2 under site/collections/bug-life/.
+ */
+export const BUG_LIFE_DECOR = ["bee", "butterfly", "dragonfly", "ladybug", "beetle", "ant", "sprig"].map(
+  (name) => `/decor/bug-life/${name}.svg`
+)
+
+/** The earlier R2 decor URLs, so the content upgrade can recognise them. */
+export const LEGACY_BUG_LIFE_DECOR_PREFIX = `${R2}/collections/bug-life/decor-`

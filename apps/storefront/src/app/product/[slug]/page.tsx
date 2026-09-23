@@ -7,8 +7,9 @@ import {
   type RecommendedItem,
 } from "@/components/recommended-for-you"
 import { ShippingNote } from "@/components/shipping-note"
-import ProductTabs from "@/components/product-tabs"
+import ProductTabs, { type AccordionSlot } from "@/components/product-tabs"
 import ProductReviews from "@/components/product-reviews"
+import RatingStars from "@/components/rating-stars"
 import { readProductContent } from "@/lib/product-content"
 import { getProductReviews } from "@/lib/product-reviews"
 import { getBundleConfig } from "@/lib/bundles"
@@ -215,8 +216,32 @@ export default async function ProductPage({ params }: Params) {
   const { featureBlocks } = productSections
   const content = readProductContent(product.metadata)
   const reviews = await reviewsPromise
-  const reviewSummary = content.reviews_enabled ? <a href="#customer-reviews" className="fl-review-jump"><span aria-hidden="true">★</span>{reviews?.count ? `${reviews.average!.toFixed(1)} · ${reviews.count} review${reviews.count === 1 ? "" : "s"}` : "Customer reviews"}<span className="fl-review-jump__link">{reviews?.count ? "Read reviews" : "Be the first to review"}</span></a> : null
-  const reviewSection = content.reviews_enabled ? <ProductReviews productId={product.id} pagePath={`/product/${slug}/`} initial={reviews} heading={content.reviews_heading} intro={content.reviews_intro} /> : null
+  // Real review data only: stars are filled from the actual average, and with
+  // no reviews they stay hollow beside "No reviews yet". A failed review read
+  // shows no summary rather than a claim.
+  const reviewCount = reviews?.count ?? 0
+  const reviewAverage = reviewCount ? reviews!.average : null
+  const reviewLabel = `${reviewCount} Review${reviewCount === 1 ? "" : "s"}`
+  const reviewSummary = content.reviews_enabled && reviews ? (
+    <a
+      href="#customer-reviews"
+      className="fl-pdp-rating"
+      aria-label={reviewCount ? `Rated ${reviewAverage!.toFixed(1)} out of 5 from ${reviewLabel.toLowerCase()}. Read reviews` : "No reviews yet. Write the first review"}
+    >
+      <RatingStars rating={reviewAverage} />
+      <span className="fl-pdp-rating__count">{reviewCount ? reviewLabel : "No reviews yet"}</span>
+    </a>
+  ) : null
+  const reviewsRow: AccordionSlot | null = content.reviews_enabled ? {
+    label: content.reviews_heading,
+    meta: reviewCount ? <><RatingStars rating={reviewAverage} size={12} /><span>{reviewLabel}</span></> : null,
+    body: <ProductReviews productId={product.id} pagePath={`/product/${slug}/`} initial={reviews} heading={content.reviews_heading} intro={content.reviews_intro} variant="accordion" />,
+  } : null
+  const delivery = productSections.delivery
+  const deliveryRow: AccordionSlot | null = delivery.enabled && delivery.cards.length ? {
+    label: delivery.heading || "Delivery & care",
+    body: <ShippingNote settings={delivery} variant="row" />,
+  } : null
 
   // Apply the existing fixed prices for supported case types. Variants such as
   // Alcantara retain the region-calculated prices fetched with the product.
@@ -240,7 +265,7 @@ export default async function ProductPage({ params }: Params) {
         : []),
     ]
     return (
-      <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
+      <article className="fl-pdp mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
         <ProductView
           pagePath={`/product/${slug}/`}
           matrix={simple.matrix}
@@ -263,13 +288,15 @@ export default async function ProductPage({ params }: Params) {
           bundleConfig={null}
           caseTypeRecords={[]}
           matchingProduct={null}
-          shipping={<ShippingNote settings={productSections.delivery} />}
+          deliveryEstimate={delivery.estimate}
           tabs={
             <ProductTabs
               description={product.description}
               facts={simpleFacts}
               content={content}
               isCase={false}
+              reviews={reviewsRow}
+              delivery={deliveryRow}
             />
           }
           reviewSummary={reviewSummary}
@@ -280,7 +307,6 @@ export default async function ProductPage({ params }: Params) {
           simple
           optionLabel={simple.optionTitle ?? undefined}
         />
-        {reviewSection}
       </article>
     )
   }
@@ -389,13 +415,15 @@ export default async function ProductPage({ params }: Params) {
       value: matrix.caseTypes.join(", "),
     },
     {
+      // The models this design is actually made for, from its variants - the
+      // "will it fit my phone?" answer, not just a count.
       label: "Fits",
-      value: `${matrix.devices.length} device${matrix.devices.length === 1 ? "" : "s"}`,
+      value: matrix.devices.join(", "),
     },
   ]
 
   return (
-    <article className="mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
+    <article className="fl-pdp mx-auto w-full max-w-[1360px] px-0 md:px-[30px]">
       <ProductView
         pagePath={`/product/${slug}/`}
         matrix={productViewMatrix(matrix)}
@@ -422,13 +450,15 @@ export default async function ProductPage({ params }: Params) {
         bundleConfig={bundleConfig}
         caseTypeRecords={caseTypes}
         matchingProduct={matchingProduct}
-        shipping={<ShippingNote settings={productSections.delivery} />}
+        deliveryEstimate={delivery.estimate}
         tabs={
           <ProductTabs
             description={product.description}
             facts={facts}
             content={content}
             isCase
+            reviews={reviewsRow}
+            delivery={deliveryRow}
           />
         }
         reviewSummary={reviewSummary}
@@ -437,7 +467,6 @@ export default async function ProductPage({ params }: Params) {
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
       />
-      {reviewSection}
     </article>
   )
 }

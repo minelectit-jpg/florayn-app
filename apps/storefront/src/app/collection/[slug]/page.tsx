@@ -195,7 +195,13 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     ...new Set(forDevice.flatMap((p) => caseTypesForDevice(p))),
   ].map((ct) => ({ value: ct, label: ct }))
 
-  const caseType = showCaseType ? first(query.case_type) : ""
+  // A case type this model is not made in (an old link, a model change) is
+  // dropped rather than emptying the grid under an "All case types" select.
+  const requestedCaseType = showCaseType ? first(query.case_type) : ""
+  const caseType = caseTypeOptions.some((o) => o.value === requestedCaseType) ? requestedCaseType : ""
+  const caseTypeSlug = caseType
+    ? caseType.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    : null
   const filtered = caseType
     ? forDevice.filter((p) => caseTypesForDevice(p).includes(caseType))
     : forDevice
@@ -227,8 +233,10 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     )
   }
 
+  // "iPhone 17 Pro Max Cases - 12"; watch bands and wallets are not "cases".
+  const noun = form === "phone" || form === "airpods" ? " Cases" : ""
   const resultLabel = device
-    ? `${device} Cases - ${sorted.length}`
+    ? `${device}${noun} - ${sorted.length}`
     : `${sorted.length} ${sorted.length === 1 ? "product" : "products"}`
 
   // The hero falls back to a phone render even while AirPods are showing.
@@ -238,10 +246,16 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     products[0]?.thumbnail ??
     null
 
+  // The heading above the grid follows the tab: "Bug Life AirPods Cases".
+  const formLabel = FORM_LABELS[form] ?? productTypeLabel(form)
+  const heroPage = landing && form !== "phone" && landing.intro_heading
+    ? { ...landing, intro_heading: landing.intro_heading.replace(/phone cases?/i, formLabel) }
+    : landing
+
   return (
     <CollectionShell theme={landing?.theme ?? null}>
-      {landing ? (
-        <CollectionHero page={landing} fallbackImage={artwork} title={group.title} />
+      {heroPage ? (
+        <CollectionHero page={heroPage} fallbackImage={artwork} title={group.title} />
       ) : (
         <header className="fl-cplain">
           <p className="eyebrow">Collection</p>
@@ -274,6 +288,8 @@ export default async function CollectionPage({ params, searchParams }: Params) {
               product={product}
               device={device || null}
               deviceSlug={deviceSlug}
+              caseType={caseType || null}
+              caseTypeSlug={caseTypeSlug}
             />
           ))}
         </div>

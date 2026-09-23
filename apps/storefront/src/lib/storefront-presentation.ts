@@ -1,7 +1,8 @@
 export const PRESENTATION_KEY = "florayn_presentation"
 export const DELIVERY_ICONS = ["truck", "wallet", "map-pin", "refresh", "package", "heart", "shield", "phone"] as const
 export type DeliveryCard = { icon: typeof DELIVERY_ICONS[number]; title: string; description: string }
-export type DeliveryPresentation = { enabled: boolean; heading: string; cards: DeliveryCard[]; link_label: string; link_href: string }
+/** `estimate` is the line after "In stock" at the top of every product page. */
+export type DeliveryPresentation = { enabled: boolean; heading: string; cards: DeliveryCard[]; link_label: string; link_href: string; estimate: string }
 export type FooterPresentation = { brand: string; tagline: string; support_title: string; support_text: string; support_label: string; support_href: string; note: string; location: string; social: { label: string; href: string }[] }
 export type Presentation = { footer: FooterPresentation; delivery: DeliveryPresentation }
 export const DEFAULT_PRESENTATION: Presentation = {
@@ -25,6 +26,7 @@ export const DEFAULT_PRESENTATION: Presentation = {
       { icon: "refresh", title: "Easy exchanges", description: "Within 3 days of delivery." },
     ],
     link_label: "Delivery & exchange help", link_href: "/contact/",
+    estimate: "Delivery in 1–3 business days",
   },
 }
 
@@ -67,7 +69,8 @@ export function validateDeliveryPresentation(value: unknown): DeliveryPresentati
     const r = object(row)
     if (!DELIVERY_ICONS.includes(r.icon as DeliveryCard["icon"])) throw new Error("Choose an available icon.")
     return { icon: r.icon as DeliveryCard["icon"], title: text(r.title, "Card heading", 80, true), description: text(r.description, "Card description", 240) }
-  }) }
+  }), estimate: v.estimate === undefined ? DEFAULT_PRESENTATION.delivery.estimate : text(v.estimate, "Stock line estimate", 60) }
+  if (/[\u0000-\u001f\u007f]/.test(result.estimate)) throw new Error("Keep the stock line estimate on one line.")
   link(result.link_label, result.link_href)
   return result
 }

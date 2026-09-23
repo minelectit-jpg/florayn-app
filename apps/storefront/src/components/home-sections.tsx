@@ -251,7 +251,7 @@ function CollectionGrid({
               className="fl-collection-card group"
               style={
                 {
-                  "--cc-bg": card.image ? card.theme.hero_bg : card.theme.bg,
+                  "--cc-bg": card.image ? card.theme.hero_bg : "#ffffff",
                   "--cc-accent": card.theme.accent,
                   "--cc-accent-text": card.theme.accent_text,
                 } as CSSProperties

@@ -117,13 +117,14 @@ export function DeliveryPresentationEditor() {
   const state = useSettings<DeliveryPresentation>("delivery")
   const value = state.value
   const set = (patch: Partial<DeliveryPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
-  return <Frame title="Product delivery" description="The information cards below the buy buttons on every product page." state={state}>
+  return <Frame title="Product delivery" description="The delivery line under the price and the delivery row in the product page's information list." state={state}>
     {value && <>
       <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
         <Text size="small">These fields change the displayed information only. Set actual shipping charges and delivery rules in Checkout settings, and keep this copy consistent with them.</Text>
       </div>
+      <Field label="Delivery line under the price" value={value.estimate ?? ""} max={60} onChange={(estimate) => set({ estimate })} hint={`Shown as "In stock | ${value.estimate || "…"}" on every product page. Hidden when the item is sold out. Leave blank to show only "In stock".`} />
       <div className="flex items-center gap-3"><Switch id="show-product-delivery" checked={value.enabled} onCheckedChange={(enabled) => set({ enabled })} /><Label htmlFor="show-product-delivery">Show delivery information</Label></div>
-      <Field label="Section heading" value={value.heading} max={80} onChange={(heading) => set({ heading })} hint="Optional. Leave blank to show the cards without a heading." />
+      <Field label="Section heading" value={value.heading} max={80} onChange={(heading) => set({ heading })} hint="The row title in the product information list, for example Delivery & care." />
       <div className="grid gap-4 md:grid-cols-2">
         {value.cards.map((card, index) => <div key={index} className="grid content-start gap-4 rounded-lg border border-ui-border-base p-4">
           <div className="flex items-center justify-between"><Heading level="h2">Card {index + 1}</Heading></div>

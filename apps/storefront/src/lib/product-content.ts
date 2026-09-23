@@ -5,8 +5,8 @@ export type ProductContent = {
   faqs: { question: string; answer: string }[] | null
 }
 export const DEFAULT_PRODUCT_CONTENT: ProductContent = {
-  description_heading: "Made for your everyday", information_heading: "Product details",
-  faq_heading: "Good to know", reviews_heading: "Customer reviews",
+  description_heading: "Description", information_heading: "Product details",
+  faq_heading: "Good to know", reviews_heading: "Reviews",
   reviews_intro: "Real experiences, shared by our customers.", reviews_enabled: true,
   facts: null, faqs: null,
 }

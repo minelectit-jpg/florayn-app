@@ -54,7 +54,9 @@ export default function ArtImage({
     )
   }
 
-  const common = { alt, fill: true as const, quality: 80, priority }
+  // getImageProps does not raise the request priority on its own (the Image
+  // component's preload does that), so say it explicitly for the LCP picture.
+  const common = { alt, fill: true as const, quality: 80, priority, fetchPriority: priority ? ("high" as const) : undefined }
   const { props: desktop } = getImageProps({ ...common, src, sizes })
   const small = mobile
     ? canOptimize(mobile)

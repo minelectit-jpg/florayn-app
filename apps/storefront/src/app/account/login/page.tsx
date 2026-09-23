@@ -10,7 +10,7 @@ export default async function AccountLoginPage() {
   // A valid session skips the form; a stale/expired cookie falls through so the
   // shopper can sign in again (avoids a redirect loop with /account).
   const customer = await getCurrentCustomer()
-  if (customer) redirect("/account")
+  if (customer) redirect("/account/")
 
   return (
     <div className="py-2 md:py-4">

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 
 export default async function AccountPage() {
   const customer = await getCurrentCustomer()
-  if (!customer) redirect("/account/login")
+  if (!customer) redirect("/account/login/")
 
   const [orders, addresses] = await Promise.all([getAccountOrders(), listAddresses()])
 

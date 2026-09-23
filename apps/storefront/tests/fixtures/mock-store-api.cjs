@@ -72,7 +72,7 @@ if (accountFixture) {
     ] }],
   }))
 }
-const pageContentDefaults = { description_heading: "Made for your everyday", information_heading: "Product details", faq_heading: "Good to know", reviews_heading: "Customer reviews", reviews_intro: "Real experiences, shared by our customers.", reviews_enabled: true, facts: null, faqs: null }
+const pageContentDefaults = { description_heading: "Description", information_heading: "Product details", faq_heading: "Good to know", reviews_heading: "Reviews", reviews_intro: "Real experiences, shared by our customers.", reviews_enabled: true, facts: null, faqs: null }
 const fixtureReviews = accountFixture ? Array.from({ length: 8 }, (_, i) => ({ id: `review_fixture_${i}`, author: `Fixture shopper ${i + 1}`, rating: i % 2 ? 4 : 5, title: "Local review fixture", body: "This is a synthetic review for local layout verification only.", reply: i === 0 ? "Fixture reply from Florayn." : "", created_at: "2026-09-23T09:00:00.000Z", review_key: "design:audit-bloom", status: i === 7 ? "pending" : "approved", product_id: "prod_audit-bloom" })) : []
 const fixtureCustomer = { id: "cus_fixture", email: "shopper@example.invalid", first_name: "Alex", last_name: "Rahman", phone: "01700000000" }
 const fixtureAddresses = [{ id: "addr_fixture", first_name: "Alex", last_name: "Rahman", address_1: "12 Fixture Road", city: "Dhaka", country_code: "bd", phone: "01700000000" }]

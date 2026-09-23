@@ -31,20 +31,18 @@ export default function FeaturesSection({
   if (!shown.length) return null
 
   return (
-    <section className="mt-12">
-      <div className="flex items-center gap-4">
-        <span className="h-px flex-1 bg-line" />
-        <h2 className="text-center text-[1.05rem] font-semibold uppercase tracking-[0.04em]">
-          Features
-        </h2>
-        <span className="h-px flex-1 bg-line" />
+    <section>
+      <div className="fl-pdp-strip__head">
+        <span aria-hidden="true" />
+        <h2>Features</h2>
+        <span aria-hidden="true" />
       </div>
 
-      <ul className="mt-6 flex flex-col gap-8">
+      <ul className="mt-3 flex flex-col gap-5 md:mt-6 md:gap-8">
         {shown.map((block) => (
           <li key={block.id}>
             {block.title || block.description ? (
-              <div className="mb-4 text-center">
+              <div className="mb-3 text-center md:mb-4">
                 {block.title ? (
                   <h3 className="text-[1.35rem] font-semibold leading-tight tracking-[-0.02em]">
                     {block.title}

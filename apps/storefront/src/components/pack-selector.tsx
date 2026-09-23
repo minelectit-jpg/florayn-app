@@ -187,7 +187,8 @@ export default function PackSelector({
   )
 
   return (
-    <section id="bundle-pack" className="fl-offers scroll-mt-40" aria-label="Bundle/pack">
+    // One connected tab bar; in bundle mode the panel hangs off it.
+    <section id="bundle-pack" className="fl-offers scroll-mt-40" data-mode={bundleMode ? "bundle" : "single"} aria-label="Bundle/pack">
       <div className="fl-offers__switch" role="group" aria-label="Purchase option">
         <button
           type="button"
@@ -195,7 +196,6 @@ export default function PackSelector({
           disabled={adding}
           onClick={() => onModeChange(false)}
         >
-          <span className="fl-offers__radio" aria-hidden="true" />
           <span className="fl-offers__option-label">Product only</span>
         </button>
         <button
@@ -204,7 +204,6 @@ export default function PackSelector({
           disabled={adding}
           onClick={() => onModeChange(true)}
         >
-          <span className="fl-offers__radio" aria-hidden="true" />
           <span className="fl-offers__option-label">Bundle/pack</span>
           {customBadge || maxSaving > 0 ? (
             <span className="fl-offers__badge">{customBadge || `Up to ${maxSaving}% off`}</span>

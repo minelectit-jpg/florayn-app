@@ -3,11 +3,11 @@
 import Link from "next/link"
 import { useState } from "react"
 
-import { useCart } from "@/components/cart-provider"
 import DragScroll from "@/components/drag-scroll"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import Price from "@/components/price"
 import ProductImage from "@/components/product-image"
+import QuickAdd from "@/components/quick-add"
 
 /** The family heading a model sits under in the SELECT MODEL drawer. */
 function modelGroup(label: string): string {
@@ -43,22 +43,35 @@ export type RecommendedItem = {
   variants: RecommendedVariant[]
 }
 
+// Image slots for the rail: half the phone width for pairs, the full content
+// width for a single card, the fixed 230px column from tablets up.
+const PAIR_SIZES = "(max-width: 767px) calc(50vw - 20px), 230px"
+const SINGLE_SIZES = "(max-width: 767px) calc(100vw - 30px), 230px"
+
 /**
- * One recommended accessory. The shopper picks a model (when the product has
- * more than one) and adds it; adding opens the cart drawer, so the whole flow
- * stays on the product page.
+ * One recommended accessory, dressed as the shop's product card (the same
+ * .fl-card markup as product-card.tsx - keep the two in step). One `selected`
+ * variant drives the picture, price, link and the item Quick Add puts in the
+ * bag, so a model change updates all four together. The link is a stretched
+ * sibling of the buttons, never their parent.
  */
-function RecommendedCard({ item }: { item: RecommendedItem }) {
-  const { add } = useCart()
+function RecommendedCard({ item, sizes }: { item: RecommendedItem; sizes: string }) {
   const [variantId, setVariantId] = useState(item.variants[0]?.id ?? "")
   const [openModel, setOpenModel] = useState(false)
-  const [busy, setBusy] = useState(false)
 
   const selected =
     item.variants.find((v) => v.id === variantId) ?? item.variants[0] ?? null
   const price = selected?.price ?? item.price
   const image = selected?.image ?? null
   const href = selected?.href ?? `/product/${item.handle}/`
+  // A single fixed option still says which one it is (e.g. an owner-picked
+  // "Signature / iPhone 17 Pro Max"); with a picker the picker says it.
+  const detail =
+    item.variants.length > 1
+      ? selected?.caseType ?? null
+      : selected?.label && selected.label !== item.formLabel
+        ? selected.label
+        : null
 
   const modelItems: ModelItem[] = item.variants.map((v) => ({
     value: v.id,
@@ -66,113 +79,91 @@ function RecommendedCard({ item }: { item: RecommendedItem }) {
     group: modelGroup(v.label),
   }))
 
-  async function addToCart() {
-    if (!selected || busy) return
-    setBusy(true)
-    try {
-      // add() opens the cart drawer by default.
-      await add(selected.id, 1, {
-        productTitle: item.name,
-        variantTitle: [selected.caseType, selected.label].filter(Boolean).join(" / "),
-        unitPrice: selected.price ?? item.price ?? 0,
-        thumbnail: image,
-      })
-    } catch {
-      /* the provider rolls the optimistic add back on failure */
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <article className="fl-recommendation">
-      <Link
-        href={href}
-        className="block"
-        aria-label={`${item.name}, ${item.formLabel}`}
-        prefetch={false}
-      >
-        <div className="relative aspect-square w-full overflow-hidden rounded-[8px] bg-surface">
-          <ProductImage
-            src={image}
-            alt={item.name}
-            label={item.name}
-            sizes="(max-width: 639px) 96px, 204px"
-            fillMode="absolute"
-          />
-        </div>
-      </Link>
-
-      <div className="fl-recommendation__body">
-        <Link href={href} className="block" prefetch={false}>
-          <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
-            {item.name}
-          </h3>
-          <p className="mt-0.5 text-[13px] text-ink-muted">{item.formLabel}</p>
-          {item.variants.length === 1 && selected?.label !== item.formLabel ? <p className="text-xs text-ink-muted">{selected?.label}</p> : null}
-        </Link>
-
-        <p className="mt-1 text-[15px] font-semibold tabular-nums">
-          {price != null ? <Price amount={price} /> : "—"}
-        </p>
+    <article className="fl-card group">
+      <div className="fl-card__media">
+        <ProductImage
+          src={image}
+          alt={item.name}
+          label={item.name}
+          sizes={sizes}
+          className="fl-card__img"
+          fillMode="absolute"
+        />
       </div>
-      <div className="fl-recommendation__actions">
-        {item.variants.length > 1 ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setOpenModel(true)}
-              aria-haspopup="dialog"
-              className="flex min-h-11 w-full items-center justify-between rounded-[8px] border border-[#e2e2e2] bg-paper px-2 py-2 text-left text-xs transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
-            >
-              <span>{selected?.label ?? "Select model"}</span>
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 14 14"
-                aria-hidden="true"
-                className="ml-2 shrink-0"
-              >
-                <path
-                  d="M3 5l4 4 4-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
 
-            <ModelDrawer
-              open={openModel}
-              onOpenChange={setOpenModel}
-              items={modelItems}
-              current={variantId}
-              onSelect={(id) => {
-                setVariantId(id)
-                setOpenModel(false)
-              }}
-            />
-          </>
+      <div className="fl-card__summary">
+        <div className="fl-card__titles">
+          <h3 className="fl-card__title">{item.name}</h3>
+          <p className="fl-card__meta">
+            <span>{item.formLabel}</span>
+            {detail ? (
+              <>
+                <span className="fl-card__meta-separator" aria-hidden="true"> • </span>
+                <span className="fl-card__case-type">{detail}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        {item.variants.length > 1 ? (
+          <button
+            type="button"
+            className="fl-card__model"
+            aria-haspopup="dialog"
+            aria-label={`Model: ${selected?.label ?? "Select model"}. Change model`}
+            onClick={() => setOpenModel(true)}
+          >
+            <span>{selected?.label ?? "Select model"}</span>
+            <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">
+              <path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
         ) : null}
 
-        <button
-          type="button"
-          onClick={addToCart}
-          disabled={busy || !selected}
-          className="flex min-h-11 w-full items-center justify-center rounded-full border border-ink px-2 text-xs font-semibold text-ink transition-colors hover:bg-ink hover:text-white disabled:opacity-50"
-        >
-          {busy ? "Adding…" : "Add to cart"}
-        </button>
+        <div className="fl-card__price-row">
+          <span className="fl-card__price">
+            {price != null ? <Price amount={price} /> : "-"}
+          </span>
+          <QuickAdd
+            key={selected?.id}
+            variantId={selected?.id ?? null}
+            productTitle={item.name}
+            variantTitle={[selected?.caseType, selected?.label].filter(Boolean).join(" / ")}
+            unitPrice={price ?? 0}
+            thumbnail={image}
+          />
+        </div>
       </div>
+
+      <Link
+        href={href}
+        aria-label={`${item.name}, ${item.formLabel}${selected ? `, ${selected.label}` : ""}`}
+        className="absolute inset-0 z-[1]"
+        prefetch={false}
+      />
+
+      {item.variants.length > 1 ? (
+        <ModelDrawer
+          open={openModel}
+          onOpenChange={setOpenModel}
+          items={modelItems}
+          current={variantId}
+          onSelect={(id) => {
+            setVariantId(id)
+            setOpenModel(false)
+          }}
+        />
+      ) : null}
     </article>
   )
 }
 
 /**
  * "Recommended for you" — matching accessories in the same design (the AirPods
- * case, card holder, ring holder… printed with the same artwork). A centered,
- * BURGA-style heading over a horizontal slider of cards.
+ * case, card holder… printed with the same artwork), as shop cards: one big
+ * card when there is one, two to a phone screen and swipeable when there are
+ * more.
  */
 export default function RecommendedForYou({
   items,
@@ -182,24 +173,20 @@ export default function RecommendedForYou({
   title?: string
 }) {
   if (!items.length) return null
+  const single = items.length === 1
 
   return (
     <section>
-      <div className="flex items-center gap-4">
-        <span className="h-px flex-1 bg-line" />
-        <h2 className="text-center text-sm font-semibold uppercase tracking-[0.04em] sm:text-[1.05rem]">
-          {title}
-        </h2>
-        <span className="h-px flex-1 bg-line" />
+      <div className="fl-pdp-strip__head">
+        <span aria-hidden="true" />
+        <h2>{title}</h2>
+        <span aria-hidden="true" />
       </div>
 
-      <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            className="w-full max-w-[350px] shrink-0 snap-start sm:w-[230px]"
-          >
-            <RecommendedCard item={item} />
+      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title}>
+        {items.map((item, i) => (
+          <li key={`${item.id}-${i}`}>
+            <RecommendedCard item={item} sizes={single ? SINGLE_SIZES : PAIR_SIZES} />
           </li>
         ))}
       </DragScroll>

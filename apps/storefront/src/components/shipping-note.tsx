@@ -4,10 +4,16 @@ import { DEFAULT_PRESENTATION, safePresentationHref, type DeliveryPresentation }
 
 const icons = { truck: Truck, wallet: Wallet, "map-pin": MapPin, refresh: RefreshCw, package: Package, heart: Heart, shield: ShieldCheck, phone: Phone }
 
-export function ShippingNote({ settings = DEFAULT_PRESENTATION.delivery }: { settings?: DeliveryPresentation }) {
+/**
+ * The Admin > Product delivery cards. "card" is a boxed section with its own
+ * heading; "row" is the compact list inside the product page's information
+ * list, where the row title is the heading.
+ */
+export function ShippingNote({ settings = DEFAULT_PRESENTATION.delivery, variant = "card" }: { settings?: DeliveryPresentation; variant?: "card" | "row" }) {
   if (!settings.enabled || !settings.cards.length) return null
-  return <section className="fl-delivery" aria-label={settings.heading || "Delivery and exchanges"}>
-    {settings.heading && <h2 className="fl-delivery__heading">{settings.heading}</h2>}
+  const Wrapper = variant === "row" ? "div" : "section"
+  return <Wrapper className={variant === "row" ? "fl-delivery fl-delivery--row" : "fl-delivery"} aria-label={variant === "row" ? undefined : settings.heading || "Delivery and exchanges"}>
+    {variant === "card" && settings.heading && <h2 className="fl-delivery__heading">{settings.heading}</h2>}
     <ul className="fl-delivery__grid">
       {settings.cards.map((card, index) => {
         const Icon = icons[card.icon] ?? Package
@@ -20,5 +26,5 @@ export function ShippingNote({ settings = DEFAULT_PRESENTATION.delivery }: { set
     {settings.link_label && safePresentationHref(settings.link_href) && <Link href={settings.link_href} prefetch={false} className="fl-delivery__help">
       {settings.link_label}<ArrowUpRight size={15} aria-hidden="true" />
     </Link>}
-  </section>
+  </Wrapper>
 }

@@ -36,3 +36,12 @@ test("card and social edits preserve order, validate limits and reject malformed
   for (const patch of [{ brand: "" }, { note: "x".repeat(201) }, { social: Array(9).fill(defaults.footer.social[0]) }, { social: [{ label: "Unsafe", href: "javascript:alert(1)" }] }]) assert.throws(() => validateFooterPresentation({ ...defaults.footer, ...patch }))
   assert.deepEqual(plain(readPresentation({ footer: { social: "broken" }, delivery: { cards: "broken" } })), plain(defaults))
 })
+test("the delivery line under the price is Admin copy: defaulted, blankable and single-line", () => {
+  // A store saved before the field existed gets the default wording.
+  const legacy = readPresentation({ delivery: { enabled: true, heading: "Delivery", cards: defaults.delivery.cards, link_label: "", link_href: "" } })
+  assert.equal(legacy.delivery.estimate, "Delivery in 1–3 business days")
+  assert.equal(validateDeliveryPresentation({ ...defaults.delivery, estimate: "  Ships in 2 days  " }).estimate, "Ships in 2 days")
+  // Blank deliberately hides it and survives a reload.
+  assert.equal(readPresentation({ delivery: { ...defaults.delivery, estimate: "" } }).delivery.estimate, "")
+  for (const estimate of ["x".repeat(61), 5, "a\nb", "tab\there"]) assert.throws(() => validateDeliveryPresentation({ ...defaults.delivery, estimate }), String(estimate))
+})

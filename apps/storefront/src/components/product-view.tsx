@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
 
 import type { MatchingProduct } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
@@ -51,6 +51,7 @@ export default function ProductView({
   caseTypeRecords,
   matchingProduct,
   shipping,
+  deliveryEstimate,
   tabs,
   reviewSummary,
   recommendedItems,
@@ -89,7 +90,10 @@ export default function ProductView({
   /** This design's AirPods case for the Matching Set bundle, or null. */
   matchingProduct?: MatchingProduct | null
   shipping?: ReactNode
+  /** Admin delivery estimate shown after "In stock" (Product delivery). */
+  deliveryEstimate?: string
   tabs: ReactNode
+  /** Stars + review count, linked to the Reviews row; shown above the title. */
   reviewSummary?: ReactNode
   /**
    * Recommended-for-you accessories, shown under the gallery in the left column
@@ -212,9 +216,16 @@ export default function ProductView({
     return variantForCaseType(ct)?.calculated_price?.calculated_amount ?? null
   }
 
+  // The phone title is sized to fit one line from its length alone - the same
+  // on the server and the client, so nothing is measured after paint. It is
+  // based on the longest model this design comes in, so switching model never
+  // changes the size.
+  const longestDevice = matrix.devices.reduce((n, d) => Math.max(n, d.length), device.length)
+  const titleChars = device ? designName.length + longestDevice + 8 : designName.length
+
   return (
     <div data-product-ready data-product-path={pagePath} data-product-hydrated={hydratedPath === pagePath}
-      className="grid grid-cols-1 items-start gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
+      className="grid grid-cols-1 items-start gap-4 md:gap-[30px] lg:grid-cols-[minmax(0,1fr)_480px] lg:gap-x-[56px] lg:grid-rows-[max-content_1fr]">
       <div className="lg:col-start-1 lg:row-start-1">
         <ProductGallery
           key={selected?.id ?? "default"}
@@ -224,30 +235,26 @@ export default function ProductView({
       </div>
 
       <ProductDetailsSticky>
-        {/* Stock badge, above the title like florayn's "N in stock". Reflects
-            the live (case type, device) blank; an untracked pair reads as in
-            stock. */}
-        {(() => {
-          const n = stock[simple ? `variant:${selectedId}` : `${caseType}|${device}`]
-          const inStock = n === undefined || n > 0
-          return (
-            <p
-              className={`mb-1.5 text-[15px] ${inStock ? "text-[#444]" : "text-danger"}`}
-            >
-              {inStock ? "In stock" : "Sold out"}
-            </p>
-          )
-        })()}
-
-        {/* Title only, matching florayn: "Design – Device Case", no collection
-            eyebrow, no case-type suffix, no fit paragraph above the price. It
-            follows the live device so an in-place model change keeps it true. */}
-        <h1 className="text-[1.625rem] font-semibold leading-[1.21] tracking-[-0.034em] text-[#111]">
-          {device ? `${designName} – ${device} Case` : designName}
-        </h1>
+        {/* Reviews first, then the title, then (in the buy box) the price and
+            the live stock/delivery line. Stock lives in the buy box so it uses
+            the refreshed availability the Add to cart button uses. */}
         {reviewSummary}
 
-        <div className="mt-3">
+        {/* "Design – Device Case". On a phone it stays on one line: only the
+            design name can shorten, never the model. The full text is always
+            in the heading. It follows the live device. */}
+        <h1 className="fl-pdp-title" style={{ "--title-chars": titleChars } as CSSProperties}>
+          {device ? (
+            <>
+              <span className="fl-pdp-title__name">{designName}</span>
+              <span className="fl-pdp-title__model">{` – ${device} Case`}</span>
+            </>
+          ) : (
+            <span className="fl-pdp-title__name">{designName}</span>
+          )}
+        </h1>
+
+        <div className="mt-1.5 md:mt-3">
           <ProductBuyBox
             matrix={matrix}
             selected={selected}
@@ -283,6 +290,7 @@ export default function ProductView({
               ) : null
             }
             shipping={shipping}
+            deliveryEstimate={deliveryEstimate}
             simple={simple}
             optionLabel={optionLabel}
           />
@@ -298,17 +306,19 @@ export default function ProductView({
           {/* Below the fold: mount only when the viewport nears it, so the
               buy box + gallery hydrate first on a low-end phone. */}
           <LazyReveal minHeight={360}>
-            <RecommendedForYou items={recommendedItems ?? []} />
-            <RecommendedForYou items={manualFeaturedItems ?? []} title="We think you’ll love" />
-            <YouWillLove
-              items={youWillLoveItems ?? []}
-              device={device}
-              caseType={caseType}
-            />
-            <FeaturesSection
-              blocks={featureBlocks ?? []}
-              group={featuresGroup(productForm, caseType)}
-            />
+            <div className="fl-pdp-strips">
+              <RecommendedForYou items={recommendedItems ?? []} />
+              <RecommendedForYou items={manualFeaturedItems ?? []} title="We think you’ll love" />
+              <YouWillLove
+                items={youWillLoveItems ?? []}
+                device={device}
+                caseType={caseType}
+              />
+              <FeaturesSection
+                blocks={featureBlocks ?? []}
+                group={featuresGroup(productForm, caseType)}
+              />
+            </div>
           </LazyReveal>
         </div>
       ) : null}

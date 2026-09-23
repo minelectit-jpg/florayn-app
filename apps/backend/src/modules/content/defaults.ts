@@ -161,7 +161,8 @@ export const DEFAULT_HOME_SECTIONS = [
         NEWEST_SLIDE,
         slide("NEW COLLECTION", "Crafted For Those Who Dare To Dream", "/collection/muse-marvel/"),
         slide("NEW COLLECTIONS", "Florayn Blooms", "/collection/florayn-blooms/"),
-        slide("NEW COLLECTIONS", "Bug Life", "/collection/bug-life/"),
+        // The Bug Life photo carries its own wordmark; no headline over it.
+        slide("NEW COLLECTIONS", "", "/collection/bug-life/"),
         slide("NEW COLLECTIONS", "Carry A Masterpiece In Your Hands", "/collection/van-gogh-dreams/"),
       ],
     },

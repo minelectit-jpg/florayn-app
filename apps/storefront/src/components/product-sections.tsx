@@ -45,7 +45,7 @@ export function MoreDesigns({
   if (!items.length && !currentName) return null
 
   return (
-    <section className="mt-6">
+    <section className="mt-3.5 md:mt-6">
       <p className="fl-pdp-label">MORE DESIGNS</p>
       <DragScroll className="fl-more-designs">
         {currentName ? (

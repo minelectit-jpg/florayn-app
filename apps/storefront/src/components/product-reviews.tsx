@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { ArrowRight, MessageSquare, Star } from "lucide-react"
 import type { ReviewPage } from "@/lib/product-reviews"
@@ -8,9 +8,37 @@ import { loadReviewPage, submitReview } from "@/lib/review-actions"
 export function ReviewStars({ rating }: { rating: number }) {
   return <span className="fl-review-stars" aria-label={`${rating.toFixed(1)} out of 5 stars`}>{[1, 2, 3, 4, 5].map((n) => <Star key={n} size={16} fill={n <= Math.round(rating) ? "currentColor" : "none"} aria-hidden="true" />)}</span>
 }
-export default function ProductReviews({ productId, pagePath, initial, heading, intro }: {
+/**
+ * Customer reviews. "section" is a standalone band with its own heading and
+ * the #customer-reviews id. "accordion" sits inside the product information
+ * list's Reviews row, which owns the heading and the id; it opens that row
+ * whenever something links to #customer-reviews (the stars under the gallery,
+ * or the sign-in return link).
+ */
+export default function ProductReviews({ productId, pagePath, initial, heading, intro, variant = "section" }: {
   productId: string; pagePath: string; initial: ReviewPage | null; heading: string; intro: string
+  variant?: "section" | "accordion"
 }) {
+  const rootRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (variant !== "accordion") return
+    const row = rootRef.current?.closest("details")
+    if (!row) return
+    const reveal = () => { row.open = true }
+    if (window.location.hash === "#customer-reviews") reveal()
+    const onHash = () => { if (window.location.hash === "#customer-reviews") reveal() }
+    // Runs before the browser follows the link, so it scrolls to an open row.
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest?.('a[href$="#customer-reviews"]')) reveal()
+    }
+    window.addEventListener("hashchange", onHash)
+    document.addEventListener("click", onClick, true)
+    return () => {
+      window.removeEventListener("hashchange", onHash)
+      document.removeEventListener("click", onClick, true)
+    }
+  }, [variant])
   const [data, setData] = useState(initial)
   const [open, setOpen] = useState(false)
   const [rating, setRating] = useState(0)
@@ -33,8 +61,9 @@ export default function ProductReviews({ productId, pagePath, initial, heading, 
       setData(next)
     })
   }
-  return <section id="customer-reviews" className="fl-reviews" aria-labelledby="reviews-heading">
-    <header className="fl-reviews__header"><div><p className="eyebrow">FROM OUR COMMUNITY</p><h2 id="reviews-heading">{heading}</h2><p>{intro}</p></div>
+  const inline = variant === "accordion"
+  return <section ref={rootRef} id={inline ? undefined : "customer-reviews"} className={inline ? "fl-reviews fl-reviews--inline" : "fl-reviews"} aria-labelledby={inline ? "customer-reviews-heading" : "reviews-heading"}>
+    <header className="fl-reviews__header">{inline ? <p>{intro}</p> : <div><p className="eyebrow">FROM OUR COMMUNITY</p><h2 id="reviews-heading">{heading}</h2><p>{intro}</p></div>}
       <button type="button" className="fl-reviews__write" onClick={write}><MessageSquare size={17} />Write a review<ArrowRight size={16} /></button>
     </header>
     <div className="fl-reviews__layout">

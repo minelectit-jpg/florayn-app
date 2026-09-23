@@ -74,6 +74,7 @@ export default function ProductBuyBox({
   priceForCaseType,
   moreDesigns,
   shipping,
+  deliveryEstimate,
   simple = false,
   optionLabel,
 }: {
@@ -106,6 +107,8 @@ export default function ProductBuyBox({
   priceForCaseType: (caseType: string) => number | null
   moreDesigns?: ReactNode
   shipping?: ReactNode
+  /** Admin delivery estimate shown after "In stock"; blank hides it. */
+  deliveryEstimate?: string
   /**
    * Simple mode: a non-case product (e.g. a StickPad with a Color option). The
    * device drawer and the multi-buy pack widget are hidden, and the option's
@@ -233,9 +236,22 @@ export default function ProductBuyBox({
 
   return (
     <div>
-      {/* Price - the selected variant's, 26px/600 to match the title. */}
-      <p className="text-[1.625rem] font-semibold leading-none tracking-[-0.034em] tabular-nums">
+      {/* Price - the selected variant's. */}
+      <p className="fl-pdp-price">
         {formatPrice(price?.calculated_amount, price?.currency_code)}
+      </p>
+
+      {/* Availability from the live (refreshed) stock, so it always agrees
+          with the Add to cart button. The delivery estimate is Admin copy
+          (Product delivery) and never shows beside "Sold out". */}
+      <p className={`fl-pdp-stock${selectedOut ? " is-out" : ""}`}>
+        <span>{selectedOut ? "Sold out" : "In stock"}</span>
+        {!selectedOut && deliveryEstimate ? (
+          <>
+            <span className="fl-pdp-stock__sep" aria-hidden="true">|</span>
+            <span>{deliveryEstimate}</span>
+          </>
+        ) : null}
       </p>
 
       {/* Keep the new Bundle/pack control in the original offer position. */}
@@ -265,7 +281,7 @@ export default function ProductBuyBox({
           Device, then More designs, then Case type. Hidden for a simple
           accessory (StickPad), which has no device. */}
       {!simple ? (
-      <div className="mt-5">
+      <div className="mt-3.5 md:mt-5">
         <div className="min-w-0">
         <p className="fl-pdp-label">MODEL</p>
         <button
@@ -314,7 +330,7 @@ export default function ProductBuyBox({
           with the current value beside the label. */}
       {simple ? (
         matrix.caseTypes.length > 1 ? (
-          <section className="mt-6">
+          <section className="mt-4 md:mt-6">
             <p className="fl-pdp-label">
               {(optionLabel ?? "Options").toUpperCase()}
               <span className="ml-2 font-normal normal-case tracking-normal text-ink-muted">
@@ -350,7 +366,7 @@ export default function ProductBuyBox({
       ) : /* CASE TYPE tiles (image + name + price) for a real case product. A
              case type not sold for the selected device is disabled, not hidden. */
       matrix.caseTypes.length > 1 ? (
-        <section className="mt-5">
+        <section className="mt-3.5 md:mt-5">
           <p className="fl-pdp-label">CASE TYPE</p>
           <DragScroll className="fl-case-tiles">
             {matrix.caseTypes.map((ct) => {
@@ -405,7 +421,7 @@ export default function ProductBuyBox({
 
       {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
       {!bundleMode ? <>
-      <div className="mt-5 flex items-stretch gap-[10px]">
+      <div className="mt-4 flex items-stretch gap-[10px] md:mt-5">
         <div className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
             type="button"
@@ -463,7 +479,7 @@ export default function ProductBuyBox({
         type="button"
         onClick={onBuyNow}
         disabled={!selected || selectedOut || buying}
-        className="mt-[10px] flex h-[50px] w-full items-center justify-center gap-2 rounded-[30px] bg-purple px-6 text-[15px] font-semibold text-white transition-colors hover:bg-purple-deep disabled:opacity-60"
+        className="mt-2 flex h-[50px] w-full md:mt-[10px] items-center justify-center gap-2 rounded-[30px] bg-purple px-6 text-[15px] font-semibold text-white transition-colors hover:bg-purple-deep disabled:opacity-60"
       >
         {buying ? <Spinner /> : null}
         {buying ? "Taking you to checkout..." : "Buy it now"}

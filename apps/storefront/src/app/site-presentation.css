@@ -12,6 +12,17 @@
   .fl-delivery__card p { margin-top:4px; font-size:12px; line-height:1.6; color:var(--color-ink-muted); overflow-wrap:anywhere; white-space:pre-line; }
   .fl-delivery__help { display:flex; align-items:center; justify-content:center; gap:7px; min-height:44px; padding:10px 16px; border-top:1px solid var(--color-line); font-size:12px; font-weight:500; color:var(--color-purple-deep); background:color-mix(in srgb,var(--color-purple-tint) 45%,white); }
   .fl-delivery__help:hover { background:var(--color-purple-tint); }
+  /* The same cards as a compact list inside the product information list. */
+  .fl-delivery--row { margin:0; border:0; border-radius:0; overflow:visible; background:none; }
+  .fl-delivery--row .fl-delivery__grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 12px; padding:2px 0 0; }
+  .fl-delivery--row .fl-delivery__card { flex-direction:row; gap:10px; }
+  .fl-delivery--row .fl-delivery__icon { width:30px; height:30px; border-radius:8px; }
+  .fl-delivery--row .fl-delivery__card h3 { color:var(--color-ink); }
+  .fl-delivery--row .fl-delivery__help { justify-content:flex-start; min-height:40px; margin-top:12px; padding:0; border:0; background:none; }
+  .fl-delivery--row .fl-delivery__help:hover { background:none; text-decoration:underline; text-underline-offset:3px; }
+  @media (max-width:400px) {
+    .fl-delivery--row .fl-delivery__grid { grid-template-columns:minmax(0,1fr); }
+  }
   .fl-footer { margin-top:80px; background:linear-gradient(180deg,#f8f6fc 0%,#fcfbfd 100%); border-top:1px solid #ece6f4; color:var(--color-ink); }
   .fl-footer__inner { max-width:1470px; margin:auto; padding:48px 30px 22px; }
   .fl-footer__top { display:flex; justify-content:space-between; align-items:center; gap:40px; padding-bottom:40px; border-bottom:1px solid var(--color-line); }

@@ -62,20 +62,22 @@ export default function YouWillLove({
   caseType?: string
   title?: string
 }) {
-  if (!items.length) return null
+  // Only designs made in the shopper's exact model and case type; the heading
+  // goes with them, so an empty strip leaves nothing behind.
+  const shown = items.filter((item) => !device || !caseType || !!item.variantByPair[`${device}|${caseType}`])
+  if (!shown.length) return null
+  const single = shown.length === 1
 
   return (
-    <section className="mt-12">
-      <div className="flex items-center gap-4">
-        <span className="h-px flex-1 bg-line" />
-        <h2 className="text-center text-[1.05rem] font-semibold uppercase tracking-[0.04em]">
-          {title}
-        </h2>
-        <span className="h-px flex-1 bg-line" />
+    <section>
+      <div className="fl-pdp-strip__head">
+        <span aria-hidden="true" />
+        <h2>{title}</h2>
+        <span aria-hidden="true" />
       </div>
 
-      <DragScroll className="mt-5 flex snap-x gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
-        {items.filter((item) => !device || !caseType || !!item.variantByPair[`${device}|${caseType}`]).map((item) => {
+      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title}>
+        {shown.map((item, i) => {
           const pair = device && caseType ? `${device}|${caseType}` : ""
           const image =
             item.imageByPair[pair] ??
@@ -83,23 +85,16 @@ export default function YouWillLove({
             item.thumbnail
           const variant = item.variantByPair[pair]
           const price = variant?.price ?? item.price
-          const meta =
-            device && caseType
-              ? `${device} Case · ${caseType}`
-              : (caseType ?? device ?? "")
           const href = youWillLoveHref(item, device, caseType)
           return (
-            <li
-              key={item.id}
-              className="w-[190px] shrink-0 snap-start sm:w-[210px]"
-            >
-              <article className="fl-card">
+            <li key={`${item.id}-${i}`}>
+              <article className="fl-card group">
                 <div className="fl-card__media">
                   <ProductImage
                     src={image}
                     alt={item.name}
                     label={item.name}
-                    sizes="(max-width: 767px) 60vw, 210px"
+                    sizes={single ? "(max-width: 767px) calc(100vw - 30px), 230px" : "(max-width: 767px) calc(50vw - 20px), 230px"}
                     className="fl-card__img"
                     fillMode="absolute"
                   />
@@ -108,7 +103,13 @@ export default function YouWillLove({
                 <div className="fl-card__summary">
                   <div className="fl-card__titles">
                     <h3 className="fl-card__title">{item.name}</h3>
-                    {meta ? <p className="fl-card__meta">{meta}</p> : null}
+                    {device || caseType ? (
+                      <p className="fl-card__meta">
+                        {device ? <span>{`${device} Case`}</span> : null}
+                        {device && caseType ? <span className="fl-card__meta-separator" aria-hidden="true"> • </span> : null}
+                        {caseType ? <span className="fl-card__case-type">{caseType}</span> : null}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="fl-card__price-row">
