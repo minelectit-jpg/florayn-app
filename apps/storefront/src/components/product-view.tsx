@@ -317,6 +317,7 @@ export default function ProductView({
               <FeaturesSection
                 blocks={featureBlocks ?? []}
                 group={featuresGroup(productForm, caseType)}
+                fallback={!simple}
               />
             </div>
           </LazyReveal>

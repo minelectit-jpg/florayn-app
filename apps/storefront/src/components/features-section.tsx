@@ -11,22 +11,29 @@ import type { FeatureBlock } from "@/lib/content"
  * Blocks are tagged with a group — a case type for phones, a product-type label
  * (AirPods, Sticky Pad…) for everything else. The band shows the blocks for the
  * live group; a group with none of its own falls back to the untagged (default)
- * blocks, so it follows the buy box like the gallery does.
+ * blocks, so it follows the buy box like the gallery does. The defaults describe
+ * a case, so a non-case accessory (a phone charm) turns the fallback off and
+ * shows nothing until its own blocks are added in the admin.
  */
 export default function FeaturesSection({
   blocks,
   group,
+  fallback = true,
 }: {
   blocks: FeatureBlock[]
   /** The live group, e.g. "Signature" or "AirPods". */
   group?: string
+  /** Show the untagged default blocks when the group has none of its own. */
+  fallback?: boolean
 }) {
   const forGroup = group
     ? blocks.filter((b) => b.case_type === group)
     : []
   const shown = forGroup.length
     ? forGroup
-    : blocks.filter((b) => !b.case_type)
+    : fallback
+      ? blocks.filter((b) => !b.case_type)
+      : []
 
   if (!shown.length) return null
 

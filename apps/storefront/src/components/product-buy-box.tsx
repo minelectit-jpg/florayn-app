@@ -337,7 +337,7 @@ export default function ProductBuyBox({
                 {caseType}
               </span>
             </p>
-            <ul className="mt-2 flex gap-[10px] overflow-x-auto pb-1">
+            <DragScroll className="fl-swatches mt-2 flex gap-[10px] overflow-x-auto" indicator>
               {matrix.caseTypes.map((ct) => {
                 const isCurrent = ct === caseType
                 return (
@@ -360,7 +360,7 @@ export default function ProductBuyBox({
                   </li>
                 )
               })}
-            </ul>
+            </DragScroll>
           </section>
         ) : null
       ) : /* CASE TYPE tiles (image + name + price) for a real case product. A

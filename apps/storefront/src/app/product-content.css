@@ -161,5 +161,5 @@
   .fl-pdp-strips { gap:14px; }
 }
 /* Rails show the slider bar instead of a native scrollbar, on every device. */
-.fl-more-designs, .fl-case-tiles, .fl-pdp-rail { padding-bottom:2px; scrollbar-width:none; }
-.fl-more-designs::-webkit-scrollbar, .fl-case-tiles::-webkit-scrollbar, .fl-pdp-rail::-webkit-scrollbar { display:none; }
+.fl-more-designs, .fl-case-tiles, .fl-pdp-rail, .fl-swatches { padding-bottom:2px; scrollbar-width:none; }
+.fl-more-designs::-webkit-scrollbar, .fl-case-tiles::-webkit-scrollbar, .fl-pdp-rail::-webkit-scrollbar, .fl-swatches::-webkit-scrollbar { display:none; }

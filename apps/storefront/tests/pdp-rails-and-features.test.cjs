@@ -83,3 +83,26 @@ test("the indicator adds a decorative slider that follows the scroll position", 
   frames[1]()
   assert.equal(barRef.current.dataset.hidden, "true")
 })
+
+test("a non-case accessory shows only its own Features blocks, never the case defaults", () => {
+  const filename = path.join(__dirname, "../src/components/features-section.tsx")
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+    fileName: filename,
+  }).outputText
+  const exports = {}
+  const jsx = (type, props) => ({ type, props })
+  vm.runInNewContext(code, { exports, require(name) {
+    if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "Fragment" }
+    throw new Error(`Unexpected dependency: ${name}`)
+  } }, { filename })
+  const Features = exports.default
+  const blocks = [
+    { id: "case", title: "Drop-tested protection", case_type: null },
+    { id: "pad", title: "Sticks anywhere", case_type: "Sticky Pad" },
+  ]
+  const ids = (tree) => JSON.stringify(tree).match(/"key":"[^"]+"|Drop-tested|Sticks anywhere/g)
+  assert.ok(ids(Features({ blocks, group: "Signature" })).includes("Drop-tested"), "a case falls back to the defaults")
+  assert.equal(Features({ blocks, group: "Phone Charm", fallback: false }), null, "a charm with no blocks shows none")
+  assert.deepEqual(ids(Features({ blocks, group: "Sticky Pad", fallback: false })), ["Sticks anywhere"])
+})
