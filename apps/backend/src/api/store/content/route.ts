@@ -1,18 +1,23 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
+import { Modules } from "@medusajs/framework/utils"
 
 import { CONTENT_MODULE } from "../../../modules/content"
-import { buildMenu, getContent } from "../../../modules/content/config"
+import { buildMenu, getCollectionCards, getContent } from "../../../modules/content/config"
 import { readStorefrontPresentation } from "../../../lib/read-storefront-presentation"
 
 /**
  * GET /store/content - everything the shell and the home page need: the
- * visible home sections in order, the header mega menu and the footer.
+ * visible home sections in order, the header mega menu, the footer, and the
+ * visible collection landing pages as cards.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)
-  const [{ sections, menuSections, items }, { settings }] = await Promise.all([
+  const productModule: any = req.scope.resolve(Modules.PRODUCT)
+  const [{ sections, menuSections, items }, { settings }, collections] = await Promise.all([
     getContent(service),
     readStorefrontPresentation(req.scope),
+    // Cards are a nicety; a failure here must not take the menu down with it.
+    getCollectionCards(service, productModule).catch(() => []),
   ])
 
   res.json({
@@ -33,5 +38,6 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     footerNote: settings.footer.note.replaceAll("{year}", String(new Date().getFullYear())),
     social: settings.footer.social,
     footerAppearance: settings.footer,
+    collections,
   })
 }

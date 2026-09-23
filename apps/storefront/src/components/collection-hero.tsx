@@ -1,17 +1,19 @@
 import Link from "next/link"
 
-import ProductImage from "@/components/product-image"
+import ArtImage from "@/components/art-image"
 import type { CollectionPage } from "@/lib/content"
 
 /**
- * The top of a collection landing page: a full-bleed hero, then the section
- * heading and copy above the grid.
+ * The top of a collection landing page, in the layout the admin picked:
  *
- * The ten live Elementor pages share this structure but not a design - their
- * headings range from 90px/600 right-aligned white to 136px/700 left-aligned
- * cream, with different button shapes. Rather than reproduce ten one-offs,
- * this is one consistent treatment on the brand scale, with the content
- * coming from the admin.
+ *   overlay   full-bleed photo, copy bottom-left (florayn's default hero)
+ *   centered  full-bleed photo, a big centred headline
+ *   image     the photo alone - for campaign art with the title baked in
+ *   split     a coloured panel with the copy beside the picture (Van Gogh,
+ *             Bug Life), with optional decor scattered over the panel
+ *
+ * With no picture at all, any layout falls back to split with the
+ * collection's own product artwork, which reads right on every theme.
  */
 export default function CollectionHero({
   page,
@@ -24,54 +26,104 @@ export default function CollectionHero({
   title: string
 }) {
   const heading = page.hero_heading || title
-  const image = page.hero_image_url || fallbackImage
+  const photo = page.hero_image_url
+  const layout = photo ? page.template : "split"
+  const image = photo || fallbackImage
+  // A button pointing at this same page means "take me to the products".
+  const own = `/collection/${page.collection_slug}/`
+  const ctaHref =
+    page.cta_href === own || page.cta_href === own.slice(0, -1) ? "#shop" : page.cta_href
+  const cta =
+    page.cta_label && ctaHref ? (
+      <Link href={ctaHref} className="fl-chero__cta">
+        {page.cta_label}
+      </Link>
+    ) : null
 
-  return (
-    <section className="mb-10">
-      <div className="relative flex h-[420px] items-end overflow-hidden rounded-[14px] bg-ink md:h-[587px]">
-        <span className="absolute inset-0">
-          <ProductImage
-            src={image}
-            alt=""
-            label={heading}
-            priority
-            sizes="100vw"
-          />
-          <span className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/35 to-ink/10" />
-        </span>
+  const copy = (
+    <div className="fl-chero__copy">
+      {page.hero_eyebrow ? <p className="fl-chero__eyebrow">{page.hero_eyebrow}</p> : null}
+      <h1 className="fl-chero__title">{heading}</h1>
+      {page.hero_copy ? <p className="fl-chero__text">{page.hero_copy}</p> : null}
+      {cta}
+    </div>
+  )
 
-        <div className="relative z-10 w-full p-6 text-white md:p-12">
-          {page.hero_eyebrow ? (
-            <p className="text-[12px] font-semibold tracking-wide">
-              {page.hero_eyebrow}
-            </p>
+  let hero
+  if (layout === "split") {
+    hero = (
+      <div className="fl-chero fl-chero--split">
+        <div className="fl-chero__panel">
+          {page.theme.decor.length ? (
+            <div className="fl-chero__decor" aria-hidden="true">
+              {page.theme.decor.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={`${src}-${i}`} src={src} alt="" loading="lazy" decoding="async" />
+              ))}
+            </div>
           ) : null}
-          <h1 className="display mt-2 max-w-3xl text-[38px] leading-[1.05] tracking-[-0.034em] sm:text-[56px] md:text-[72px]">
-            {heading}
-          </h1>
-          {page.cta_label && page.cta_href ? (
-            <Link
-              href={page.cta_href}
-              className="mt-6 inline-grid h-[50px] min-w-[200px] place-items-center rounded-[30px] bg-white px-6 text-[15px] font-semibold text-ink transition-colors hover:bg-purple hover:text-white"
-            >
-              {page.cta_label}
-            </Link>
+          {copy}
+        </div>
+        <div className={`fl-chero__media${photo ? "" : " is-artwork"}`}>
+          {image ? (
+            <ArtImage
+              src={image}
+              mobileSrc={page.hero_mobile_image_url}
+              alt=""
+              priority
+              sizes="(max-width: 767px) 100vw, 50vw"
+              className={photo ? "object-cover" : "object-contain"}
+            />
           ) : null}
         </div>
       </div>
+    )
+  } else if (layout === "image") {
+    hero = (
+      <div className="fl-chero fl-chero--image">
+        <div className={`fl-chero__frame${page.hero_mobile_image_url ? " has-mobile" : ""}`}>
+          <ArtImage
+            src={photo!}
+            mobileSrc={page.hero_mobile_image_url}
+            alt={heading}
+            priority
+            sizes="(max-width: 1470px) 100vw, 1410px"
+            className="object-cover"
+          />
+        </div>
+        {/* The picture carries the title; keep the heading for the outline. */}
+        <div className="fl-chero__below">
+          <h1 className="sr-only">{heading}</h1>
+          {cta}
+        </div>
+      </div>
+    )
+  } else {
+    hero = (
+      <div className={`fl-chero fl-chero--${layout}`}>
+        <div className={`fl-chero__frame${page.hero_mobile_image_url ? " has-mobile" : ""}`}>
+          <ArtImage
+            src={photo!}
+            mobileSrc={page.hero_mobile_image_url}
+            alt=""
+            priority
+            sizes="(max-width: 1470px) 100vw, 1410px"
+            className="object-cover"
+          />
+          <span className="fl-chero__shade" aria-hidden="true" />
+          {copy}
+        </div>
+      </div>
+    )
+  }
 
+  return (
+    <section className="fl-chero-wrap">
+      {hero}
       {page.intro_heading || page.intro_copy ? (
-        <div className="mx-auto mt-10 max-w-2xl text-center">
-          {page.intro_heading ? (
-            <h2 className="display text-[2.1rem] leading-tight tracking-[-0.034em]">
-              {page.intro_heading}
-            </h2>
-          ) : null}
-          {page.intro_copy ? (
-            <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">
-              {page.intro_copy}
-            </p>
-          ) : null}
+        <div className="fl-cintro">
+          {page.intro_heading ? <h2 className="fl-cintro__title">{page.intro_heading}</h2> : null}
+          {page.intro_copy ? <p className="fl-cintro__text">{page.intro_copy}</p> : null}
         </div>
       ) : null}
     </section>

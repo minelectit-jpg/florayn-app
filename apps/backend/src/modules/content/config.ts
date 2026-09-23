@@ -1,4 +1,5 @@
 import { DEFAULT_COLLECTION_PAGES } from "./collection-pages"
+import { normaliseBlocks, normaliseTemplate, normaliseTheme } from "./collection-templates"
 import {
   DEFAULT_FEATURE_BLOCKS,
   DEFAULT_HOME_SECTIONS,
@@ -122,8 +123,15 @@ export async function getCollectionPages(service: any) {
     await service.createCollectionPages(
       DEFAULT_COLLECTION_PAGES.map((page, index) => ({
         ...page,
+        title: page.title ?? null,
+        template: page.template ?? "overlay",
+        theme: page.theme ?? null,
         cta_href: page.cta_href ?? `/collection/${page.collection_slug}/`,
         hero_image_url: page.hero_image_url ?? null,
+        hero_mobile_image_url: page.hero_mobile_image_url ?? null,
+        hero_copy: page.hero_copy ?? null,
+        card_image_url: page.card_image_url ?? null,
+        blocks: page.blocks ?? [],
         design_slugs: [],
         is_visible: true,
         position: index,
@@ -133,6 +141,73 @@ export async function getCollectionPages(service: any) {
   }
 
   return pages ?? []
+}
+
+/**
+ * The visible landing pages as cards for "Shop by collection" and the
+ * collections index: name, picture and colours. A page without a card image
+ * falls back to its hero, then to one of the collection's own product renders.
+ */
+export async function getCollectionCards(service: any, productModule: any) {
+  const pages = (await getCollectionPages(service))
+    .filter((p: any) => p.is_visible)
+    .map(shapeCollectionPage)
+  if (!pages.length) return []
+
+  const collections = await productModule.listProductCollections(
+    { handle: pages.map((p: any) => p.collection_slug) },
+    { select: ["id", "handle", "title"], take: pages.length }
+  )
+  const byHandle = new Map<string, any>((collections ?? []).map((c: any) => [c.handle, c]))
+
+  const needArt = pages
+    .filter((p: any) => !p.card_image_url && !p.hero_image_url)
+    .map((p: any) => byHandle.get(p.collection_slug)?.id)
+    .filter(Boolean)
+  const artwork = new Map<string, string>()
+  if (needArt.length) {
+    const products = await productModule.listProducts(
+      { collection_id: needArt },
+      { select: ["id", "thumbnail", "collection_id", "metadata"], take: needArt.length * 40 }
+    )
+    for (const product of products ?? []) {
+      if (!product.thumbnail || artwork.has(product.collection_id)) continue
+      if ((product.metadata?.form ?? "phone") !== "phone") continue
+      artwork.set(product.collection_id, product.thumbnail)
+    }
+  }
+
+  return pages.map((page: any) => {
+    const collection = byHandle.get(page.collection_slug)
+    const image = page.card_image_url || page.hero_image_url || null
+    return {
+      slug: page.collection_slug,
+      collection_id: collection?.id ?? null,
+      title: page.title || collection?.title || page.hero_heading || page.collection_slug,
+      image,
+      /** A product render (white ground), shown contained rather than cropped. */
+      artwork: image ? null : (collection ? artwork.get(collection.id) ?? null : null),
+      theme: {
+        bg: page.theme.bg,
+        text: page.theme.text,
+        accent: page.theme.accent,
+        accent_text: page.theme.accent_text,
+        hero_bg: page.theme.hero_bg,
+        hero_text: page.theme.hero_text,
+      },
+    }
+  })
+}
+
+/** A page row with its look filled in: old rows predate template/theme/blocks. */
+export function shapeCollectionPage(page: any) {
+  return {
+    ...page,
+    template: normaliseTemplate(page.template),
+    theme: normaliseTheme(page.theme),
+    blocks: normaliseBlocks(page.blocks),
+    design_slugs: Array.isArray(page.design_slugs) ? page.design_slugs : [],
+  }
 }
 
 /**

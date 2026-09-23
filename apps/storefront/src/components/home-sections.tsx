@@ -1,55 +1,88 @@
+import { ArrowRight, ArrowUpRight, BadgeCheck, Star } from "lucide-react"
 import Link from "next/link"
+import type { CSSProperties } from "react"
 
+import ArtImage from "@/components/art-image"
+import DragScroll from "@/components/drag-scroll"
+import HeroSlider, { type HeroSlide } from "@/components/hero-slider"
 import ProductCard from "@/components/product-card"
-import ProductImage from "@/components/product-image"
-import type { HomeSection } from "@/lib/content"
+import type { CollectionCard, HomeSection } from "@/lib/content"
 import type { StoreProduct } from "@/lib/medusa"
 
-// The root layout already provides the 1470 container and its padding,
-// so sections only manage their own vertical rhythm.
-const WRAP = "w-full"
+/*
+ * The home page bands. Each reads its own `config` from the admin (Home page
+ * screen), so pictures, links and copy change without a deploy. Everything
+ * here renders on the server; only the hero slideshow and the drag-to-scroll
+ * rails hydrate.
+ */
 
-/** Circular category shortcuts, the first band on the live home page. */
+function SectionHeader({
+  section,
+  fallbackTitle,
+  moreHref,
+  moreLabel = "View all",
+  center = false,
+}: {
+  section: HomeSection
+  fallbackTitle?: string
+  moreHref?: string | null
+  moreLabel?: string
+  center?: boolean
+}) {
+  const title = section.title ?? fallbackTitle
+  if (!title && !section.eyebrow && !section.subtitle) return null
+  return (
+    <div className={`fl-home-head${center ? " is-center" : ""}`}>
+      <div>
+        {section.eyebrow ? <p className="fl-home-eyebrow">{section.eyebrow}</p> : null}
+        {title ? <h2 className="fl-home-title">{title}</h2> : null}
+        {section.subtitle ? <p className="fl-home-subtitle">{section.subtitle}</p> : null}
+      </div>
+      {moreHref && !center ? (
+        <Link href={moreHref} className="fl-home-more">
+          {moreLabel}
+          <ArrowRight size={16} aria-hidden="true" />
+        </Link>
+      ) : null}
+    </div>
+  )
+}
+
+function initials(label: string) {
+  return label.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
+}
+
+/** Round category shortcuts with product photos, the first band on live. */
 function CategoryPills({ section }: { section: HomeSection }) {
-  const items: { label: string; href: string | null; note?: string }[] =
+  const items: { label: string; href: string | null; note?: string; image?: string | null }[] =
     section.config.items ?? []
   if (!items.length) return null
 
   return (
-    <section className={`${WRAP} mt-9 mb-6`}>
-      <ul className="flex gap-6 overflow-x-auto pb-2 sm:justify-center">
+    <section className="fl-home-pills" aria-label={section.title ?? "Shop by category"}>
+      <ul>
         {items.map((item) => {
           const body = (
             <>
-              <span className="relative block size-[60px] overflow-hidden rounded-full border border-line">
-                <ProductImage src={null} alt="" label={item.label} sizes="60px" />
+              <span className="fl-home-pills__circle">
+                {item.image ? (
+                  <ArtImage src={item.image} alt="" sizes="96px" className="object-cover" />
+                ) : (
+                  <span className="fl-home-pills__initials" aria-hidden="true">{initials(item.label)}</span>
+                )}
               </span>
-              <span className="mt-2 block max-w-[92px] text-center text-[11px] font-semibold uppercase leading-tight tracking-wide">
+              <span className="fl-home-pills__label">
                 {item.label}
-                {item.note ? (
-                  <span className="block font-normal text-ink-faint">
-                    ({item.note})
-                  </span>
-                ) : null}
+                {item.note ? <span className="fl-home-pills__note">{item.note}</span> : null}
               </span>
             </>
           )
           return (
-            <li key={item.label} className="shrink-0">
+            <li key={item.label}>
               {item.href ? (
-                <Link
-                  href={item.href}
-                  className="flex flex-col items-center transition-opacity hover:opacity-80"
-                >
-                  {body}
-                </Link>
+                <Link href={item.href} className="fl-home-pills__item">{body}</Link>
               ) : (
-                <span
-                  aria-disabled="true"
-                  className="flex cursor-default flex-col items-center opacity-55"
-                >
-                  {body}
-                </span>
+                <span aria-disabled="true" className="fl-home-pills__item is-disabled">{body}</span>
               )}
             </li>
           )
@@ -59,133 +92,87 @@ function CategoryPills({ section }: { section: HomeSection }) {
   )
 }
 
-/**
- * The hero. Live runs a carousel; this renders the first slide as the banner
- * and the rest as a row beneath, so every slide stays reachable without
- * shipping a carousel that hides three quarters of the content.
- */
 function Hero({ section }: { section: HomeSection }) {
-  const slides: { eyebrow: string; heading: string; href: string }[] =
-    section.config.slides ?? []
+  const slides: HeroSlide[] = (section.config.slides ?? [])
+    .filter((s: Partial<HeroSlide>) => s && s.href)
+    .map((s: Partial<HeroSlide>) => ({
+      eyebrow: s.eyebrow ?? null,
+      heading: s.heading ?? null,
+      href: s.href!,
+      cta_label: s.cta_label ?? null,
+      image: s.image ?? null,
+      mobile_image: s.mobile_image ?? null,
+    }))
   if (!slides.length) return null
-
-  const [lead, ...rest] = slides
-  const cta = section.cta_label ?? "Shop Collection"
-
-  return (
-    <section className={WRAP}>
-      <Link
-        href={lead.href}
-        className="group relative flex h-[420px] items-end overflow-hidden rounded-[14px] bg-ink md:h-[505px]"
-      >
-        <span className="absolute inset-0">
-          <ProductImage src={null} alt="" label={lead.heading} priority sizes="100vw" />
-          <span className="absolute inset-0 bg-gradient-to-r from-ink/75 via-ink/40 to-transparent" />
-        </span>
-        <span className="relative z-10 max-w-xl p-6 text-white md:p-10">
-          <span className="block text-[12px] font-semibold tracking-wide">
-            {lead.eyebrow}
-          </span>
-          <span className="display mt-3 block text-[32px] leading-[1.1] tracking-[-0.034em] sm:text-[40px] md:text-[50px] md:leading-[55px]">
-            {lead.heading}
-          </span>
-          <span className="mt-6 inline-grid h-[50px] w-[200px] place-items-center rounded-[30px] bg-white text-[15px] font-semibold text-ink transition-colors group-hover:bg-purple group-hover:text-white">
-            {cta}
-          </span>
-        </span>
-      </Link>
-
-      {rest.length ? (
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
-          {rest.map((slide) => (
-            <li key={slide.heading}>
-              <Link
-                href={slide.href}
-                className="group relative flex h-[150px] items-end overflow-hidden rounded-[12px] bg-ink"
-              >
-                <span className="absolute inset-0">
-                  <ProductImage src={null} alt="" label={slide.heading} sizes="33vw" />
-                  <span className="absolute inset-0 bg-ink/45 transition-colors group-hover:bg-ink/30" />
-                </span>
-                <span className="relative z-10 p-5 text-white">
-                  <span className="block text-[10px] font-semibold tracking-wide">
-                    {slide.eyebrow}
-                  </span>
-                  <span className="display mt-1 block text-xl leading-tight">
-                    {slide.heading}
-                  </span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  )
+  return <HeroSlider slides={slides} ctaLabel={section.cta_label ?? "Shop Collection"} />
 }
 
-/** The repeating delivery strip. */
+/** A slow ticker of short store promises (delivery, payment). */
 function Marquee({ section }: { section: HomeSection }) {
-  const text = section.title ?? ""
-  if (!text) return null
-  const run = Array.from({ length: 8 }, (_, i) => i)
+  const items: string[] = (section.config.items ?? []).filter(Boolean)
+  const messages = items.length ? items : section.title ? [section.title] : []
+  if (!messages.length) return null
+  // Enough copies to overfill a wide screen; the second half loops the first.
+  const run = Array.from({ length: Math.max(2, Math.ceil(8 / messages.length)) }, () => messages).flat()
 
   return (
-    <section className="my-6 overflow-hidden border-y border-line py-3">
-      <ul className="flex justify-between gap-10 whitespace-nowrap px-4">
-        {run.map((i) => (
-          <li
-            key={i}
-            className="text-[13px] font-medium text-ink-muted"
-            aria-hidden={i > 0}
-          >
-            {text}
-          </li>
+    <section className="fl-marquee" aria-label={messages.join(". ")}>
+      <div className="fl-marquee__track" aria-hidden="true">
+        {[0, 1].map((half) => (
+          <ul key={half}>
+            {run.map((text, i) => (
+              <li key={`${half}-${i}`}>
+                <span className="fl-marquee__dot" />
+                {text}
+              </li>
+            ))}
+          </ul>
         ))}
-      </ul>
+      </div>
     </section>
   )
 }
 
-/** Image tiles with the label bottom-left and a corner arrow, as on live. */
+/** Picture tiles with the label bottom-left and a corner arrow, as on live. */
 function TileGrid({ section }: { section: HomeSection }) {
-  const tiles: { label: string; href: string }[] = section.config.tiles ?? []
+  const tiles: { label: string; subtitle?: string | null; href: string; image?: string | null }[] =
+    section.config.tiles ?? []
   const columns = Number(section.config.columns) || 2
   if (!tiles.length) return null
 
-  const height =
-    columns >= 4 ? "h-[220px] md:h-[300px]" : "h-[320px] md:h-[504px]"
-  const grid =
-    columns >= 4
-      ? "grid-cols-2 lg:grid-cols-4"
-      : columns === 3
-        ? "grid-cols-1 sm:grid-cols-3"
-        : "grid-cols-1 sm:grid-cols-2"
+  const cols = columns >= 4 ? 4 : columns === 3 ? 3 : 2
+  const sizes =
+    cols === 4
+      ? "(max-width: 1023px) 50vw, 25vw"
+      : cols === 3
+        ? "(max-width: 767px) 100vw, 33vw"
+        : "(max-width: 639px) 100vw, 50vw"
 
   return (
-    <section className={`${WRAP} mb-5`}>
-      <ul className={`grid gap-4 ${grid}`}>
+    <section className="fl-home-section">
+      <SectionHeader section={section} />
+      <ul className={`fl-tiles fl-tiles--${cols}`}>
         {tiles.map((tile) => (
-          <li key={tile.label}>
-            <Link
-              href={tile.href}
-              className={`group relative flex ${height} items-end overflow-hidden rounded-[12px] bg-surface`}
-            >
-              <span className="absolute inset-0">
-                <ProductImage
-                  src={null}
+          <li key={`${tile.label}-${tile.href}`}>
+            <Link href={tile.href} className="fl-tile group">
+              {tile.image ? (
+                <ArtImage
+                  src={tile.image}
                   alt=""
-                  label={tile.label}
-                  sizes="(max-width: 640px) 100vw, 50vw"
-                  className="transition-transform duration-700 group-hover:scale-[1.04]"
+                  sizes={sizes}
+                  className="fl-tile__img object-cover"
                 />
-              </span>
-              <span className="relative z-10 flex w-full items-center justify-between p-6">
-                <span className="text-lg font-semibold text-white drop-shadow">
-                  {tile.label}
+              ) : (
+                <span className="fl-tile__placeholder" aria-hidden="true">{initials(tile.label)}</span>
+              )}
+              <span className="fl-tile__shade" aria-hidden="true" />
+              <span className="fl-tile__body">
+                <span>
+                  <span className="fl-tile__label">{tile.label}</span>
+                  {tile.subtitle ? <span className="fl-tile__subtitle">{tile.subtitle}</span> : null}
                 </span>
-                <span className="grid size-9 place-items-center rounded-full bg-white text-ink transition-colors group-hover:bg-purple group-hover:text-white">
-                  ↗
+                <span className="fl-tile__arrow" aria-hidden="true">
+                  <ArrowUpRight size={18} />
                 </span>
               </span>
             </Link>
@@ -204,25 +191,23 @@ function ProductRow({
   products: StoreProduct[]
 }) {
   if (!products.length) return null
+  const cols = products.length % 5 === 0 ? 5 : 4
 
   return (
-    <section className={`${WRAP} mb-20`}>
-      {section.title ? (
-        <h2 className="display mb-5 text-[2.1rem] tracking-[-0.034em]">
-          {section.title}
-        </h2>
-      ) : null}
-      <div className="fl-grid">
+    <section className="fl-home-section">
+      <SectionHeader
+        section={section}
+        moreHref={section.cta_href}
+        moreLabel={section.cta_label ?? "View all"}
+      />
+      <div className="fl-rail" style={{ "--rail-cols": cols } as CSSProperties}>
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
         ))}
       </div>
       {section.cta_label && section.cta_href ? (
-        <div className="mt-8 flex justify-center">
-          <Link
-            href={section.cta_href}
-            className="inline-grid h-[50px] min-w-[200px] place-items-center rounded-[30px] border border-ink px-6 text-[15px] font-semibold transition-colors hover:bg-ink hover:text-white"
-          >
+        <div className="fl-home-cta-mobile">
+          <Link href={section.cta_href} className="fl-button fl-button--outline">
             {section.cta_label}
           </Link>
         </div>
@@ -231,36 +216,141 @@ function ProductRow({
   )
 }
 
+/** The collection landing pages as tall picture cards, in their admin order. */
+function CollectionGrid({
+  section,
+  collections,
+}: {
+  section: HomeSection
+  collections: CollectionCard[]
+}) {
+  const wanted: string[] = section.config.slugs ?? []
+  const limit = Number(section.config.limit) || 12
+  const cards = (
+    wanted.length
+      ? wanted
+          .map((slug) => collections.find((c) => c.slug === slug))
+          .filter((c): c is CollectionCard => Boolean(c))
+      : collections
+  ).slice(0, limit)
+  if (!cards.length) return null
+
+  return (
+    <section className="fl-home-section">
+      <SectionHeader
+        section={section}
+        fallbackTitle="Shop by Collection"
+        moreHref="/collections/"
+        moreLabel="All collections"
+      />
+      <DragScroll className="fl-collection-rail" aria-label={section.title ?? "Collections"}>
+        {cards.map((card) => (
+          <li key={card.slug}>
+            <Link
+              href={`/collection/${card.slug}/`}
+              className="fl-collection-card group"
+              style={
+                {
+                  "--cc-bg": card.image ? card.theme.hero_bg : card.theme.bg,
+                  "--cc-accent": card.theme.accent,
+                  "--cc-accent-text": card.theme.accent_text,
+                } as CSSProperties
+              }
+              draggable={false}
+            >
+              {card.image || card.artwork ? (
+                <ArtImage
+                  src={(card.image ?? card.artwork)!}
+                  alt=""
+                  sizes="(max-width: 767px) 70vw, (max-width: 1023px) 40vw, 300px"
+                  className={card.image ? "fl-collection-card__img object-cover" : "fl-collection-card__img fl-collection-card__img--art object-contain"}
+                />
+              ) : null}
+              <span className="fl-collection-card__shade" aria-hidden="true" />
+              <span className="fl-collection-card__body">
+                <span className="fl-collection-card__title">{card.title}</span>
+                <span className="fl-collection-card__cta">
+                  Explore <ArrowRight size={14} aria-hidden="true" />
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </DragScroll>
+    </section>
+  )
+}
+
+/** A full-width campaign banner with its copy centred over the picture. */
+function Banner({ section }: { section: HomeSection }) {
+  const image: string | null = section.config.image ?? null
+  if (!image && !section.title) return null
+  const content = (
+    <span className="fl-banner__copy">
+      {section.eyebrow ? <span className="fl-banner__eyebrow">{section.eyebrow}</span> : null}
+      {section.title ? <span className="fl-banner__title">{section.title}</span> : null}
+      {section.subtitle ? <span className="fl-banner__subtitle">{section.subtitle}</span> : null}
+      {section.cta_label ? <span className="fl-banner__cta">{section.cta_label}</span> : null}
+    </span>
+  )
+  return (
+    <section className="fl-home-section">
+      {section.cta_href ? (
+        <Link href={section.cta_href} className="fl-banner group">
+          {image ? (
+            <ArtImage src={image} mobileSrc={section.config.mobile_image} alt="" sizes="(max-width: 1470px) 100vw, 1410px" className="fl-banner__img object-cover" />
+          ) : null}
+          <span className="fl-banner__shade" aria-hidden="true" />
+          {content}
+        </Link>
+      ) : (
+        <div className="fl-banner">
+          {image ? (
+            <ArtImage src={image} mobileSrc={section.config.mobile_image} alt="" sizes="(max-width: 1470px) 100vw, 1410px" className="fl-banner__img object-cover" />
+          ) : null}
+          <span className="fl-banner__shade" aria-hidden="true" />
+          {content}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Stars({ rating }: { rating: number }) {
+  return (
+    <span className="fl-stars" role="img" aria-label={`${rating} out of 5 stars`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star key={i} size={15} aria-hidden="true" className={i < rating ? "is-on" : ""} />
+      ))}
+    </span>
+  )
+}
+
 function Testimonials({ section }: { section: HomeSection }) {
-  const quotes: { name: string; badge: string; body: string }[] =
+  const quotes: { name: string; badge?: string | null; body: string; rating?: number }[] =
     section.config.quotes ?? []
   if (!quotes.length) return null
 
   return (
-    <section className={`${WRAP} mb-20`}>
-      <div className="mb-8 text-center">
-        {section.title ? (
-          <h2 className="display text-[2.1rem] tracking-[-0.034em]">
-            {section.title}
-          </h2>
-        ) : null}
-        {section.subtitle ? (
-          <p className="mt-2 text-sm text-ink-muted">{section.subtitle}</p>
-        ) : null}
-      </div>
-      <ul className="grid gap-4 md:grid-cols-3">
+    <section className="fl-home-section">
+      <SectionHeader section={section} center />
+      <ul className="fl-quotes">
         {quotes.map((quote) => (
-          <li
-            key={quote.name}
-            className="rounded-[12px] border border-line bg-surface p-6"
-          >
-            <p className="text-sm leading-relaxed text-ink-muted">
-              &ldquo;{quote.body}&rdquo;
-            </p>
-            <p className="mt-4 text-sm font-semibold">{quote.name}</p>
-            {quote.badge ? (
-              <p className="text-[12px] text-success">{quote.badge}</p>
-            ) : null}
+          <li key={quote.name} className="fl-quote">
+            <Stars rating={Math.min(5, Math.max(1, Number(quote.rating) || 5))} />
+            <p className="fl-quote__body">&ldquo;{quote.body}&rdquo;</p>
+            <div className="fl-quote__who">
+              <span className="fl-quote__avatar" aria-hidden="true">{initials(quote.name)}</span>
+              <span>
+                <span className="fl-quote__name">{quote.name}</span>
+                {quote.badge ? (
+                  <span className="fl-quote__badge">
+                    <BadgeCheck size={14} aria-hidden="true" />
+                    {quote.badge}
+                  </span>
+                ) : null}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
@@ -272,9 +362,11 @@ function Testimonials({ section }: { section: HomeSection }) {
 export default function HomeSectionRenderer({
   section,
   products,
+  collections = [],
 }: {
   section: HomeSection
   products: StoreProduct[]
+  collections?: CollectionCard[]
 }) {
   switch (section.type) {
     case "category_pills":
@@ -287,6 +379,10 @@ export default function HomeSectionRenderer({
       return <TileGrid section={section} />
     case "product_carousel":
       return <ProductRow section={section} products={products} />
+    case "collection_grid":
+      return <CollectionGrid section={section} collections={collections} />
+    case "banner":
+      return <Banner section={section} />
     case "testimonials":
       return <Testimonials section={section} />
     default:

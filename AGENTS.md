@@ -105,6 +105,9 @@ product sticky layout. It records the chosen interactions and safe local QA flow
 Read `CONTACT.md` before changing the Contact page, its admin editor or FAQ
 content. Keep Contact cache invalidation scoped and preserve editable blanks.
 
+Read `HOME_COLLECTIONS.md` before changing the home page, collection landing
+pages, their admin editors or the product card's colours.
+
 Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
 layout; verify real commerce changes using the isolated Medusa integration CI.
