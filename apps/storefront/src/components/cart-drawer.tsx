@@ -137,9 +137,11 @@ export default function CartDrawer() {
         aria-hidden={!isDrawerOpen}
         className={[
           "fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col",
-          "bg-paper shadow-2xl outline-none",
+          "bg-paper outline-none",
           "transition-transform duration-300 ease-out motion-reduce:transition-none",
-          isDrawerOpen ? "translate-x-0" : "translate-x-full",
+          // The shadow only while open: parked off-screen it bled a grey
+          // smudge along the right edge of every page.
+          isDrawerOpen ? "translate-x-0 shadow-2xl" : "translate-x-full",
         ].join(" ")}
       >
         {/* Header */}

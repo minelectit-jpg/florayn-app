@@ -3,13 +3,16 @@ import { unstable_cache } from "next/cache"
 import { notFound } from "next/navigation"
 import { cache } from "react"
 
+import CollectionBlocks from "@/components/collection-blocks"
 import CollectionFilters from "@/components/collection-filters"
 import CollectionHero from "@/components/collection-hero"
+import CollectionShell from "@/components/collection-shell"
 import ProductCard from "@/components/product-card"
 import { getDeviceCatalog } from "@/lib/catalog"
 import { COLLECTION_FIELDS, hydrateCollectionProducts } from "@/lib/collection-products"
 import { getCollectionPage } from "@/lib/content"
 import { listProducts, sdk, type StoreProduct } from "@/lib/medusa"
+import { formForDeviceFamily, productTypeLabel } from "@/lib/product-forms"
 import { buildVariantMatrix } from "@/lib/variant-matrix"
 
 type Params = {
@@ -17,8 +20,21 @@ type Params = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-/** Matches the live site, which opens its collection pages on this device. */
-const DEFAULT_DEVICE = "iPhone 17 Pro Max"
+/** Matches the live site, which opens its collection pages on these devices. */
+const DEFAULT_DEVICE: Record<string, string> = {
+  phone: "iPhone 17 Pro Max",
+  airpods: "AirPods Pro 3",
+}
+
+/** Product-type tabs, in this order, then anything newer alphabetically. */
+const FORM_ORDER = ["phone", "airpods", "watch", "wallet"]
+const FORM_LABELS: Record<string, string> = {
+  phone: "Phone Cases",
+  airpods: "AirPods Cases",
+  watch: "Watch Bands",
+  wallet: "Wallets",
+}
+const formOf = (p: StoreProduct) => (p.metadata?.form as string | undefined) ?? "phone"
 
 /** Families that come in more than one construction. */
 const MULTI_CASE_TYPE_FAMILIES = new Set(["iphone", "samsung"])
@@ -121,28 +137,44 @@ export default async function CollectionPage({ params, searchParams }: Params) {
   ])
 
   /*
-   * Structure B: a design is one phone-case product (plus separate AirPods etc.
-   * products). A collection is browsed as phone cases, so keep the phone form -
-   * that already yields one card per design. Device and Case Type both come from
-   * the products' own option matrix.
+   * Structure B: a design is one product per form - a phone case, an AirPods
+   * case, a watch band... A collection is browsed one form at a time (phone
+   * cases first), which yields one card per design. Device and Case Type both
+   * come from the products' own option matrix.
    */
-  const phoneProducts = products.filter(
-    (p) => (p.metadata?.form ?? "phone") === "phone"
-  )
-  const matrices = new Map(phoneProducts.map((p) => [p.id, buildVariantMatrix(p)]))
+  const forms = [...new Set(products.map(formOf))].sort((a, b) => {
+    const ia = FORM_ORDER.indexOf(a)
+    const ib = FORM_ORDER.indexOf(b)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b)
+  })
+  const requestedDevice = first(query.device)
+  const requestedForm = first(query.form)
+  const requestedFamily = deviceCatalog.find((d) => d.name === requestedDevice)?.family
+  const deviceForm = requestedFamily ? formForDeviceFamily(requestedFamily) : ""
+  const form = forms.includes(requestedForm)
+    ? requestedForm
+    : forms.includes(deviceForm)
+      ? deviceForm
+      : forms.includes("phone")
+        ? "phone"
+        : (forms[0] ?? "phone")
 
-  // Only offer devices this collection actually has stock for.
+  const formProducts = products.filter((p) => formOf(p) === form)
+  const matrices = new Map(formProducts.map((p) => [p.id, buildVariantMatrix(p)]))
+
+  // Only offer devices this collection actually has stock for, in this form's
+  // family (iPhone and Samsung share phone; AirPods never mix in).
   const availableDeviceNames = new Set<string>(
-    phoneProducts.flatMap((p) => matrices.get(p.id)!.devices)
+    formProducts.flatMap((p) => matrices.get(p.id)!.devices)
   )
-  const deviceOptions = deviceCatalog
-    .filter((d) => availableDeviceNames.has(d.name))
+  const available = deviceCatalog.filter((d) => availableDeviceNames.has(d.name))
+  const sameFamily = available.filter((d) => formForDeviceFamily(d.family ?? "") === form)
+  const deviceOptions = (sameFamily.length ? sameFamily : available)
     .map((d) => ({ value: d.name, label: d.name }))
 
-  const requestedDevice = first(query.device)
   const device =
     deviceOptions.find((o) => o.value === requestedDevice)?.value ??
-    deviceOptions.find((o) => o.value === DEFAULT_DEVICE)?.value ??
+    deviceOptions.find((o) => o.value === DEFAULT_DEVICE[form])?.value ??
     deviceOptions[0]?.value ??
     ""
   const deviceSlug = deviceCatalog.find((d) => d.name === device)?.slug ?? null
@@ -152,8 +184,8 @@ export default async function CollectionPage({ params, searchParams }: Params) {
 
   // Products offered for the chosen device, and the case types available on it.
   const forDevice = device
-    ? phoneProducts.filter((p) => matrices.get(p.id)!.devices.includes(device))
-    : phoneProducts
+    ? formProducts.filter((p) => matrices.get(p.id)!.devices.includes(device))
+    : formProducts
 
   const caseTypesForDevice = (p: StoreProduct): string[] => {
     const m = matrices.get(p.id)!
@@ -199,16 +231,19 @@ export default async function CollectionPage({ params, searchParams }: Params) {
     ? `${device} Cases - ${sorted.length}`
     : `${sorted.length} ${sorted.length === 1 ? "product" : "products"}`
 
+  // The hero falls back to a phone render even while AirPods are showing.
+  const artwork =
+    products.find((p) => formOf(p) === "phone" && p.thumbnail)?.thumbnail ??
+    sorted[0]?.thumbnail ??
+    products[0]?.thumbnail ??
+    null
+
   return (
-    <div className="space-y-8">
+    <CollectionShell theme={landing?.theme ?? null}>
       {landing ? (
-        <CollectionHero
-          page={landing}
-          fallbackImage={sorted[0]?.thumbnail ?? products[0]?.thumbnail ?? null}
-          title={group.title}
-        />
+        <CollectionHero page={landing} fallbackImage={artwork} title={group.title} />
       ) : (
-        <header className="space-y-3">
+        <header className="fl-cplain">
           <p className="eyebrow">Collection</p>
           <h1 className="display text-[2.25rem] leading-tight md:text-[3rem]">
             {group.title}
@@ -220,6 +255,8 @@ export default async function CollectionPage({ params, searchParams }: Params) {
       )}
 
       <CollectionFilters
+        forms={forms.map((f) => ({ value: f, label: FORM_LABELS[f] ?? productTypeLabel(f) }))}
+        form={form}
         devices={deviceOptions}
         caseTypes={caseTypeOptions}
         device={device}
@@ -245,7 +282,9 @@ export default async function CollectionPage({ params, searchParams }: Params) {
           Nothing here fits that combination. Try another device or case type.
         </p>
       )}
-    </div>
+
+      {landing?.blocks?.length ? <CollectionBlocks blocks={landing.blocks} /> : null}
+    </CollectionShell>
   )
 }
 

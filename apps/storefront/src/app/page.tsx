@@ -1,6 +1,59 @@
 import HomeSectionRenderer from "@/components/home-sections"
-import { getSiteContent } from "@/lib/content"
+import { getSiteContent, type HomeSection, type SiteContent } from "@/lib/content"
 import { CARD_FIELDS, listProducts, type StoreProduct } from "@/lib/medusa"
+
+/** More carousels than this on one page is a mistake, not a layout. */
+const MAX_CAROUSELS = 4
+
+/**
+ * One carousel's cards: the newest published designs (or a chosen
+ * collection's), one card per design, priced only once the final few are
+ * picked.
+ */
+async function carouselProducts(
+  section: HomeSection,
+  content: SiteContent
+): Promise<StoreProduct[]> {
+  const limit = Number(section.config?.limit) || 5
+  const handle = typeof section.config?.collection === "string" ? section.config.collection : ""
+  const collectionId = handle
+    ? (content.collections ?? []).find((c) => c.slug === handle)?.collection_id ?? null
+    : null
+
+  // Pick the designs before asking Medusa to price their variants. Most of
+  // these 48 candidates never appear in the carousel.
+  const { products: pool } = await listProducts({
+    limit: 48,
+    fields: "id,handle,metadata",
+    order: "-created_at",
+    ...(collectionId ? { collection_id: collectionId } : {}),
+  }, { pricing: false })
+  // One card per design, so a row of five is five artworks rather than the
+  // same artwork in five constructions.
+  const seen = new Set<string>()
+  const selected = pool
+    .filter((product) => {
+      // The phone case is a design's representative card; skip AirPods etc.
+      if ((product.metadata?.form ?? "phone") !== "phone") return false
+      const design =
+        (product.metadata?.design_slug as string) ?? product.handle
+      if (seen.has(design)) return false
+      seen.add(design)
+      return true
+    })
+    .slice(0, limit)
+
+  if (!selected.length) return []
+  const { products: cards } = await listProducts({
+    id: selected.map((product) => product.id),
+    limit: selected.length,
+    fields: CARD_FIELDS,
+  })
+  const byId = new Map(cards.map((product) => [product.id, product]))
+  return selected
+    .map((product) => byId.get(product.id))
+    .filter((product): product is StoreProduct => Boolean(product))
+}
 
 /**
  * The home page is assembled from the sections stored in the content module,
@@ -10,44 +63,11 @@ import { CARD_FIELDS, listProducts, type StoreProduct } from "@/lib/medusa"
 export default async function HomePage() {
   const content = await getSiteContent()
 
-  const carousel = content.sections.find((s) => s.type === "product_carousel")
-  const limit = Number(carousel?.config?.limit) || 5
-
-  let products: StoreProduct[] = []
-  if (carousel) {
-    // Pick the designs before asking Medusa to price their variants. Most of
-    // these 48 candidates never appear in the five-card carousel.
-    const { products: pool } = await listProducts({
-      limit: 48,
-      fields: "id,handle,metadata",
-    }, { pricing: false })
-    // One card per design, so a row of five is five artworks rather than the
-    // same artwork in five constructions.
-    const seen = new Set<string>()
-    const selected = pool
-      .filter((product) => {
-        // The phone case is a design's representative card; skip AirPods etc.
-        if ((product.metadata?.form ?? "phone") !== "phone") return false
-        const design =
-          (product.metadata?.design_slug as string) ?? product.handle
-        if (seen.has(design)) return false
-        seen.add(design)
-        return true
-      })
-      .slice(0, limit)
-
-    if (selected.length) {
-      const { products: cards } = await listProducts({
-        id: selected.map((product) => product.id),
-        limit: selected.length,
-        fields: CARD_FIELDS,
-      })
-      const byId = new Map(cards.map((product) => [product.id, product]))
-      products = selected
-        .map((product) => byId.get(product.id))
-        .filter((product): product is StoreProduct => Boolean(product))
-    }
-  }
+  const carousels = content.sections
+    .filter((s) => s.type === "product_carousel")
+    .slice(0, MAX_CAROUSELS)
+  const loaded = await Promise.all(carousels.map((s) => carouselProducts(s, content)))
+  const productsByKey = new Map(carousels.map((s, i) => [s.key, loaded[i]]))
 
   if (!content.sections.length) {
     return (
@@ -62,12 +82,13 @@ export default async function HomePage() {
   }
 
   return (
-    <div>
+    <div className="fl-home">
       {content.sections.map((section) => (
         <HomeSectionRenderer
           key={section.key}
           section={section}
-          products={products}
+          products={productsByKey.get(section.key) ?? []}
+          collections={content.collections ?? []}
         />
       ))}
     </div>

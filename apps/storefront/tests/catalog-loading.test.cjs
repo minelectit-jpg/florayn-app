@@ -140,6 +140,7 @@ test("collection loads compatibility before hydrating selected-device prices and
     },
     "@/lib/content": { getCollectionPage: async () => null },
     "@/lib/variant-matrix": { buildVariantMatrix },
+    "@/lib/product-forms": loadSource("lib/product-forms.ts", {}),
     "@/lib/medusa": {
       sdk: { store: { collection: { list: async () => ({ collections: [{ id: "collection-1", title: "Alcantara" }] }) } } },
       listProducts: async (query, options) => {
@@ -398,6 +399,7 @@ test("collection starts independent reads early and prices only final featured m
     "@/lib/catalog": { getDeviceCatalog: async () => { events.push("devices"); return [device, { name: "iPhone 16", slug: "iphone-16", family: "iphone" }] } },
     "@/lib/content": { getCollectionPage: async () => { events.push("landing"); return { design_slugs: ["d2", "d0"] } } },
     "@/lib/variant-matrix": { buildVariantMatrix },
+    "@/lib/product-forms": loadSource("lib/product-forms.ts", {}),
     "@/lib/medusa": {
       sdk: { store: { collection: { list: async () => { events.push("group"); return group } } } },
       listProducts: async () => { events.push("products"); return { products: sources, count: 3 } },

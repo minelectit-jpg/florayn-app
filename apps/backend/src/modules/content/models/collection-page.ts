@@ -7,16 +7,29 @@ import { model } from "@medusajs/framework/utils"
  * heading, a line of copy and a grid of design tiles - but not a design: their
  * headings run from 90px/600 right-aligned white to 136px/700 left-aligned
  * cream, with different button shapes and colours. So this is one template
- * with the per-collection content as data, rather than ten hand-built pages.
+ * with the per-collection content as data, rather than ten hand-built pages:
+ * `template` picks the hero layout and `theme` the colours the page (and the
+ * product cards on it) wear. See collection-templates.ts.
  */
 const CollectionPage = model.define("collection_page", {
   id: model.id({ prefix: "colpage" }).primaryKey(),
   /** Matches the Medusa collection or category handle in the URL. */
   collection_slug: model.text().unique(),
+  /** Display name on cards and the collections index; blank = Medusa's title. */
+  title: model.text().nullable(),
+  /** Hero layout: overlay | split | image | centered. */
+  template: model.text().default("overlay"),
+  /** Colours, card dressing and hero decor; see normaliseTheme. */
+  theme: model.json().nullable(),
   /** Blank falls back to the artwork of the first design in the grid. */
   hero_image_url: model.text().nullable(),
+  /** Optional portrait crop for phones. */
+  hero_mobile_image_url: model.text().nullable(),
   hero_eyebrow: model.text().nullable(),
   hero_heading: model.text().nullable(),
+  hero_copy: model.text().nullable(),
+  /** The picture on "Shop by collection" cards; blank = first artwork. */
+  card_image_url: model.text().nullable(),
   cta_label: model.text().nullable(),
   cta_href: model.text().nullable(),
   /** Heading and copy above the tile grid. */
@@ -27,6 +40,8 @@ const CollectionPage = model.define("collection_page", {
    * collection, in catalogue order.
    */
   design_slugs: model.json().nullable(),
+  /** Ordered banner/text blocks shown below the product grid. */
+  blocks: model.json().nullable(),
   is_visible: model.boolean().default(true),
   position: model.number().default(0),
 })

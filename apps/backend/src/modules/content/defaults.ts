@@ -11,8 +11,125 @@
  *   - Footer "Contact Us" points at a real contact page rather than Facebook.
  */
 
+import { SITE_IMAGES as IMG } from "./site-images"
+
 const shop = (device: string, caseType = "signature") =>
   `/shop/?filter_device=${device}&filter_case-type=${caseType}&filter=1`
+
+/**
+ * Every home section type the storefront renders, with what its `config`
+ * holds. The admin's "Add section" offers exactly these.
+ *
+ *   category_pills   items[]: label, href, image, note
+ *   hero             slides[]: eyebrow, heading, href, cta_label, image, mobile_image
+ *   marquee          items[]: short strings (falls back to the section title)
+ *   tile_grid        columns (2|3|4), tiles[]: label, subtitle, href, image
+ *   product_carousel limit, collection (handle; blank = newest across the store)
+ *   collection_grid  slugs[] (blank = every visible landing page), limit
+ *   banner           image, mobile_image (copy/CTA from the section fields)
+ *   testimonials     quotes[]: name, badge, body, rating
+ */
+export const HOME_SECTION_TYPES = [
+  "category_pills",
+  "hero",
+  "marquee",
+  "tile_grid",
+  "product_carousel",
+  "collection_grid",
+  "banner",
+  "testimonials",
+] as const
+
+/**
+ * Pictures for the seeded items, keyed by label (case-insensitive). The seed
+ * uses them directly; the one-off content upgrade uses them to fill items the
+ * owner has not already given a picture.
+ */
+export const HOME_ITEM_IMAGES: Record<string, Record<string, string>> = {
+  category_pills: {
+    "phone case": IMG.iconPhoneCase,
+    "earbuds case": IMG.iconEarbudsCase,
+    "watch bands": IMG.iconWatchBands,
+    "card holder": IMG.iconCardHolder,
+    "phone charms": IMG.iconPhoneCharms,
+    stickpad: IMG.iconStickPad,
+    "ring holder": IMG.iconRingHolder,
+    "fake nails": IMG.iconFakeNails,
+  },
+  tile_grid: {
+    "phone case": IMG.tilePhoneCase,
+    "earbuds case": IMG.tileEarbudsCase,
+    stickypad: IMG.tileStickPad,
+    stickpad: IMG.tileStickPad,
+    "phone charms": IMG.tilePhoneCharms,
+    "watch bands": IMG.tileWatchBands,
+    "magsafe wallets": IMG.tileMagsafeWallets,
+  },
+}
+
+/** Hero slide pictures, keyed by the collection or shop path a slide opens. */
+export const HERO_SLIDE_IMAGES: { match: string; image: string; mobile_image: string }[] = [
+  { match: "/collection/muse-marvel", image: IMG.heroMuseMarvel, mobile_image: IMG.heroMuseMarvelMobile },
+  { match: "/collection/florayn-blooms", image: IMG.heroBlooms, mobile_image: IMG.heroBloomsMobile },
+  { match: "/collection/bug-life", image: IMG.heroBugLife, mobile_image: IMG.heroBugLifeMobile },
+  { match: "/collection/van-gogh-dreams", image: IMG.heroVanGogh, mobile_image: IMG.heroVanGoghMobile },
+  { match: "/shop/", image: IMG.heroNewest, mobile_image: IMG.heroNewestMobile },
+]
+
+const pill = (label: string, href: string | null, note?: string) => ({
+  label,
+  href,
+  image: HOME_ITEM_IMAGES.category_pills[label.toLowerCase()] ?? null,
+  ...(note ? { note } : {}),
+})
+
+const tile = (label: string, href: string) => ({
+  label,
+  href,
+  image: HOME_ITEM_IMAGES.tile_grid[label.toLowerCase()] ?? null,
+})
+
+const slide = (eyebrow: string, heading: string, href: string, cta_label: string | null = null) => {
+  const art = HERO_SLIDE_IMAGES.find((s) => href.startsWith(s.match))
+  return {
+    eyebrow,
+    heading,
+    href,
+    cta_label,
+    image: art?.image ?? null,
+    mobile_image: art?.mobile_image ?? null,
+  }
+}
+
+/** The newest-flagship slide florayn.com opens with. */
+export const NEWEST_SLIDE = slide(
+  "DESIGNED FOR iPHONE 17",
+  "Built for the Newest",
+  "/shop/iphone-17-pro-max/signature/",
+  "Shop Now"
+)
+
+export const COLLECTION_GRID_SECTION = {
+  key: "shop-by-collection",
+  type: "collection_grid",
+  is_visible: true,
+  eyebrow: "Collections",
+  title: "Shop by Collection",
+  subtitle: "Every collection comes in every model and case type.",
+  config: { slugs: [], limit: 12 },
+}
+
+export const AIRPODS_BANNER_SECTION = {
+  key: "airpods-banner",
+  type: "banner",
+  is_visible: true,
+  eyebrow: "Match your case",
+  title: "AirPods Cases",
+  subtitle: "Pair any design with its AirPods case.",
+  cta_label: "Shop AirPods Cases",
+  cta_href: "/shop/airpods-pro-3/signature-earbuds/",
+  config: { image: IMG.bannerAirpods, mobile_image: null },
+}
 
 export const DEFAULT_HOME_SECTIONS = [
   {
@@ -22,14 +139,14 @@ export const DEFAULT_HOME_SECTIONS = [
     is_visible: true,
     config: {
       items: [
-        { label: "Phone Case", href: shop("iphone-17-pro-max") },
-        { label: "Earbuds Case", href: shop("airpods-pro-3", "signature-earbuds") },
-        { label: "Watch Bands", href: "/collection/signature/" },
-        { label: "Card Holder", href: "/collection/signature/" },
-        { label: "Phone Charms", href: "/collection/signature/" },
-        { label: "StickPad", href: "/collection/signature/" },
-        { label: "Ring Holder", href: null, note: "Coming Soon" },
-        { label: "Fake Nails", href: null, note: "Coming Soon" },
+        pill("Phone Case", shop("iphone-17-pro-max")),
+        pill("Earbuds Case", shop("airpods-pro-3", "signature-earbuds")),
+        pill("Watch Bands", "/collection/signature/"),
+        pill("Card Holder", "/collection/signature/"),
+        pill("Phone Charms", "/collection/signature/"),
+        pill("StickPad", "/collection/signature/"),
+        pill("Ring Holder", null, "Coming Soon"),
+        pill("Fake Nails", null, "Coming Soon"),
       ],
     },
   },
@@ -41,26 +158,11 @@ export const DEFAULT_HOME_SECTIONS = [
     cta_label: "Shop Collection",
     config: {
       slides: [
-        {
-          eyebrow: "NEW COLLECTION",
-          heading: "Crafted For Those Who Dare To Dream",
-          href: "/collection/muse-marvel/",
-        },
-        {
-          eyebrow: "NEW COLLECTIONS",
-          heading: "Florayn Blooms",
-          href: "/collection/florayn-blooms/",
-        },
-        {
-          eyebrow: "NEW COLLECTIONS",
-          heading: "Bug Life",
-          href: "/collection/bug-life/",
-        },
-        {
-          eyebrow: "NEW COLLECTIONS",
-          heading: "Carry A Masterpiece In Your Hands",
-          href: "/collection/van-gogh-dreams/",
-        },
+        NEWEST_SLIDE,
+        slide("NEW COLLECTION", "Crafted For Those Who Dare To Dream", "/collection/muse-marvel/"),
+        slide("NEW COLLECTIONS", "Florayn Blooms", "/collection/florayn-blooms/"),
+        slide("NEW COLLECTIONS", "Bug Life", "/collection/bug-life/"),
+        slide("NEW COLLECTIONS", "Carry A Masterpiece In Your Hands", "/collection/van-gogh-dreams/"),
       ],
     },
   },
@@ -70,6 +172,7 @@ export const DEFAULT_HOME_SECTIONS = [
     position: 2,
     is_visible: true,
     title: "3 To 5 Days Delivery",
+    config: { items: ["3 To 5 Days Delivery", "Cash On Delivery Across Bangladesh"] },
   },
   {
     key: "primary-tiles",
@@ -79,40 +182,42 @@ export const DEFAULT_HOME_SECTIONS = [
     config: {
       columns: 2,
       tiles: [
-        { label: "Phone Case", href: shop("iphone-17-pro-max") },
-        { label: "EarBuds Case", href: shop("airpods-pro-3", "signature-earbuds") },
-      ],
-    },
-  },
-  {
-    key: "secondary-tiles",
-    type: "tile_grid",
-    position: 4,
-    is_visible: true,
-    config: {
-      columns: 4,
-      tiles: [
-        { label: "StickyPad", href: "/collection/signature/" },
-        { label: "Phone Charms", href: "/collection/signature/" },
-        { label: "Watch Bands", href: "/collection/signature/" },
-        { label: "Magsafe Wallets", href: "/collection/signature/" },
+        tile("Phone Case", shop("iphone-17-pro-max")),
+        tile("EarBuds Case", shop("airpods-pro-3", "signature-earbuds")),
       ],
     },
   },
   {
     key: "new-releases",
     type: "product_carousel",
-    position: 5,
+    position: 4,
     is_visible: true,
     title: "New Releases",
     cta_label: "See More",
     cta_href: "/collection/muse-marvel/",
     config: { limit: 5 },
   },
+  { ...COLLECTION_GRID_SECTION, position: 5 },
+  {
+    key: "secondary-tiles",
+    type: "tile_grid",
+    position: 6,
+    is_visible: true,
+    config: {
+      columns: 4,
+      tiles: [
+        tile("StickyPad", "/collection/signature/"),
+        tile("Phone Charms", "/collection/signature/"),
+        tile("Watch Bands", "/collection/signature/"),
+        tile("Magsafe Wallets", "/collection/signature/"),
+      ],
+    },
+  },
+  { ...AIRPODS_BANNER_SECTION, position: 7 },
   {
     key: "testimonials",
     type: "testimonials",
-    position: 6,
+    position: 8,
     is_visible: true,
     title: "Customer Say!",
     subtitle:

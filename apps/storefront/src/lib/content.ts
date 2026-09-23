@@ -35,12 +35,25 @@ export type HomeSection = {
   config: Record<string, any>
 }
 
+/** A visible collection landing page, as a card on the home page and index. */
+export type CollectionCard = {
+  slug: string
+  collection_id: string | null
+  title: string
+  /** Campaign picture, shown cropped to the card. */
+  image: string | null
+  /** A product render on white, shown contained when there is no picture. */
+  artwork: string | null
+  theme: Pick<CollectionTheme, "bg" | "text" | "accent" | "accent_text" | "hero_bg" | "hero_text">
+}
+
 export type SiteContent = {
   sections: HomeSection[]
   primary: MenuSection[]
   footer: MenuSection[]
   footerNote: string
   social: { label: string; href: string }[]
+  collections: CollectionCard[]
 }
 
 /** Enough of a shell to render if the backend is unreachable. */
@@ -50,6 +63,7 @@ const EMPTY: SiteContent = {
   footer: [],
   footerNote: "",
   social: [],
+  collections: [],
 }
 
 export async function getSiteContent(): Promise<SiteContent> {
@@ -59,7 +73,9 @@ export async function getSiteContent(): Promise<SiteContent> {
       next: { revalidate: 60, tags: ["content", "content:site"] },
     })
     if (!res.ok) return EMPTY
-    return (await res.json()) as SiteContent
+    const data = (await res.json()) as Partial<SiteContent>
+    // An older backend has no collection cards; keep the shape complete.
+    return { ...EMPTY, ...data, collections: data.collections ?? [] }
   } catch {
     return EMPTY
   }
@@ -174,17 +190,77 @@ export async function getGalleryVideos(
   }
 }
 
+export type HeroLayout = "overlay" | "split" | "image" | "centered"
+
+/** A collection page's colours; mirrors the backend's collection-templates. */
+export type CollectionTheme = {
+  bg: string
+  text: string
+  muted: string
+  line: string
+  accent: string
+  accent_text: string
+  hero_bg: string
+  hero_text: string
+  card_bg: string
+  card_border: string
+  card_text: string
+  card_muted: string
+  card_radius: number
+  heading_size: "md" | "lg" | "xl"
+  decor: string[]
+}
+
+export type CollectionBlock =
+  | {
+      type: "banner"
+      eyebrow: string | null
+      heading: string | null
+      copy: string | null
+      image: string | null
+      mobile_image: string | null
+      cta_label: string | null
+      cta_href: string | null
+    }
+  | { type: "text"; heading: string | null; copy: string | null }
+
+/** The store's own look, used when a page has no theme (or an old backend). */
+export const DEFAULT_COLLECTION_THEME: CollectionTheme = {
+  bg: "#ffffff",
+  text: "#1a1625",
+  muted: "#6b6577",
+  line: "#e8e4de",
+  accent: "#7c3aed",
+  accent_text: "#ffffff",
+  hero_bg: "#1a1625",
+  hero_text: "#ffffff",
+  card_bg: "#ffffff",
+  card_border: "#e9e6ef",
+  card_text: "#1a1625",
+  card_muted: "#6b6478",
+  card_radius: 10,
+  heading_size: "md",
+  decor: [],
+}
+
 export type CollectionPage = {
   collection_slug: string
+  title: string | null
+  template: HeroLayout
+  theme: CollectionTheme
   hero_image_url: string | null
+  hero_mobile_image_url: string | null
   hero_eyebrow: string | null
   hero_heading: string | null
+  hero_copy: string | null
   cta_label: string | null
   cta_href: string | null
   intro_heading: string | null
   intro_copy: string | null
   /** Ordered design slugs. Empty means every design, in catalogue order. */
   design_slugs: string[]
+  /** Banners and text below the product grid, in order. */
+  blocks: CollectionBlock[]
 }
 
 /** The landing content for one collection, or null when there is none. */
@@ -197,8 +273,27 @@ export async function getCollectionPage(
       next: { revalidate: 60, tags: ["content", `content:collection:${slug}`] },
     })
     if (!res.ok) return null
-    const data = (await res.json()) as { page: CollectionPage }
-    return data.page ?? null
+    const data = (await res.json()) as { page: Partial<CollectionPage> | null }
+    if (!data.page) return null
+    const page = data.page
+    // Fill anything an older backend does not send yet.
+    return {
+      collection_slug: page.collection_slug ?? slug,
+      title: page.title ?? null,
+      template: page.template ?? "overlay",
+      theme: { ...DEFAULT_COLLECTION_THEME, ...page.theme },
+      hero_image_url: page.hero_image_url ?? null,
+      hero_mobile_image_url: page.hero_mobile_image_url ?? null,
+      hero_eyebrow: page.hero_eyebrow ?? null,
+      hero_heading: page.hero_heading ?? null,
+      hero_copy: page.hero_copy ?? null,
+      cta_label: page.cta_label ?? null,
+      cta_href: page.cta_href ?? null,
+      intro_heading: page.intro_heading ?? null,
+      intro_copy: page.intro_copy ?? null,
+      design_slugs: page.design_slugs ?? [],
+      blocks: page.blocks ?? [],
+    }
   } catch {
     return null
   }
