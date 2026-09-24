@@ -143,8 +143,9 @@ export default function ProductView({
     if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
   }
 
-  // Honour ?case=<slug> from a filtered shop card, on the client so the page
-  // itself stays static/cacheable. Runs once after hydration.
+  // Honour ?variant=<id>, ?device=<model> (a link from an order in the admin)
+  // and ?case=<slug> (a filtered shop card), on the client so the page itself
+  // stays static/cacheable. Runs once after hydration.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const variant = params.get("variant")
@@ -158,8 +159,18 @@ export default function ProductView({
       }
     }
     const slug = params.get("case")
-    if (!slug) return
-    const name = caseTypeRecords?.find((c) => c.slug === slug)?.name
+    const name = slug ? caseTypeRecords?.find((c) => c.slug === slug)?.name : undefined
+    const wanted = params.get("device")?.trim().toLowerCase()
+    const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    const model = wanted ? Object.keys(matrix.caseTypesByDevice).find((d) => d.toLowerCase() === wanted || slugOf(d) === slugOf(wanted)) : undefined
+    if (model) {
+      // Set both at once: the case type has to be one sold for that model.
+      const fits = matrix.caseTypesByDevice[model] ?? []
+      setDevice(model)
+      if (name && fits.includes(name)) setCaseType(name)
+      else if (!fits.includes(caseType) && fits[0]) setCaseType(fits[0])
+      return
+    }
     if (name && matrix.caseTypes.includes(name)) selectCaseType(name)
   }, [])
 

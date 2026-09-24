@@ -2,7 +2,8 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 import { realEmail } from "../../../../lib/contact"
-import { opsByOrderId, DEFAULT_STATUS, type WorkflowStatus } from "../../../../lib/order-ops"
+import { storefrontUrl } from "../../../../lib/review-links"
+import { itemProductUrl, opsByOrderId, DEFAULT_STATUS, type WorkflowStatus } from "../../../../lib/order-ops"
 
 const DETAIL_FIELDS = [
   "id",
@@ -21,6 +22,8 @@ const DETAIL_FIELDS = [
   "items.thumbnail",
   "items.variant_id",
   "items.variant_title",
+  "items.product_handle",
+  "items.metadata",
   "shipping_address.first_name",
   "shipping_address.last_name",
   "shipping_address.address_1",
@@ -79,8 +82,15 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
           quantity: Number(i.quantity ?? 0),
           unit_price: Number(i.unit_price ?? 0),
           thumbnail: snap !== undefined ? snap : (typeof i.thumbnail === "string" ? i.thumbnail : null),
+          url: itemProductUrl(i, storefrontUrl()),
         }
       }),
+      // Anything between items + delivery and the total: bundle savings on a
+      // new order, or the price adjustment on a florayn.com import.
+      adjustment: Math.round((Number(order.total ?? 0) - Number(order.item_subtotal ?? 0) - Number(order.shipping_total ?? 0)) * 100) / 100,
+      advance_paid: typeof meta.advance_paid === "number" ? meta.advance_paid : null,
+      cod_amount: typeof meta.cod_amount === "number" ? meta.cod_amount : null,
+      source_tracking_code: (meta.tracking_code as string) ?? null,
       workflow_status: (op?.workflow_status ?? DEFAULT_STATUS) as WorkflowStatus,
       steadfast_consignment_id: op?.steadfast_consignment_id ?? null,
       steadfast_tracking_code: op?.steadfast_tracking_code ?? null,

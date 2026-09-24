@@ -1,6 +1,7 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
 import { localMobile, NO_EMAIL_DOMAIN, realEmail } from "./contact"
+import { buildCatalog, matchLine, type LineMatch } from "./florayn-import-match"
 import { opsService, type WorkflowStatus } from "./order-ops"
 
 /**
@@ -19,8 +20,14 @@ import { opsService, type WorkflowStatus } from "./order-ops"
  *   running it again adds new orders and moves changed statuses, never
  *   duplicates. Imported orders are marked `source: florayn.com` on their
  *   workflow row: never booked with the courier or asked for a review here.
+ * - When the mapping improves, IMPORT_VERSION goes up and the next run
+ *   rebuilds older imports in place: the order is created afresh under its
+ *   old number, its workflow row (status, note) moves across, then the old
+ *   copy is deleted. florayn.com stays the source, so nothing is lost.
  */
 export const IMPORT_SOURCE = "florayn.com"
+/** 2: totals = what was paid (advance + COD), items linked to this store's products. */
+export const IMPORT_VERSION = 2
 const PAGE = 50
 
 type Money = string | number | null | undefined
@@ -50,7 +57,6 @@ export type WcOrder = {
   coupon_lines?: { code?: string; discount?: Money }[]
   meta_data?: WcMeta[]
 }
-export type MatchedProduct = { id: string; handle: string; title: string; thumbnail: string | null }
 
 /** WooCommerce status -> this store's workflow tab and Medusa order status. Unknown/draft statuses are not imported. */
 const STATUS_MAP: Record<string, [WorkflowStatus, "completed" | "canceled" | "pending"]> = {
@@ -145,57 +151,122 @@ export function lineOptions(line: WcLine): { name: string; value: string }[] {
     .slice(0, 10)
 }
 
+/** A WooCommerce order's meta value by key (the first one). */
+function metaValue(wc: WcOrder, key: string): unknown {
+  return (wc.meta_data ?? []).find((m) => m.key === key)?.value
+}
+
+/** A numeric meta value, or null when it is missing or blank ("0" is 0). */
+function metaNumber(wc: WcOrder, key: string): number | null {
+  const value = metaValue(wc, key)
+  if (value === undefined || value === null || (typeof value === "string" && !value.trim())) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? money(n) : null
+}
+
+/**
+ * What the customer actually paid. florayn.com's order manager keeps a bKash
+ * advance and the courier's cash-on-delivery amount apart from WooCommerce's
+ * `total`, which is sometimes only what was left to collect (0, or just the
+ * delivery charge, after a full advance) and sometimes edited by hand (a
+ * bundle price, a surcharge). Paid = COD booked with the courier + advance.
+ * Without a courier booking, `total` (+ the advance, when `total` is only the
+ * remainder) is the best measure: whichever is closer to the items' own sum.
+ */
+export function paidAmounts(wc: WcOrder, linesTotal: number) {
+  const advance = metaNumber(wc, "_otm_advance_paid_amount") || metaNumber(wc, "_advance_paid_amount") || metaNumber(wc, "_florayn_qo_advance") || 0
+  const courierCod = metaNumber(wc, "_otm_courier_cod_amount")
+  const total = money(wc.total)
+  if (courierCod !== null) return { paid: money(courierCod + advance), advance, cod: courierCod }
+  if (advance > 0 && Math.abs(total + advance - linesTotal) < Math.abs(total - linesTotal)) return { paid: money(total + advance), advance, cod: total }
+  return { paid: total, advance: Math.min(advance, total), cod: money(total - Math.min(advance, total)) }
+}
+
+/** florayn.com's payment method in words. */
+function paymentWords(wc: WcOrder, advance: number, cod: number): string {
+  const method = String(wc.payment_method ?? "")
+  if (advance > 0 && cod > 0) return "bKash advance + cash on delivery"
+  if (advance > 0) return "Paid in advance (bKash)"
+  if (/bkash/i.test(method)) return "bKash"
+  return text(wc.payment_method_title, 80) || (method === "cod" ? "Cash on delivery" : method) || "Cash on delivery"
+}
+
+/** How far an imported order's items + delivery must move to equal what was paid. */
+export const ADJUSTMENT_TITLE = "Price adjustment on florayn.com"
+
 /**
  * One WooCommerce order as Medusa order input, plus what the importer needs
- * around it. Pure: the region, sales channel, customer and matched products
+ * around it. Pure: the region, sales channel, customer and the line matcher
  * are passed in.
+ *
+ * Items keep their florayn.com name and price; each is linked to this store's
+ * product when its name matches (see florayn-import-match.ts), with our own
+ * image. The order total is what the customer paid: when that differs from
+ * items + delivery, an adjustment says so (a credit when less was paid, an
+ * extra line when more was).
  */
 export function mapWcOrder(
   wc: WcOrder,
-  ctx: { regionId: string; salesChannelId?: string | null; customerId: string; products: Map<number, MatchedProduct> }
+  ctx: { regionId: string; salesChannelId?: string | null; customerId: string; match?: (title: string) => LineMatch | null; displayId?: number | null }
 ) {
   const status = mapWcStatus(wc.status)
   if (!status) return null
   const contact = orderContact(wc)
-  const items = (wc.line_items ?? []).map((line) => {
+  let linked = 0
+  const items: any[] = (wc.line_items ?? []).map((line) => {
     const quantity = Math.max(1, Math.round(Number(line.quantity) || 1))
     const total = money(line.total)
     const options = lineOptions(line)
-    const match = ctx.products.get(Number(line.product_id))
+    const title = text(line.name, 200) || "Item"
+    const match = ctx.match?.(title) ?? null
+    if (match) linked++
     return {
-      title: text(line.name, 200) || "Item",
+      title,
       quantity,
       unit_price: Math.round((total / quantity) * 100) / 100,
-      thumbnail: match?.thumbnail || line.image?.src || null,
-      ...(match ? { product_id: match.id, product_handle: match.handle, product_title: match.title } : { product_title: text(line.parent_name || line.name, 200) }),
-      variant_title: options.map((o) => o.value).join(" / ") || null,
+      thumbnail: match?.image || match?.product.thumbnail || line.image?.src || null,
+      ...(match
+        ? { product_id: match.product.id, product_handle: match.product.handle, product_title: match.product.designName || match.product.title, ...(match.variant ? { variant_id: match.variant.id } : {}) }
+        : { product_title: text(line.parent_name || line.name, 200) }),
+      variant_title: options.map((o) => o.value).join(" / ") || match?.device || null,
       variant_sku: line.sku || null,
       requires_shipping: true,
       is_discountable: false,
-      metadata: { wc_line_id: line.id, wc_product_id: line.product_id, wc_variation_id: line.variation_id ?? 0, options, wc_subtotal: money(line.subtotal) },
+      metadata: { wc_line_id: line.id, wc_product_id: line.product_id, wc_variation_id: line.variation_id ?? 0, options, wc_subtotal: money(line.subtotal), ...(match?.device ? { device: match.device } : {}) },
     }
   })
   const credit_lines: { amount: number; reference: string; reference_id: string; metadata: Record<string, unknown> }[] = []
   for (const fee of wc.fee_lines ?? []) {
     const amount = money(fee.total)
-    if (amount > 0) items.push({ title: text(fee.name, 200) || "Fee", quantity: 1, unit_price: amount, thumbnail: null, product_title: text(fee.name, 200) || "Fee", variant_title: null, variant_sku: null, requires_shipping: false, is_discountable: false, metadata: { wc_fee: true } as any })
+    if (amount > 0) items.push({ title: text(fee.name, 200) || "Fee", quantity: 1, unit_price: amount, thumbnail: null, product_title: text(fee.name, 200) || "Fee", variant_title: null, variant_sku: null, requires_shipping: false, is_discountable: false, metadata: { wc_fee: true } })
     else if (amount < 0) credit_lines.push({ amount: -amount, reference: "florayn.com discount", reference_id: String(fee.id ?? ""), metadata: { name: text(fee.name, 200) } })
   }
   const shipping_methods = (wc.shipping_lines ?? []).map((line) => ({ name: text(line.method_title, 120) || "Delivery", amount: money(line.total), data: {} }))
   if (!shipping_methods.length && money(wc.shipping_total) > 0) shipping_methods.push({ name: "Delivery", amount: money(wc.shipping_total), data: {} })
 
-  const computed = Math.round((items.reduce((n, i) => n + i.unit_price * i.quantity, 0) + shipping_methods.reduce((n, s) => n + s.amount, 0) - credit_lines.reduce((n, c) => n + c.amount, 0)) * 100) / 100
+  const sum = () => money(items.reduce((n, i) => n + i.unit_price * i.quantity, 0) + shipping_methods.reduce((n, s) => n + s.amount, 0) - credit_lines.reduce((n, c) => n + c.amount, 0))
+  const linesTotal = sum()
+  const { paid, advance, cod } = paidAmounts(wc, linesTotal)
+  const adjustment = money(paid - linesTotal)
+  if (adjustment <= -1) {
+    credit_lines.push({ amount: -adjustment, reference: ADJUSTMENT_TITLE, reference_id: String(wc.id), metadata: { lines_total: linesTotal, paid } })
+  } else if (adjustment >= 1) {
+    items.push({ title: ADJUSTMENT_TITLE, quantity: 1, unit_price: adjustment, thumbnail: null, product_title: ADJUSTMENT_TITLE, variant_title: null, variant_sku: null, requires_shipping: false, is_discountable: false, metadata: { wc_adjustment: true, lines_total: linesTotal, paid } })
+  }
   const wcTotal = money(wc.total)
   const createdAt = parseWcDate(wc.date_created_gmt) ?? new Date()
   const statusAt = parseWcDate(wc.date_completed_gmt) ?? parseWcDate(wc.date_modified_gmt) ?? createdAt
+  const tracking = text(metaValue(wc, "_otm_courier_tracking_code"), 60) || null
   return {
     status,
     contact,
     createdAt,
     statusChangedAt: statusAt,
     modifiedAt: parseWcDate(wc.date_modified_gmt),
-    totals: { computed, wc: wcTotal, matches: Math.abs(computed - wcTotal) < 1 },
+    totals: { lines: linesTotal, paid, wc: wcTotal, advance, cod, total: sum(), adjusted: Math.abs(adjustment) >= 1 },
+    linked: { lines: (wc.line_items ?? []).length, matched: linked },
     input: {
+      ...(ctx.displayId ? { display_id: ctx.displayId } : {}),
       region_id: ctx.regionId,
       ...(ctx.salesChannelId ? { sales_channel_id: ctx.salesChannelId } : {}),
       customer_id: ctx.customerId,
@@ -216,13 +287,17 @@ export function mapWcOrder(
         wc_total: wcTotal,
         wc_discount_total: money(wc.discount_total),
         coupon_codes: (wc.coupon_lines ?? []).map((c) => text(c.code, 60)).filter(Boolean),
-        payment_method: text(wc.payment_method_title || wc.payment_method, 80) || null,
+        payment_method: paymentWords(wc, advance, cod),
+        advance_paid: advance,
+        cod_amount: cod,
         paid_at: wc.date_paid_gmt ? parseWcDate(wc.date_paid_gmt)?.toISOString() ?? null : null,
         order_note: text(wc.customer_note, 1000) || null,
         customer_phone: contact.phone,
         customer_has_email: Boolean(contact.email),
         district: contact.address.province || null,
-        ...(Math.abs(computed - wcTotal) >= 1 ? { total_mismatch: { computed, wc: wcTotal } } : {}),
+        ...(tracking ? { tracking_code: tracking, courier: "Steadfast", consignment_id: text(metaValue(wc, "_otm_courier_consignment_id"), 40) || null } : {}),
+        ...(Math.abs(adjustment) >= 1 ? { total_adjusted: { lines: linesTotal, paid } } : {}),
+        import_version: IMPORT_VERSION,
       },
     },
   }
@@ -235,21 +310,28 @@ export function parseWcDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+
 // ---------------------------------------------------------------- settings --
 
 export type ImportProgress = {
   total: number
   seen: number
   created: number
+  /** Older imports rebuilt with the current mapping (IMPORT_VERSION). */
+  rebuilt: number
   updated: number
   unchanged: number
   skipped: number
   failed: number
-  mismatched: number
+  /** Orders whose items + delivery differ from what was paid, so an adjustment was added. */
+  adjusted: number
+  /** Line items linked to a product in this store, of all line items written. */
+  linked: number
+  lines: number
   errors: { id: string; message: string }[]
 }
 
-export const emptyProgress = (): ImportProgress => ({ total: 0, seen: 0, created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, mismatched: 0, errors: [] })
+export const emptyProgress = (): ImportProgress => ({ total: 0, seen: 0, created: 0, rebuilt: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, adjusted: 0, linked: 0, lines: 0, errors: [] })
 
 export async function getImportSettings(container: any): Promise<any> {
   const svc = opsService(container)
@@ -276,6 +358,17 @@ export function presentImport(s: any) {
 /** A run that has not reported for ten minutes died with its server. */
 function isStale(s: any): boolean {
   return Date.now() - new Date(s.updated_at ?? s.started_at ?? 0).getTime() > 10 * 60_000
+}
+
+/** How many imported orders an older IMPORT_VERSION made (the next run rebuilds them). */
+export async function outdatedImports(container: any): Promise<number> {
+  const knex: any = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const [{ count }] = await knex("order")
+    .whereNull("deleted_at")
+    .whereRaw("metadata->>'source' = ?", [IMPORT_SOURCE])
+    .andWhere((w: any) => w.whereRaw("metadata->>'import_version' is null").orWhereRaw("(metadata->>'import_version')::int < ?", [IMPORT_VERSION]))
+    .count({ count: "id" })
+  return Number(count) || 0
 }
 
 // ------------------------------------------------------------ WooCommerce --
@@ -310,20 +403,19 @@ export async function wcGet(s: { site_url: string; consumer_key: string; consume
   return { data: body, total: Number(res.headers.get("x-wp-total") ?? 0), pages: Number(res.headers.get("x-wp-totalpages") ?? 0) }
 }
 
-/** This store's products for WooCommerce product ids, matched by slug = handle. */
-async function matchProducts(container: any, s: any, ids: number[], cache: Map<number, MatchedProduct | null>, fetchImpl: Fetch) {
-  const wanted = [...new Set(ids)].filter((id) => id > 0 && !cache.has(id))
-  if (!wanted.length) return
-  const { data } = await wcGet(s, "products", { include: wanted.join(","), per_page: 100, _fields: "id,slug" }, fetchImpl)
-  const slugs = new Map<number, string>((Array.isArray(data) ? data : []).map((p: any) => [Number(p.id), String(p.slug)]))
-  const handles = [...new Set(slugs.values())]
-  const products = handles.length
-    ? await container.resolve(Modules.PRODUCT).listProducts({ handle: handles }, { select: ["id", "handle", "title", "thumbnail", "metadata"], take: handles.length })
-    : []
-  const byHandle = new Map<string, any>(products.map((p: any) => [p.handle, p]))
-  for (const id of wanted) {
-    const p = byHandle.get(slugs.get(id) ?? "")
-    cache.set(id, p ? { id: p.id, handle: p.handle, title: (p.metadata?.design_name as string) || p.title, thumbnail: p.thumbnail ?? null } : null)
+/** This store's products with their options, for matching florayn.com line items by name. */
+export async function loadLineMatcher(container: any): Promise<(title: string) => LineMatch | null> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
+  const { data } = await query.graph({
+    entity: "product",
+    fields: ["id", "handle", "title", "thumbnail", "metadata", "variants.id", "variants.metadata", "variants.options.value", "variants.options.option.title"],
+    filters: { status: "published" },
+  })
+  const catalog = buildCatalog(data ?? [])
+  const cache = new Map<string, LineMatch | null>()
+  return (title: string) => {
+    if (!cache.has(title)) cache.set(title, matchLine(title, catalog))
+    return cache.get(title) ?? null
   }
 }
 
@@ -356,7 +448,8 @@ async function saveProgress(container: any, id: string, patch: Record<string, un
 /**
  * One import run over every florayn.com order, oldest first. Each order is
  * its own step: one that fails is recorded and the rest carry on. Safe to run
- * again at any time (it resumes, and moves changed statuses).
+ * again at any time: it adds new orders, moves changed statuses, and rebuilds
+ * imports made by an older IMPORT_VERSION under their own order numbers.
  */
 export async function runFloraynImport(container: any, fetchImpl: Fetch = fetch): Promise<ImportProgress> {
   if (running) throw new Error("An import is already running.")
@@ -373,19 +466,34 @@ export async function runFloraynImport(container: any, fetchImpl: Fetch = fetch)
     const [store] = await container.resolve(Modules.STORE).listStores({}, { take: 1, select: ["id", "default_sales_channel_id"] })
     const knex: any = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
     const orders: any = container.resolve(Modules.ORDER)
-    const productCache = new Map<number, MatchedProduct | null>()
+    const match = await loadLineMatcher(container)
+    const base = { regionId: region.id, salesChannelId: store?.default_sales_channel_id ?? null, match }
+
+    /** Write one mapped order under its date (and old number, on a rebuild). */
+    const write = async (mapped: NonNullable<ReturnType<typeof mapWcOrder>>, displayId: number | null) => {
+      if (mapped.totals.adjusted) progress.adjusted++
+      progress.lines += mapped.linked.lines
+      progress.linked += mapped.linked.matched
+      const created = await orders.createOrders(mapped.input)
+      await knex("order").where({ id: created.id }).update({
+        created_at: mapped.createdAt,
+        updated_at: mapped.modifiedAt ?? mapped.createdAt,
+        ...(displayId ? { display_id: displayId } : {}),
+      })
+      return created
+    }
 
     for (let page = 1; ; page++) {
       const { data, total } = await wcGet(settings, "orders", { per_page: PAGE, page, orderby: "id", order: "asc" }, fetchImpl)
       const batch: WcOrder[] = Array.isArray(data) ? data : []
       if (page === 1) progress.total = total || batch.length
       if (!batch.length) break
-      await matchProducts(container, settings, batch.flatMap((o) => (o.line_items ?? []).map((l) => Number(l.product_id))), productCache, fetchImpl).catch((error) => {
-        logger.warn(`[florayn-import] product matching skipped for a page: ${error?.message ?? error}`)
-      })
-      const products = new Map<number, MatchedProduct>([...productCache].filter((entry): entry is [number, MatchedProduct] => Boolean(entry[1])))
       const known = await svc.listImportedOrders({ source: IMPORT_SOURCE, source_id: batch.map((o) => String(o.id)) }, { take: batch.length })
       const bySource = new Map<string, any>(known.map((row: any) => [row.source_id, row]))
+      const currentOrders = known.length
+        ? await orders.listOrders({ id: known.map((row: any) => row.order_id) }, { take: known.length, select: ["id", "display_id", "customer_id", "metadata"] })
+        : []
+      const orderById = new Map<string, any>(currentOrders.map((o: any) => [o.id, o]))
 
       for (const wc of batch) {
         progress.seen++
@@ -393,23 +501,44 @@ export async function runFloraynImport(container: any, fetchImpl: Fetch = fetch)
           const status = mapWcStatus(wc.status)
           if (!status) { progress.skipped++; continue }
           const existing = bySource.get(String(wc.id))
-          if (existing) {
+          const current = existing ? orderById.get(existing.order_id) : null
+
+          if (existing && current && current.metadata?.import_version === IMPORT_VERSION) {
             if (existing.source_status === wc.status) { progress.unchanged++; continue }
             const [op] = await svc.listOrderOps({ order_id: existing.order_id }, { take: 1 })
             const changedAt = parseWcDate(wc.date_modified_gmt) ?? new Date()
             if (op) await svc.updateOrderOps({ id: op.id, workflow_status: status.workflow, status_changed_at: changedAt })
-            const [current] = await orders.listOrders({ id: existing.order_id }, { take: 1, select: ["id", "metadata"] })
-            await orders.updateOrders(existing.order_id, { status: status.order, metadata: { ...(current?.metadata ?? {}), wc_status: wc.status } })
+            await orders.updateOrders(existing.order_id, { status: status.order, metadata: { ...(current.metadata ?? {}), wc_status: wc.status } })
             await svc.updateImportedOrders({ id: existing.id, source_status: wc.status, source_modified_at: changedAt })
             progress.updated++
             continue
           }
+
           const contact = orderContact(wc)
-          const customerId = await customerFor(container, contact)
-          const mapped = mapWcOrder(wc, { regionId: region.id, salesChannelId: store?.default_sales_channel_id ?? null, customerId, products })!
-          if (!mapped.totals.matches) progress.mismatched++
-          const created = await orders.createOrders(mapped.input)
-          await knex("order").where({ id: created.id }).update({ created_at: mapped.createdAt, updated_at: mapped.modifiedAt ?? mapped.createdAt })
+          const customerId = current?.customer_id ?? (await customerFor(container, contact))
+          const mapped = mapWcOrder(wc, { ...base, customerId, displayId: current?.display_id ?? null })!
+
+          if (existing) {
+            // Rebuild under the same number; the workflow row (status, note) moves across.
+            const created = await write(mapped, current?.display_id ?? null)
+            const [op] = await svc.listOrderOps({ order_id: existing.order_id }, { take: 1 })
+            if (op) {
+              await svc.updateOrderOps({
+                id: op.id,
+                order_id: created.id,
+                ...(existing.source_status !== wc.status ? { workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt } : {}),
+              })
+            } else {
+              const fresh = await svc.createOrderOps({ order_id: created.id, workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt, source: IMPORT_SOURCE })
+              await knex("order_op").where({ id: fresh.id }).update({ created_at: mapped.createdAt })
+            }
+            await svc.updateImportedOrders({ id: existing.id, order_id: created.id, source_status: wc.status, source_modified_at: mapped.modifiedAt })
+            if (current) await orders.deleteOrders([current.id])
+            progress.rebuilt++
+            continue
+          }
+
+          const created = await write(mapped, null)
           const op = await svc.createOrderOps({ order_id: created.id, workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt, source: IMPORT_SOURCE })
           await knex("order_op").where({ id: op.id }).update({ created_at: mapped.createdAt })
           await svc.createImportedOrders({ source: IMPORT_SOURCE, source_id: String(wc.id), order_id: created.id, source_status: wc.status, source_modified_at: mapped.modifiedAt })
@@ -422,8 +551,12 @@ export async function runFloraynImport(container: any, fetchImpl: Fetch = fetch)
       await saveProgress(container, settings.id, { progress })
       if (batch.length < PAGE) break
     }
+    // A rebuild writes old numbers back; keep the next new order after the highest one.
+    if (progress.rebuilt) {
+      await knex.raw(`select setval(pg_get_serial_sequence('"order"', 'display_id'), greatest((select coalesce(max(display_id), 1) from "order"), 1))`)
+    }
     await saveProgress(container, settings.id, { state: "done", finished_at: new Date(), progress })
-    logger.info(`[florayn-import] ${progress.created} created, ${progress.updated} updated, ${progress.unchanged} unchanged, ${progress.skipped} skipped, ${progress.failed} failed`)
+    logger.info(`[florayn-import] ${progress.created} created, ${progress.rebuilt} rebuilt, ${progress.updated} updated, ${progress.unchanged} unchanged, ${progress.skipped} skipped, ${progress.failed} failed, ${progress.adjusted} adjusted, ${progress.linked}/${progress.lines} lines linked`)
     return progress
   } catch (error: any) {
     await saveProgress(container, settings.id, { state: "failed", finished_at: new Date(), progress, last_error: String(error?.message ?? error).slice(0, 500) }).catch(() => undefined)
@@ -442,15 +575,13 @@ export async function previewFloraynImport(container: any, fetchImpl: Fetch = fe
   if (!settings.consumer_key || !settings.consumer_secret) throw new Error("Save the WooCommerce key first.")
   const { data, total } = await wcGet(settings, "orders", { per_page: 5, page: 1, orderby: "date", order: "desc" }, fetchImpl)
   const batch: WcOrder[] = Array.isArray(data) ? data : []
-  const cache = new Map<number, MatchedProduct | null>()
-  await matchProducts(container, settings, batch.flatMap((o) => (o.line_items ?? []).map((l) => Number(l.product_id))), cache, fetchImpl).catch(() => undefined)
-  const products = new Map<number, MatchedProduct>([...cache].filter((entry): entry is [number, MatchedProduct] => Boolean(entry[1])))
+  const match = await loadLineMatcher(container)
   const already = await opsService(container).listAndCountImportedOrders({ source: IMPORT_SOURCE }, { take: 1, select: ["id"] })
   return {
     total,
     imported: already[1],
     orders: batch.map((wc) => {
-      const mapped = mapWcOrder(wc, { regionId: "preview", customerId: "preview", products })
+      const mapped = mapWcOrder(wc, { regionId: "preview", customerId: "preview", match })
       if (!mapped) return { number: String(wc.number ?? wc.id), status: wc.status, skipped: true }
       return {
         number: String(wc.number ?? wc.id),
@@ -461,10 +592,12 @@ export async function previewFloraynImport(container: any, fetchImpl: Fetch = fe
         phone: mapped.contact.phone,
         email: mapped.contact.email,
         district: mapped.contact.address.province,
-        items: mapped.input.items.map((i) => ({ title: i.title, quantity: i.quantity, price: i.unit_price, options: i.variant_title, linked: Boolean((i as any).product_id) })),
+        items: mapped.input.items.map((i: any) => ({ title: i.title, quantity: i.quantity, price: i.unit_price, options: i.variant_title, linked: Boolean(i.product_id) })),
         delivery: mapped.input.shipping_methods.reduce((n, s) => n + s.amount, 0),
-        total: mapped.totals.wc,
-        totals_match: mapped.totals.matches,
+        total: mapped.totals.paid,
+        advance: mapped.totals.advance,
+        adjusted: mapped.totals.adjusted,
+        payment: mapped.input.metadata.payment_method,
       }
     }),
   }

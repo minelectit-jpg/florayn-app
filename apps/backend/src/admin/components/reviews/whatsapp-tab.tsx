@@ -91,7 +91,7 @@ export function WhatsAppTab({ whatsapp }: { whatsapp: ReturnType<typeof useWhats
       <div className="grid gap-4 md:grid-cols-2">
         {field("phone_number_id", "Phone number ID", "WhatsApp Manager > Phone numbers > the number > Phone number ID (not the phone number itself).", { inputMode: "numeric" })}
         {field("business_account_id", "WhatsApp Business Account ID", "Shown at the top of WhatsApp Manager. Needed for the templates.", { inputMode: "numeric" })}
-        {field("access_token", info.access_token_set ? `Access token (saved ${info.access_token_masked})` : "Access token", "A permanent System User token with whatsapp_business_messaging and whatsapp_business_management. Leave blank to keep the saved one.", { type: "password", autoComplete: "off", placeholder: info.access_token_set ? "Paste a new token to replace it" : "EAA…" })}
+        {field("access_token", info.access_token_set ? `Access token (saved ${info.access_token_masked})` : "Access token", "A permanent System User token with whatsapp_business_messaging and whatsapp_business_management. Leave blank to keep the saved one.", { name: "wa-access-token", autoComplete: "one-time-code", spellCheck: false, "data-1p-ignore": true, "data-lpignore": "true", style: { WebkitTextSecurity: "disc" }, placeholder: info.access_token_set ? "Paste a new token to replace it" : "EAA…" })}
         {field("api_version", "Graph API version", "Leave as is unless Meta retires it.")}
       </div>
       <div className="flex flex-wrap gap-2">

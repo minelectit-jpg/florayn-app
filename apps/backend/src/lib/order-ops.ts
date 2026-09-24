@@ -176,6 +176,21 @@ export async function hydrateOrders(
   return new Map((orders ?? []).map((o: any) => [o.id, o]))
 }
 
+/**
+ * The product page a line item was bought from, with that model and case
+ * picked: `?variant=` when the order knows the variant, `?device=` for a
+ * florayn.com import that only knows the model. Null for a line with no
+ * product in this store (a fee, an adjustment, a discontinued design).
+ */
+export function itemProductUrl(item: any, storefront: string): string | null {
+  const handle = typeof item?.product_handle === "string" && item.product_handle ? item.product_handle : null
+  if (!handle || item?.metadata?.wc_adjustment || item?.metadata?.wc_fee) return null
+  const base = `${storefront}/product/${encodeURIComponent(handle)}/`
+  if (item.variant_id) return `${base}?variant=${encodeURIComponent(item.variant_id)}`
+  const device = typeof item.metadata?.device === "string" ? item.metadata.device : null
+  return device ? `${base}?device=${encodeURIComponent(device)}` : base
+}
+
 /** The compact order shape the admin order manager renders. */
 export function projectManagedOrder(order: any, op: OrderOpRow | undefined) {
   const addr = order.shipping_address ?? {}
@@ -226,6 +241,7 @@ export async function searchOrderIds(container: any, q: string, limit = 10): Pro
     .andWhere((w: any) => {
       if (/^\d{1,9}$/.test(number)) w.orWhere("o.display_id", Number(number))
       if (/^\d{1,12}$/.test(number)) w.orWhereRaw("o.metadata->>'wc_order_id' = ?", [number])
+      w.orWhereRaw("o.metadata->>'tracking_code' ilike ?", [like])
       w.orWhereILike("o.email", like)
         .orWhereILike("a.phone", like)
         .orWhereRaw("concat_ws(' ', a.first_name, a.last_name) ilike ?", [like])

@@ -459,7 +459,11 @@ type OrderDetail = {
   address_1: string
   area: string
   district: string
-  items: { title: string; variant_title: string | null; quantity: number; unit_price: number; thumbnail: string | null }[]
+  items: { title: string; variant_title: string | null; quantity: number; unit_price: number; thumbnail: string | null; url: string | null }[]
+  adjustment: number
+  advance_paid: number | null
+  cod_amount: number | null
+  source_tracking_code: string | null
   workflow_status: Status
   steadfast_consignment_id: string | null
   steadfast_tracking_code: string | null
@@ -518,6 +522,7 @@ function OrderDetailDrawer({
                   <Row k="Order number there">#{d.source_number}</Row>
                   {d.source_status ? <Row k="Status there">{prettyRaw(d.source_status.replace(/^otm-/, ""))}</Row> : null}
                   {d.coupon_codes.length ? <Row k="Coupon">{d.coupon_codes.join(", ")}</Row> : null}
+                  {d.source_tracking_code ? <Row k="Steadfast tracking"><span className="font-mono">{d.source_tracking_code}</span> <Copy content={d.source_tracking_code} /></Row> : null}
                   <Text size="xsmall" className="text-ui-fg-subtle">Imported history: it was handled on {d.source}, so it is not sent to Steadfast from here.</Text>
                 </Section>
               ) : null}
@@ -547,19 +552,33 @@ function OrderDetailDrawer({
               {/* Items */}
               <Section title={`Items (${d.items.reduce((n, i) => n + i.quantity, 0)})`}>
                 <ul className="flex flex-col gap-2">
-                  {d.items.map((i, idx) => (
-                    <li key={idx} className="flex items-center gap-3">
-                      <span className="size-10 shrink-0 overflow-hidden rounded-md bg-ui-bg-subtle">
-                        {i.thumbnail ? <img src={i.thumbnail} alt="" className="size-full object-cover" /> : null}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-ui-fg-base">{i.title}</span>
-                        {i.variant_title ? <span className="block truncate text-xs text-ui-fg-subtle">{i.variant_title}</span> : null}
-                      </span>
-                      <span className="text-sm text-ui-fg-subtle">×{i.quantity}</span>
-                      <span className="w-16 text-right text-sm tabular-nums text-ui-fg-base">{bdt(i.unit_price)}</span>
-                    </li>
-                  ))}
+                  {d.items.map((i, idx) => {
+                    const body = (
+                      <>
+                        <span className="size-10 shrink-0 overflow-hidden rounded-md bg-ui-bg-subtle">
+                          {i.thumbnail ? <img src={i.thumbnail} alt="" className="size-full object-cover" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className={`block truncate text-sm ${i.url ? "text-ui-fg-interactive group-hover:underline" : "text-ui-fg-base"}`}>{i.title}{i.url ? <span aria-hidden="true"> ↗</span> : null}</span>
+                          {i.variant_title ? <span className="block truncate text-xs text-ui-fg-subtle">{i.variant_title}</span> : null}
+                        </span>
+                        <span className="text-sm text-ui-fg-subtle">×{i.quantity}</span>
+                        <span className="w-16 text-right text-sm tabular-nums text-ui-fg-base">{bdt(i.unit_price)}</span>
+                      </>
+                    )
+                    // The product the customer bought, opened on the shop with that model picked.
+                    return (
+                      <li key={idx}>
+                        {i.url ? (
+                          <a href={i.url} target="_blank" rel="noopener noreferrer" title="Open this product in the shop" className="group -mx-1.5 flex items-center gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-ui-bg-base-hover">
+                            {body}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-3 py-1">{body}</div>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               </Section>
 
@@ -567,7 +586,15 @@ function OrderDetailDrawer({
               <Section title={`Payment (${d.payment_method || "Cash on Delivery"})`}>
                 <Row k="Subtotal">{bdt(d.subtotal)}</Row>
                 <Row k="Shipping">{d.shipping_total === 0 ? "Free" : bdt(d.shipping_total)}</Row>
-                <Row k="Total (COD)"><b>{bdt(d.total)}</b></Row>
+                {Math.abs(d.adjustment) >= 1 ? (
+                  <Row k={d.source ? "Price adjustment" : "Savings"}>{d.adjustment < 0 ? `−${bdt(-d.adjustment)}` : bdt(d.adjustment)}</Row>
+                ) : null}
+                {d.advance_paid ? <Row k="Paid in advance">{bdt(d.advance_paid)}</Row> : null}
+                <Row k={d.advance_paid ? "Cash on delivery" : "Total (COD)"}><b>{bdt(d.advance_paid ? d.cod_amount ?? Math.max(0, d.total - d.advance_paid) : d.total)}</b></Row>
+                {d.advance_paid ? <Row k="Order total">{bdt(d.total)}</Row> : null}
+                {d.source && Math.abs(d.adjustment) >= 1 ? (
+                  <Text size="xsmall" className="text-ui-fg-subtle">Set to what the customer paid on {d.source}{d.advance_paid ? " (advance + cash on delivery)" : ""}, which differs from the items and delivery.</Text>
+                ) : null}
               </Section>
 
               {d.note ? <Section title="Order note"><Text size="small" className="text-ui-fg-subtle">{d.note}</Text></Section> : null}

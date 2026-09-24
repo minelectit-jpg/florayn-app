@@ -1,12 +1,17 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
-import { getImportSettings, presentImport, previewFloraynImport, runFloraynImport } from "../../../lib/florayn-import"
+import { getImportSettings, outdatedImports, presentImport, previewFloraynImport, runFloraynImport } from "../../../lib/florayn-import"
 import { opsService } from "../../../lib/order-ops"
 
-/** GET /admin/florayn-import - the saved key (masked) and the last run's progress. */
+/**
+ * GET /admin/florayn-import - the saved key (masked), the last run's progress,
+ * and how many imported orders an older version of the import made (the next
+ * run rebuilds them).
+ */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
-  res.json({ import: presentImport(await getImportSettings(req.scope)) })
+  const [settings, outdated] = await Promise.all([getImportSettings(req.scope), outdatedImports(req.scope)])
+  res.json({ import: { ...presentImport(settings), outdated } })
 }
 
 /**
