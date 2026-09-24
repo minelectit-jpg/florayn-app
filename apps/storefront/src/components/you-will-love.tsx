@@ -66,7 +66,6 @@ export default function YouWillLove({
   // goes with them, so an empty strip leaves nothing behind.
   const shown = items.filter((item) => !device || !caseType || !!item.variantByPair[`${device}|${caseType}`])
   if (!shown.length) return null
-  const single = shown.length === 1
 
   return (
     <section>
@@ -76,7 +75,7 @@ export default function YouWillLove({
         <span aria-hidden="true" />
       </div>
 
-      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title} indicator>
+      <DragScroll className="fl-pdp-rail" aria-label={title} indicator>
         {shown.map((item, i) => {
           const pair = device && caseType ? `${device}|${caseType}` : ""
           const image =
@@ -94,7 +93,7 @@ export default function YouWillLove({
                     src={image}
                     alt={item.name}
                     label={item.name}
-                    sizes={single ? "(max-width: 767px) calc(100vw - 30px), 230px" : "(max-width: 767px) calc(50vw - 20px), 230px"}
+                    sizes="(max-width: 767px) calc(50vw - 20px), 230px"
                     className="fl-card__img"
                     fillMode="absolute"
                   />

@@ -61,13 +61,13 @@ const airpods = {
 const picked = { id: "picked", name: "Timeless", handle: "timeless", formLabel: "Signature / iPhone 17 Pro Max", price: 1400,
   variants: [{ id: "variant_a", label: "Signature / iPhone 17 Pro Max", price: 1400, image: "a.webp", href: "/product/timeless/?variant=variant_a" }] }
 
-test("one recommendation is one big shop card; its model picker moves image, price, link and cart item together", () => {
+test("one recommendation keeps the two-up card size on the left; its model picker moves image, price, link and cart item together", () => {
   const { react, reset } = host()
   const Recommended = load(react)
   const render = () => { reset(); return expand(Recommended({ items: [airpods] }), null) }
   let tree = render()
   const rail = find(tree, (n) => n.type === "@/components/drag-scroll")[0]
-  assert.match(rail.props.className, /fl-pdp-rail is-single/)
+  assert.equal(rail.props.className, "fl-pdp-rail", "no full-width single card on phones")
   const card = () => find(tree, (n) => n.type === "article")[0]
   assert.match(card().props.className, /fl-card/)
   const state = () => ({
@@ -78,7 +78,7 @@ test("one recommendation is one big shop card; its model picker moves image, pri
   let s = state()
   assert.equal(s.href, airpods.variants[0].href)
   assert.equal(s.add.variantId, "v-pro3"); assert.equal(s.add.unitPrice, 750); assert.equal(s.image.src, "pro3.webp")
-  assert.match(s.image.sizes, /calc\(100vw - 30px\)/, "a single card downloads a full-width image")
+  assert.match(s.image.sizes, /calc\(50vw - 20px\)/, "a single card is half the phone width, like a pair")
   // The stretched link wraps nothing: no button ever sits inside it.
   assert.equal(find(card(), (n) => n.type === "Link")[0].props.children, undefined)
   const drawer = find(card(), (n) => n.type === "@/components/model-drawer")[0]

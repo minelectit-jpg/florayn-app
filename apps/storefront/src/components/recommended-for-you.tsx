@@ -43,10 +43,10 @@ export type RecommendedItem = {
   variants: RecommendedVariant[]
 }
 
-// Image slots for the rail: half the phone width for pairs, the full content
-// width for a single card, the fixed 230px column from tablets up.
-const PAIR_SIZES = "(max-width: 767px) calc(50vw - 20px), 230px"
-const SINGLE_SIZES = "(max-width: 767px) calc(100vw - 30px), 230px"
+// Image slots for the rail: half the phone width (one card stays that size,
+// on the left, rather than filling the screen), the fixed 230px column from
+// tablets up.
+const CARD_SIZES = "(max-width: 767px) calc(50vw - 20px), 230px"
 
 /**
  * One recommended accessory, dressed as the shop's product card (the same
@@ -173,7 +173,6 @@ export default function RecommendedForYou({
   title?: string
 }) {
   if (!items.length) return null
-  const single = items.length === 1
 
   return (
     <section>
@@ -183,10 +182,10 @@ export default function RecommendedForYou({
         <span aria-hidden="true" />
       </div>
 
-      <DragScroll className={`fl-pdp-rail${single ? " is-single" : ""}`} aria-label={title} indicator>
+      <DragScroll className="fl-pdp-rail" aria-label={title} indicator>
         {items.map((item, i) => (
           <li key={`${item.id}-${i}`}>
-            <RecommendedCard item={item} sizes={single ? SINGLE_SIZES : PAIR_SIZES} />
+            <RecommendedCard item={item} sizes={CARD_SIZES} />
           </li>
         ))}
       </DragScroll>

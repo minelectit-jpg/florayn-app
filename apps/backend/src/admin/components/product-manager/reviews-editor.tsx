@@ -16,7 +16,7 @@ function ReviewRow({ review, onSaved }: { review: Review; onSaved: () => void })
   return <article className="grid gap-3 rounded-lg border p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><Text weight="plus">{review.author} · {review.rating}/5</Text><Badge color={review.status === "approved" ? "green" : review.status === "pending" ? "orange" : "grey"}>{review.status}</Badge></div>
     <Text size="xsmall" className="text-ui-fg-subtle">{review.review_key} · {new Date(review.created_at).toLocaleDateString()}</Text>
-    <Heading level="h3">{review.title}</Heading><Text className="whitespace-pre-wrap break-words">{review.body}</Text>
+    {review.title ? <Heading level="h3">{review.title}</Heading> : null}<Text className="whitespace-pre-wrap break-words">{review.body}</Text>
     <Textarea aria-label={`Reply to ${review.author}`} placeholder="Reply publicly as Florayn (optional)" maxLength={2000} value={reply} onChange={(e) => setReply(e.target.value)} disabled={busy} />
     <div className="flex flex-wrap gap-2"><Button size="small" disabled={busy} onClick={() => save("approved")}>Approve & save reply</Button><Button size="small" variant="secondary" disabled={busy} onClick={() => save("rejected")}>Hide review</Button><Button size="small" variant="secondary" disabled={busy || reply === review.reply} onClick={() => save(review.status)}>Save reply</Button></div>
   </article>

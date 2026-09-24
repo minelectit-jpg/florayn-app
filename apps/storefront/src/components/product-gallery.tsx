@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 
+import DragScroll from "@/components/drag-scroll"
 import ProductImage from "@/components/product-image"
 
 export type GalleryItem = {
@@ -15,7 +16,8 @@ export type GalleryItem = {
  * The live gallery is a 50px thumbnail rail beside a 540px stage, 10px apart,
  * inside a 600px column. Below the lg breakpoint the rail moves under the
  * stage and runs horizontally, because 50px of rail plus a readable stage does
- * not fit a phone.
+ * not fit a phone. There it scrolls like the other rails, with the slider bar a
+ * little below the thumbnails instead of a native scrollbar touching them.
  */
 export default function ProductGallery({
   items,
@@ -37,9 +39,11 @@ export default function ProductGallery({
   return (
     <div className="flex flex-col gap-[10px] lg:flex-row">
       {items.length > 1 ? (
-        <ul
-          className="order-2 flex shrink-0 gap-[10px] overflow-x-auto lg:order-1 lg:w-[60px] lg:flex-col lg:overflow-visible"
+        <div className="order-2 min-w-0 shrink-0 lg:order-1 lg:w-[60px]">
+        <DragScroll
+          className="fl-gallery-thumbs flex gap-[10px] overflow-x-auto lg:flex-col lg:overflow-visible"
           aria-label="Product images"
+          indicator
         >
           {items.map((item) => {
             const isActive = item.id === active?.id
@@ -78,7 +82,8 @@ export default function ProductGallery({
               </li>
             )
           })}
-        </ul>
+        </DragScroll>
+        </div>
       ) : null}
 
       <div className="order-1 min-w-0 flex-1 lg:order-2">
