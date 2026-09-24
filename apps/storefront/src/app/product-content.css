@@ -136,9 +136,13 @@
  .fl-reviews--inline .fl-review-form__fields { grid-template-columns:1fr; }
 
  /* ---- Slider bar under horizontal rails (see DragScroll `indicator`) ----- */
- .fl-scrollbar { position:relative; height:3px; margin-top:10px; overflow:hidden; border-radius:3px; background:var(--color-line); }
+ .fl-scrollbar { position:relative; height:3px; margin-top:10px; border-radius:3px; background:var(--color-line); cursor:pointer; touch-action:none; }
+ /* An invisible 19px-tall hit area, so the 3px bar is easy to grab. */
+ .fl-scrollbar::before { content:""; position:absolute; inset:-8px 0; }
  .fl-scrollbar[data-hidden] { display:none; }
- .fl-scrollbar > span { position:absolute; top:0; left:0; width:30%; height:100%; border-radius:3px; background:var(--color-ink-muted); will-change:transform; }
+ .fl-scrollbar > span { position:absolute; top:0; left:0; width:30%; height:100%; border-radius:3px; background:var(--color-ink-muted); transition:background-color .15s; will-change:transform; }
+ .fl-scrollbar:hover > span, .fl-scrollbar[data-dragging] > span { background:var(--color-ink); }
+ .fl-scrollbar[data-dragging] { cursor:grabbing; }
 
  /* ---- Strips under the gallery ------------------------------------------ */
  .fl-pdp-strips { display:flex; flex-direction:column; gap:24px; }

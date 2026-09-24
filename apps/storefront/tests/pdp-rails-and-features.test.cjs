@@ -44,6 +44,26 @@ function fakeList(size) {
   return { ...size, style: {}, addEventListener: (type, fn) => { listeners[type] = fn }, removeEventListener() {}, listeners }
 }
 
+// The slider bar: 250px wide from x=100, with pointer capture.
+function fakeBar() {
+  const bar = fakeList({ clientWidth: 250, dataset: { hidden: "true" } })
+  bar.captured = null
+  bar.setPointerCapture = (id) => { bar.captured = id }
+  bar.hasPointerCapture = (id) => bar.captured === id
+  bar.releasePointerCapture = () => { bar.captured = null }
+  bar.getBoundingClientRect = () => ({ left: 100 })
+  return bar
+}
+function fakeThumb() {
+  const thumb = { style: {} }
+  const width = () => (parseFloat(thumb.style.width) / 100) * 250
+  const left = () => 100 + Number(/translateX\(([\d.]+)px\)/.exec(thumb.style.transform ?? "")?.[1] ?? 0)
+  Object.defineProperty(thumb, "offsetWidth", { get: width })
+  thumb.getBoundingClientRect = () => ({ left: left(), right: left() + width(), width: width() })
+  return thumb
+}
+const pointer = (clientX, extra = {}) => ({ clientX, pointerId: 7, pointerType: "mouse", button: 0, preventDefault() {}, ...extra })
+
 test("a rail without the indicator is just the draggable list", () => {
   const { tree } = render({ className: "fl-pdp-rail", children: "cards", "aria-label": "Recommended" })
   assert.equal(tree.type, "ul")
@@ -51,7 +71,7 @@ test("a rail without the indicator is just the draggable list", () => {
   assert.equal(tree.props["aria-label"], "Recommended")
 })
 
-test("the indicator adds a decorative slider that follows the scroll position", () => {
+test("the indicator adds a slider bar that follows the scroll position", () => {
   const { tree, refs, effects, frames, observed } = render({ className: "fl-more-designs", children: "tiles", indicator: true })
   assert.equal(tree.type, "Fragment")
   const [list, bar] = tree.props.children
@@ -61,7 +81,7 @@ test("the indicator adds a decorative slider that follows the scroll position", 
 
   const [listRef, barRef, thumbRef] = refs
   listRef.current = fakeList({ scrollWidth: 1000, clientWidth: 250, scrollLeft: 0 })
-  barRef.current = { clientWidth: 250, dataset: { hidden: "true" } }
+  barRef.current = fakeBar()
   thumbRef.current = { style: {} }
   effects[1]()
   assert.equal(barRef.current.dataset.hidden, undefined, "shown when the rail overflows")
@@ -82,6 +102,39 @@ test("the indicator adds a decorative slider that follows the scroll position", 
   listRef.current.listeners.scroll()
   frames[1]()
   assert.equal(barRef.current.dataset.hidden, "true")
+})
+
+test("the slider bar can be dragged by its thumb, or pressed to jump there", () => {
+  const { refs, effects } = render({ className: "fl-more-designs", children: "tiles", indicator: true })
+  const [listRef, barRef, thumbRef] = refs
+  const list = listRef.current = fakeList({ scrollWidth: 1000, clientWidth: 250, scrollLeft: 0 })
+  const bar = barRef.current = fakeBar()
+  thumbRef.current = fakeThumb()
+  effects[1]()
+  // Thumb: 62.5px of a 250px bar (a quarter), so 187.5px of travel for 750px of scroll.
+
+  bar.listeners.pointerdown(pointer(120))
+  assert.equal(bar.captured, 7, "the drag keeps the pointer when it leaves the bar")
+  assert.equal(bar.dataset.dragging, "true")
+  assert.equal(list.scrollLeft, 0, "grabbing the thumb does not jump")
+  bar.listeners.pointermove(pointer(213.75))
+  assert.equal(list.scrollLeft, 375, "half the travel scrolls half the rail")
+  bar.listeners.pointermove(pointer(900))
+  assert.equal(list.scrollLeft, 750, "held at the end")
+  bar.listeners.pointerup(pointer(900))
+  assert.equal(bar.dataset.dragging, undefined)
+  assert.equal(bar.captured, null)
+  bar.listeners.pointermove(pointer(100))
+  assert.equal(list.scrollLeft, 750, "moving after letting go does nothing")
+
+  list.scrollLeft = 0
+  thumbRef.current.style.transform = "translateX(0px)"
+  bar.listeners.pointerdown(pointer(225))
+  assert.equal(list.scrollLeft, 375, "pressing the track centres the thumb there")
+  bar.listeners.pointerup(pointer(225))
+
+  bar.listeners.pointerdown(pointer(300, { button: 2 }))
+  assert.equal(list.scrollLeft, 375, "a right click is left alone")
 })
 
 test("a non-case accessory shows only its own Features blocks, never the case defaults", () => {

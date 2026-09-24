@@ -14,7 +14,9 @@ import { useEffect, useRef, type ReactNode } from "react"
  * `indicator` adds a thin slider bar under the rail that shows how far along
  * it is. Phones hide native scrollbars, so this is what tells a shopper there
  * is more to swipe to. It hides itself when everything already fits, and moves
- * by direct style updates (no re-render per scroll frame).
+ * by direct style updates (no re-render per scroll frame). It works like a
+ * scrollbar too: drag the thumb, or press the track to jump there and keep
+ * dragging. Pointer capture keeps the drag when the pointer leaves the bar.
  */
 export default function DragScroll({
   className,
@@ -107,12 +109,50 @@ export default function DragScroll({
       if (!frame) frame = requestAnimationFrame(update)
     }
 
+    // Dragging the bar: `grab` is where on the thumb the pointer holds it.
+    let grab: number | null = null
+    function scrollTo(clientX: number) {
+      if (!el || !bar || !thumb || grab === null) return
+      const overflow = el.scrollWidth - el.clientWidth
+      const travel = bar.clientWidth - thumb.offsetWidth
+      if (overflow <= 0 || travel <= 0) return
+      const x = clientX - bar.getBoundingClientRect().left - grab
+      el.scrollLeft = Math.min(Math.max(x / travel, 0), 1) * overflow
+    }
+    function onBarDown(e: PointerEvent) {
+      if (!bar || !thumb || (e.pointerType === "mouse" && e.button !== 0)) return
+      const box = thumb.getBoundingClientRect()
+      const onThumb = e.clientX >= box.left && e.clientX <= box.right
+      grab = onThumb ? e.clientX - box.left : box.width / 2
+      bar.setPointerCapture(e.pointerId)
+      bar.dataset.dragging = "true"
+      e.preventDefault()
+      if (!onThumb) scrollTo(e.clientX)
+    }
+    function onBarMove(e: PointerEvent) {
+      if (grab !== null) scrollTo(e.clientX)
+    }
+    function onBarUp(e: PointerEvent) {
+      if (grab === null || !bar) return
+      grab = null
+      delete bar.dataset.dragging
+      if (bar.hasPointerCapture(e.pointerId)) bar.releasePointerCapture(e.pointerId)
+    }
+
     update()
     el.addEventListener("scroll", schedule, { passive: true })
+    bar.addEventListener("pointerdown", onBarDown)
+    bar.addEventListener("pointermove", onBarMove)
+    bar.addEventListener("pointerup", onBarUp)
+    bar.addEventListener("pointercancel", onBarUp)
     const observer = new ResizeObserver(schedule)
     observer.observe(el)
     return () => {
       el.removeEventListener("scroll", schedule)
+      bar.removeEventListener("pointerdown", onBarDown)
+      bar.removeEventListener("pointermove", onBarMove)
+      bar.removeEventListener("pointerup", onBarUp)
+      bar.removeEventListener("pointercancel", onBarUp)
       observer.disconnect()
       if (frame) cancelAnimationFrame(frame)
     }
@@ -134,7 +174,8 @@ export default function DragScroll({
   return (
     <>
       {list}
-      {/* Decorative: the list itself is the scrollable, labelled element. */}
+      {/* Hidden from assistive tech: the list itself is the scrollable,
+          labelled element, and the bar only mirrors it for pointers. */}
       <div ref={barRef} className="fl-scrollbar" aria-hidden="true">
         <span ref={thumbRef} />
       </div>
