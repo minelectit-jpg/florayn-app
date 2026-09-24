@@ -14,21 +14,22 @@ import {
 import { formatPrice } from "@/lib/money"
 
 export default function CartDrawer() {
-  const { isDrawerOpen, closeDrawer, summary, applySummary } = useCart()
+  const { isDrawerOpen, closeDrawer, summary, applySummary, items: known, setItems, adding, lastAdded } = useCart()
   const panelRef = useRef<HTMLDivElement>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
 
-  const [items, setItems] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
   const itemCount = summary?.itemCount ?? 0
 
-  // Load the full cart whenever the drawer opens or the cart count changes.
+  // Opened by the header: read the bag (the last known lines stay on screen
+  // meanwhile). Opened by an add: that add returns the lines itself, so no
+  // second request races it.
   useEffect(() => {
-    if (!isDrawerOpen) return
+    if (!isDrawerOpen || adding) return
     let cancelled = false
-    setLoading(true)
+    setLoading(known === null)
     getCart()
       .then((cart) => {
         if (!cancelled) setItems(cart?.items ?? [])
@@ -39,7 +40,25 @@ export default function CartDrawer() {
     return () => {
       cancelled = true
     }
-  }, [isDrawerOpen, itemCount])
+  }, [isDrawerOpen])
+
+  // While an add is on its way, its line is shown straight away: merged into
+  // the same design already in the bag, or on top as a new line.
+  const items: CartItem[] = (() => {
+    const list = known ?? []
+    if (!adding || !lastAdded?.variantId || !lastAdded.id.startsWith("optimistic-")) return list
+    const same = list.find((i) => i.variant?.id === lastAdded.variantId)
+    if (same) return list.map((i) => (i === same ? { ...i, quantity: i.quantity + lastAdded.quantity } : i))
+    return [{
+      id: lastAdded.id,
+      title: lastAdded.productTitle,
+      quantity: lastAdded.quantity,
+      unit_price: lastAdded.unitPrice,
+      thumbnail: lastAdded.thumbnail,
+      variant: { id: lastAdded.variantId, title: lastAdded.variantTitle, product: { title: lastAdded.productTitle, handle: "" } },
+    }, ...list]
+  })()
+  const pending = (item: CartItem) => adding && (item.id.startsWith("optimistic-") || item.variant?.id === lastAdded?.variantId)
 
   // Escape to close + focus trap + lock body scroll while open.
   useEffect(() => {
@@ -82,9 +101,7 @@ export default function CartDrawer() {
     const next = item.quantity + delta
     if (next < 1 || busy) return
     setBusy(item.id)
-    setItems((list) =>
-      list.map((i) => (i.id === item.id ? { ...i, quantity: next } : i))
-    )
+    setItems(items.map((i) => (i.id === item.id ? { ...i, quantity: next } : i)))
     try {
       applySummary(await setLineItemQuantity(item.id, next))
     } catch {
@@ -98,7 +115,7 @@ export default function CartDrawer() {
   async function remove(item: CartItem) {
     if (busy) return
     setBusy(item.id)
-    setItems((list) => list.filter((i) => i.id !== item.id))
+    setItems(items.filter((i) => i.id !== item.id))
     try {
       applySummary(await removeLineItem(item.id))
     } catch {
@@ -115,7 +132,7 @@ export default function CartDrawer() {
     items.reduce((n, i) => n + i.unit_price * i.quantity, 0)
   const discount = summary?.bundleDiscount ?? 0
   const total = Math.max(0, subtotal - discount)
-  const isEmpty = !loading && items.length === 0
+  const isEmpty = !loading && !adding && items.length === 0
 
   return (
     <>
@@ -199,7 +216,7 @@ export default function CartDrawer() {
                         <button
                           type="button"
                           onClick={() => remove(item)}
-                          disabled={busy === item.id}
+                          disabled={busy === item.id || pending(item)}
                           aria-label={`Remove ${title}`}
                           className="grid size-7 shrink-0 place-items-center rounded-full text-ink-faint transition-colors hover:bg-surface hover:text-ink disabled:opacity-40"
                         >
@@ -220,7 +237,7 @@ export default function CartDrawer() {
                           <button
                             type="button"
                             onClick={() => changeQty(item, -1)}
-                            disabled={busy === item.id || item.quantity <= 1}
+                            disabled={busy === item.id || pending(item) || item.quantity <= 1}
                             aria-label="Decrease quantity"
                             className="grid size-9 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
                           >
@@ -232,7 +249,7 @@ export default function CartDrawer() {
                           <button
                             type="button"
                             onClick={() => changeQty(item, 1)}
-                            disabled={busy === item.id}
+                            disabled={busy === item.id || pending(item)}
                             aria-label="Increase quantity"
                             className="grid size-9 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
                           >

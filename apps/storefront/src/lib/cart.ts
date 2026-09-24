@@ -64,6 +64,8 @@ export type CartSummary = {
 
 export type AddedLine = {
   id: string
+  /** The variant, so an optimistic line can merge with one already in the bag. */
+  variantId?: string
   productTitle: string
   variantTitle: string
   sku: string | null
@@ -122,6 +124,15 @@ async function readCartId(): Promise<string | undefined> {
   return store.get(CART_COOKIE)?.value
 }
 
+/** A cart as the storefront shows it: item subtotal and the bundle saving. */
+async function prepareCart(cart: unknown): Promise<Cart> {
+  const typed = cart as Cart
+  // Medusa subtotal includes shipping once checkout has attached a method.
+  typed.subtotal = Number((cart as { item_subtotal?: number }).item_subtotal ?? typed.subtotal)
+  typed.bundleDiscount = await computeBundleDiscount(typed)
+  return typed
+}
+
 export async function getCart(): Promise<Cart | null> {
   const cartId = await readCartId()
   if (!cartId) {
@@ -133,11 +144,7 @@ export async function getCart(): Promise<Cart | null> {
       fields: CART_FIELDS,
     })
     if (cart.completed_at) return null
-    const typed = cart as unknown as Cart
-    // Medusa subtotal includes shipping once checkout has attached a method.
-    typed.subtotal = Number((cart as unknown as { item_subtotal?: number }).item_subtotal ?? typed.subtotal)
-    typed.bundleDiscount = await computeBundleDiscount(typed)
-    return typed
+    return await prepareCart(cart)
   } catch {
     // The cart was completed or pruned server-side; treat it as empty.
     return null
@@ -149,17 +156,16 @@ export async function getCartSummary(): Promise<CartSummary> {
   return summarize(await getCart())
 }
 
-async function getOrCreateCartId(): Promise<string> {
-  const existing = await readCartId()
-  if (existing) {
-    try {
-      const { cart } = await sdk.store.cart.retrieve(existing, { fields: "id,completed_at" })
-      if (!cart.completed_at) return existing
-    } catch {
-      // Fall through and create a new one.
-    }
+async function cartIsOpen(cartId: string): Promise<boolean> {
+  try {
+    const { cart } = await sdk.store.cart.retrieve(cartId, { fields: "id,completed_at" })
+    return !cart.completed_at
+  } catch {
+    return false
   }
+}
 
+async function createCartId(): Promise<string> {
   const region_id = await getRegionId()
   const { cart } = await sdk.store.cart.create({ region_id })
   const store = await cookies()
@@ -173,30 +179,62 @@ async function getOrCreateCartId(): Promise<string> {
 }
 
 /**
+ * Add lines and get the whole cart back in the same round trip (Medusa returns
+ * the cart from createLineItem; asking for the drawer's fields there saves a
+ * second read). The existing cart is used directly; only if it is gone or
+ * already ordered is a new one made, so a normal add is one request.
+ */
+async function addLines(lines: { variantId: string; quantity: number }[]): Promise<Cart> {
+  let added = 0
+  const add = async (cartId: string) => {
+    let cart: unknown = null
+    for (const [index, line] of lines.entries()) {
+      const last = index === lines.length - 1
+      ;({ cart } = await sdk.store.cart.createLineItem(
+        cartId,
+        { variant_id: line.variantId, quantity: line.quantity },
+        last ? { fields: CART_FIELDS } : { fields: "id" }
+      ))
+      added++
+    }
+    return prepareCart(cart)
+  }
+  const existing = await readCartId()
+  if (existing) {
+    try {
+      return await add(existing)
+    } catch (error) {
+      // Only a cart that is gone or already ordered is replaced. Any other
+      // failure (a sold-out variant) keeps the shopper's bag and is reported,
+      // and a failure after a line went in must not add the pack twice.
+      if (added || (await cartIsOpen(existing))) throw error
+    }
+  }
+  return add(await createCartId())
+}
+
+/**
  * Returns the line as the server now holds it, not as the caller assumed. If
  * the device was already in the cart the quantity is the merged total, and the
- * drawer should show that rather than "1".
+ * drawer should show that rather than "1". The full list of lines comes back
+ * too, so the drawer never waits on a second request.
  */
 export async function addToCart(
   variantId: string,
   quantity = 1
-): Promise<{ summary: CartSummary; added: AddedLine | null }> {
-  const cartId = await getOrCreateCartId()
-  await sdk.store.cart.createLineItem(cartId, {
-    variant_id: variantId,
-    quantity,
-  })
-
-  const cart = await getCart()
+): Promise<{ summary: CartSummary; added: AddedLine | null; items: CartItem[] }> {
+  const cart = await addLines([{ variantId, quantity }])
   const line = (cart?.items ?? []).find((i) => i.variant?.id === variantId)
 
   revalidatePath("/cart")
 
   return {
     summary: summarize(cart),
+    items: cart.items ?? [],
     added: line
       ? {
           id: line.id,
+          variantId,
           productTitle: line.variant?.product?.title ?? line.title,
           variantTitle: line.variant?.title ?? "",
           sku: line.variant?.sku ?? null,
@@ -216,22 +254,16 @@ export async function addToCart(
  */
 export async function addManyToCart(
   items: { variantId: string; quantity?: number }[]
-): Promise<{ summary: CartSummary }> {
+): Promise<{ summary: CartSummary; items: CartItem[] }> {
   const clean = items.filter((i) => i.variantId)
   if (!clean.length) {
-    return { summary: await getCartSummary() }
+    const cart = await getCart()
+    return { summary: summarize(cart), items: cart?.items ?? [] }
   }
 
-  const cartId = await getOrCreateCartId()
-  for (const item of clean) {
-    await sdk.store.cart.createLineItem(cartId, {
-      variant_id: item.variantId,
-      quantity: item.quantity ?? 1,
-    })
-  }
-
+  const cart = await addLines(clean.map((i) => ({ variantId: i.variantId, quantity: i.quantity ?? 1 })))
   revalidatePath("/cart")
-  return { summary: summarize(await getCart()) }
+  return { summary: summarize(cart), items: cart.items ?? [] }
 }
 
 export async function setLineItemQuantity(

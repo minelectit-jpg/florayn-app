@@ -15,6 +15,7 @@ import {
   addToCart as addToCartAction,
   getCartSummary,
   type AddedLine,
+  type CartItem,
   type CartSummary,
 } from "@/lib/cart"
 
@@ -29,6 +30,14 @@ type CartContextValue = {
   /** null until the summary has been fetched, so the badge can stay hidden. */
   summary: CartSummary | null
   lastAdded: AddedLine | null
+  /**
+   * The bag's lines as last read from the server, or null before the first
+   * read. Every add hands the new list back, so the drawer shows it at once.
+   */
+  items: CartItem[] | null
+  setItems: (items: CartItem[]) => void
+  /** An add is on its way; the drawer shows the new line optimistically. */
+  adding: boolean
   isDrawerOpen: boolean
   openDrawer: () => void
   closeDrawer: () => void
@@ -64,6 +73,8 @@ export default function CartProvider({
 }) {
   const [summary, setSummary] = useState<CartSummary | null>(null)
   const [lastAdded, setLastAdded] = useState<AddedLine | null>(null)
+  const [items, setItems] = useState<CartItem[] | null>(null)
+  const [inFlight, setInFlight] = useState(0)
   const [isDrawerOpen, setDrawerOpen] = useState(false)
   // Guards against a slow first add resolving after a faster second one and
   // overwriting the newer total.
@@ -118,6 +129,7 @@ export default function CartProvider({
       }))
       setLastAdded({
         id: `optimistic-${variantId}`,
+        variantId,
         productTitle: optimistic.productTitle,
         variantTitle: optimistic.variantTitle,
         sku: null,
@@ -127,9 +139,10 @@ export default function CartProvider({
       })
       // Buy-it-now goes straight to checkout, so it opts out of the drawer.
       if (options?.openDrawer !== false) setDrawerOpen(true)
+      setInFlight((n) => n + 1)
 
       try {
-        const { summary: serverSummary, added } = await addToCartAction(
+        const { summary: serverSummary, added, items: serverItems } = await addToCartAction(
           variantId,
           quantity
         )
@@ -137,6 +150,7 @@ export default function CartProvider({
           return
         }
         setSummary(serverSummary)
+        setItems(serverItems)
         if (added) {
           setLastAdded(added)
         }
@@ -150,6 +164,8 @@ export default function CartProvider({
             .catch(() => undefined)
         }
         throw error
+      } finally {
+        setInFlight((n) => n - 1)
       }
     },
     []
@@ -181,10 +197,14 @@ export default function CartProvider({
         thumbnail: optimistic.thumbnail,
       })
       setDrawerOpen(true)
+      setInFlight((n) => n + 1)
 
       try {
-        const { summary: serverSummary } = await addManyToCartAction(items)
-        if (seq === requestSeq.current) setSummary(serverSummary)
+        const { summary: serverSummary, items: serverItems } = await addManyToCartAction(items)
+        if (seq === requestSeq.current) {
+          setSummary(serverSummary)
+          setItems(serverItems)
+        }
       } catch (error) {
         if (seq === requestSeq.current) {
           setDrawerOpen(false)
@@ -192,6 +212,8 @@ export default function CartProvider({
           getCartSummary().then(setSummary).catch(() => undefined)
         }
         throw error
+      } finally {
+        setInFlight((n) => n - 1)
       }
     },
     []
@@ -201,6 +223,9 @@ export default function CartProvider({
     () => ({
       summary,
       lastAdded,
+      items,
+      setItems,
+      adding: inFlight > 0,
       isDrawerOpen,
       openDrawer,
       closeDrawer,
@@ -211,6 +236,8 @@ export default function CartProvider({
     [
       summary,
       lastAdded,
+      items,
+      inFlight,
       isDrawerOpen,
       openDrawer,
       closeDrawer,
