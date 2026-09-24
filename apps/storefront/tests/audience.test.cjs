@@ -73,7 +73,7 @@ function toggle(pathname, variant = "pill") {
     "next/link": { __esModule: true, default: ({ prefetch, children, ...props }) => React.createElement("a", props, children) },
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({ push: (to) => pushed.push(to) }) },
     "@/lib/audience": audience,
-    "@/components/use-audience": { useAudience: () => audience.audienceFromPath(pathname) ?? "women", rememberAudience() {} },
+    "@/components/use-audience": { useAudience: () => audience.audienceFromPath(pathname) ?? "women", rememberAudience() {}, setSwitchingAudience() {} },
   }).default
   return renderToStaticMarkup(React.createElement(Toggle, { variant }))
 }
@@ -86,4 +86,33 @@ test("the header switch links each option to the counterpart page and marks the 
   assert.match(html, /aria-label="Shop for"/)
   assert.match(toggle("/", "tabs"), /fl-audience--tabs/)
   assert.match(toggle("/contact/"), /href="\/men\/"/)
+})
+
+test("a switch in flight dims the old page, points every link at the new mode, and always clears", () => {
+  const filename = path.join(__dirname, "../src/components/use-audience.ts")
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const exports = {}
+  const timers = []
+  const document = { cookie: "", documentElement: { dataset: {} } }
+  vm.runInNewContext(code, {
+    exports, document,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length },
+    clearTimeout: () => {},
+    require(name) {
+      if (name === "next/navigation") return { usePathname: () => "/shop/x/" }
+      if (name === "react") return { useEffect() {}, useSyncExternalStore: (subscribe, get) => get() }
+      if (name === "@/lib/audience") return audience
+      throw new Error(name)
+    },
+  }, { filename })
+  assert.equal(exports.useAudience(), "women", "the URL decides when nothing is switching")
+  exports.setSwitchingAudience("men")
+  assert.equal(document.documentElement.dataset.audienceSwitch, "men")
+  assert.equal(exports.useAudience(), "men", "links already point at the chosen mode")
+  assert.equal(timers.at(-1).ms, 12000, "a failed navigation cannot leave the page dimmed")
+  timers.at(-1).fn()
+  assert.equal(document.documentElement.dataset.audienceSwitch, undefined)
+  assert.equal(exports.useAudience(), "women")
+  exports.rememberAudience("men")
+  assert.match(document.cookie, /fl_audience=men/)
 })
