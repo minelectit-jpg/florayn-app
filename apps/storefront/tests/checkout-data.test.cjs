@@ -183,11 +183,14 @@ test("successful checkout retains recovery capability and the next add starts a 
     "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: {
       retrieve: async (id) => ({ cart: structuredClone(id === completed.id ? completed : fresh) }),
       create: async (input) => { creationCalls.push(plain(input)); return { cart: fresh } },
-      createLineItem: async (id, input) => {
-        itemCalls.push({ id, input: plain(input) })
+      // Like Medusa: an ordered cart refuses new lines; an open one returns itself.
+      createLineItem: async (id, input, query) => {
+        itemCalls.push({ id, input: plain(input), fields: query?.fields })
+        if (id === completed.id) throw new Error("Cart is already completed")
         fresh.items.push({ id: "line_fresh", title: "New selection", unit_price: 750, quantity: input.quantity,
           variant: { id: input.variant_id, title: "Signature Earbuds / AirPods Pro 3" } })
         fresh.subtotal = fresh.item_subtotal = fresh.total = 750 * input.quantity
+        return { cart: structuredClone(fresh) }
       },
     } } } },
   })
@@ -201,7 +204,10 @@ test("successful checkout retains recovery capability and the next add starts a 
   assert.equal((await cart.getCartSummary()).itemCount, 0)
   const added = await cart.addToCart("variant_new_earbuds", 2)
   assert.deepEqual(creationCalls, [{ region_id: "region_fixture" }])
-  assert.deepEqual(itemCalls, [{ id: fresh.id, input: { variant_id: "variant_new_earbuds", quantity: 2 } }])
+  assert.deepEqual(itemCalls.map((call) => call.id), [completed.id, fresh.id], "the ordered cart refuses, then a fresh one takes the line")
+  assert.deepEqual(itemCalls[1].input, { variant_id: "variant_new_earbuds", quantity: 2 })
+  assert.match(itemCalls[1].fields, /\*items/, "the lines come back with the add, no second read")
+  assert.equal(added.items.length, 1)
   assert.equal(cookie, fresh.id)
   assert.equal(cookieWrites[0].options.httpOnly, true)
   assert.equal(cookieWrites[0].options.sameSite, "lax")
@@ -253,4 +259,22 @@ test("a guest checkout forwards no customer token", async () => {
   })
   await cart.submitOrder({ ...validFields, quote_version: "v" })
   assert.equal(placeOrderArgs[0].token, undefined)
+})
+
+test("an add that fails on an open bag keeps that bag instead of starting a new one", async () => {
+  const creations = []
+  const cart = load("cart.ts", {
+    "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_open_fixture" }), set: () => assert.fail("the bag must not be replaced") }) },
+    "next/cache": { revalidatePath: () => {} },
+    "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
+    "./checkout": { placeOrder: async () => ({}), fetchCheckoutQuote: async () => ({}) },
+    "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: {
+      retrieve: async (id) => ({ cart: { id, completed_at: null, items: [{ id: "line_kept", quantity: 1, unit_price: 1400 }] } }),
+      create: async (input) => { creations.push(input); return { cart: { id: "cart_new" } } },
+      createLineItem: async () => { throw new Error("Variant is out of stock") },
+    } } } },
+  })
+  await assert.rejects(cart.addToCart("variant_sold_out", 1), /out of stock/)
+  assert.equal(creations.length, 0)
 })
