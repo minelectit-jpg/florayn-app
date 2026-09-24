@@ -5,7 +5,7 @@ import { Migration } from "@medusajs/framework/mikro-orm/migrations"
  * there) and when its "How is your Florayn order?" email went out. Additive
  * and idempotent, so it can run ahead of the deploy that reads it.
  */
-export class Migration20260925100000 extends Migration {
+export class Migration20260925101000 extends Migration {
   override async up(): Promise<void> {
     this.addSql(`alter table if exists "order_op" add column if not exists "status_changed_at" timestamptz null;`)
     this.addSql(`alter table if exists "order_op" add column if not exists "review_request_sent_at" timestamptz null;`)
