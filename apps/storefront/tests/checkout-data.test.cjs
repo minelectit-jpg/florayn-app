@@ -278,3 +278,34 @@ test("an add that fails on an open bag keeps that bag instead of starting a new 
   await assert.rejects(cart.addToCart("variant_sold_out", 1), /out of stock/)
   assert.equal(creations.length, 0)
 })
+
+test("a discount code is applied only if Medusa actually takes it, and the store's own offers stay hidden", async () => {
+  const calls = []
+  let promotions = [{ code: "BUNDLE-cart_fixture" }]
+  const cart = load("cart.ts", {
+    "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
+    "next/cache": { revalidatePath: () => {} },
+    "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
+    "./checkout": { placeOrder: async () => ({}), fetchCheckoutQuote: async () => ({}) },
+    "./medusa": { getRegionId: async () => "region_fixture", sdk: {
+      client: { fetch: async (url, init) => {
+        calls.push({ url, method: init.method, codes: init.body.promo_codes })
+        // Medusa ignores a code it cannot use rather than failing.
+        if (init.method === "POST" && init.body.promo_codes[0] === "REVGOOD1") promotions.push({ code: "REVGOOD1" })
+        if (init.method === "DELETE") promotions = promotions.filter((p) => !init.body.promo_codes.includes(p.code))
+        return {}
+      } },
+      store: { cart: { retrieve: async () => ({ cart: { id: "cart_fixture", promotions: structuredClone(promotions) } }) } },
+    } },
+  })
+  assert.deepEqual(plain(await cart.cartPromoCodes()), [], "the bundle code is the store's, not the shopper's")
+  assert.deepEqual(plain(await cart.applyPromoCode(" revgood1 ")), { ok: true, codes: ["REVGOOD1"] })
+  assert.deepEqual(plain(calls[0]), { url: "/store/carts/cart_fixture/promotions", method: "POST", codes: ["REVGOOD1"] })
+  const used = plain(await cart.applyPromoCode("REVUSED01"))
+  assert.equal(used.ok, false)
+  assert.match(used.message, /isn't valid or has already been used/)
+  for (const bad of ["", "x", "BUNDLE-cart_fixture", "code with spaces", "A".repeat(41)]) assert.equal((await cart.applyPromoCode(bad)).ok, false, bad)
+  assert.deepEqual(plain(await cart.removePromoCode("REVGOOD1")), { ok: true, codes: [] })
+  assert.equal((await cart.removePromoCode("FREESHIP-cart_fixture")).ok, false, "the store's own offers cannot be removed by hand")
+})

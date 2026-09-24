@@ -37,6 +37,9 @@ export type OrderOpRow = {
   steadfast_status: string | null
   steadfast_synced_at: string | null
   label_printed_at: string | null
+  status_changed_at?: string | null
+  review_request_sent_at?: string | null
+  review_request_note?: string | null
   courier_meta: Record<string, any> | null
   note: string | null
 }
@@ -130,7 +133,7 @@ export async function setWorkflowStatus(
   const updates = orderIds
     .map((id) => existing.get(id))
     .filter((op): op is OrderOpRow => Boolean(op))
-    .map((op) => ({ id: op.id, workflow_status: status }))
+    .map((op) => ({ id: op.id, workflow_status: status, ...(op.workflow_status !== status ? { status_changed_at: new Date() } : {}) }))
   if (updates.length) await opsService(container).updateOrderOps(updates)
 }
 

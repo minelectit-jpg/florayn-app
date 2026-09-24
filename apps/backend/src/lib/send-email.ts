@@ -22,6 +22,16 @@ export type EmailInput = {
   html: string
   text?: string
   replyTo?: string
+  /** Sender name shown in the inbox; the verified address from EMAIL_FROM is kept. */
+  fromName?: string
+}
+
+/** "Name <address>" with the configured address and an optional new name. */
+export function fromHeader(configured: string, name?: string): string {
+  const clean = name?.replace(/[<>"\r\n]/g, "").trim()
+  if (!clean) return configured
+  const address = configured.match(/<([^>]+)>/)?.[1] ?? configured.trim()
+  return `${clean} <${address}>`
 }
 
 export type EmailResult = { ok: boolean; error?: string }
@@ -39,7 +49,7 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
   }
 
   const body = {
-    from,
+    from: fromHeader(from, input.fromName),
     to: Array.isArray(input.to) ? input.to : [input.to],
     subject: input.subject,
     html: input.html,

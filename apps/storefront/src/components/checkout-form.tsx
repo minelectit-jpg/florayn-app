@@ -7,14 +7,17 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, LockKeyhole, Phone, Shopping
 
 import { useCart } from "@/components/cart-provider"
 import ProductImage from "@/components/product-image"
+import PromoCode from "@/components/promo-code"
 import { Button, Spinner } from "@/components/ui/button"
 import { quoteCheckout, submitOrder } from "@/lib/cart"
 import type { CheckoutQuote, CheckoutSettings, DistrictsResponse } from "@/lib/checkout"
 import { EMPTY_CHECKOUT_FIELDS, normalizeCheckoutPhone, validateCheckout, type CheckoutFields, type CheckoutLine } from "@/lib/checkout-form-data"
 import { formatPrice } from "@/lib/money"
 
-export default function CheckoutForm({ districts, items: initialItems, subtotal, bundleDiscount = 0, currencyCode, settings }: {
+export default function CheckoutForm({ districts, items: initialItems, subtotal, bundleDiscount = 0, currencyCode, settings, promoCodes = [] }: {
   districts: DistrictsResponse
+  /** Discount codes already on the bag (a review reward, say). */
+  promoCodes?: string[]
   items: CheckoutLine[]
   subtotal: number
   bundleDiscount?: number
@@ -229,6 +232,7 @@ export default function CheckoutForm({ districts, items: initialItems, subtotal,
               <div><dt>Delivery{currentQuote ? <small> to {currentQuote.district}</small> : null}</dt><dd>{quoting ? "Confirming…" : currentQuote ? currentQuote.shipping_total === 0 ? <span className="text-success">Free</span> : money(currentQuote.shipping_total) : "Select a district"}</dd></div>
               {currentQuote && currentQuote.tax_total > 0 ? <div><dt>Tax</dt><dd>{money(currentQuote.tax_total)}</dd></div> : null}
             </dl>
+            <PromoCode initialCodes={promoCodes} disabled={submitting} onChange={() => setQuoteAttempt((attempt) => attempt + 1)} />
             {currentQuote?.free_shipping ? <p className="checkout-free"><Truck size={15} aria-hidden="true" /> Free delivery applied to this order</p> : null}
           </div>
         </section>

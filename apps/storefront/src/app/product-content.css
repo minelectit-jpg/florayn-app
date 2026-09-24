@@ -88,7 +88,7 @@
  .fl-reviews__invitation h3,.fl-review-form h3 { font-size:18px; font-weight:600; color:var(--color-ink); }
  .fl-reviews__invitation p,.fl-review-form p { margin:8px 0 16px; font-size:13px; line-height:1.6; color:var(--color-ink-muted); }
  .fl-reviews__invitation button { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; color:var(--color-purple-deep); min-height:44px; }
- .fl-review-form { border-top:1px solid var(--color-line); padding-top:20px; margin-top:12px; }
+ .fl-review-form { border-top:1px solid var(--color-line); padding-top:20px; margin-top:12px; scroll-margin-top:96px; }
  .fl-review-form label,.fl-review-form legend { display:block; font-size:12px; font-weight:500; color:var(--color-ink); }
  .fl-review-form input:not([type=radio]),.fl-review-form textarea { display:block; width:100%; padding:10px 12px; border:1px solid var(--color-line-strong); border-radius:8px; font-size:16px; font-weight:400; margin-top:6px; background:var(--color-paper); }
  .fl-review-form__fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; }
@@ -99,6 +99,28 @@
  .fl-review-form__buttons { display:flex; gap:12px; margin-top:14px; }
  .fl-review-form__buttons button { padding:10px 18px; border-radius:24px; min-height:44px; font-size:13px; }
  .fl-review-form__buttons button[type=submit] { background:var(--color-ink); color:white; }
+ .fl-review-form__buttons button[type=submit]:disabled { opacity:.55; }
+ .fl-review-form__offer { padding:10px 12px; border-radius:10px; background:var(--color-purple-tint); color:var(--color-purple-deep) !important; }
+ .fl-review-form__label { display:block; font-size:12px; font-weight:500; color:var(--color-ink); }
+ .fl-review-form__photos { margin-top:14px; }
+ .fl-review-form__photos ul { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+ .fl-review-form__photos li { position:relative; width:76px; height:76px; }
+ .fl-review-form__photos li > img { width:100%; height:100%; object-fit:cover; border-radius:10px; border:1px solid var(--color-line); }
+ .fl-review-form__photos li > button { position:absolute; top:-6px; right:-6px; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--color-ink); color:white; }
+ .fl-review-form__add { display:flex !important; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:100%; height:100%; border:1.5px dashed var(--color-line-strong); border-radius:10px; color:var(--color-ink-muted) !important; font-size:11px !important; cursor:pointer; }
+ .fl-review-form__add:hover { border-color:var(--color-purple); color:var(--color-purple) !important; }
+ .fl-review-form__add:has(input:focus-visible) { outline:2px solid var(--color-purple); outline-offset:2px; }
+ .fl-review__verified { display:inline-flex; align-items:center; gap:3px; margin-left:8px; font-size:11px; font-weight:500; color:var(--color-success); }
+ .fl-review__photos { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+ .fl-review__photos a { display:block; width:72px; height:72px; overflow:hidden; border-radius:10px; border:1px solid var(--color-line); }
+ .fl-review__photos img { width:100%; height:100%; object-fit:cover; transition:transform .2s; }
+ .fl-review__photos a:hover img { transform:scale(1.05); }
+ .fl-review-thanks { text-align:center; padding:6px 0 4px; }
+ .fl-review-thanks__stars { display:block; font-size:22px; letter-spacing:3px; color:#f0a500; }
+ .fl-review-thanks__code { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px auto 0; padding:12px 14px; max-width:320px; border:1.5px dashed var(--color-purple); border-radius:12px; }
+ .fl-review-thanks__code span { font-size:22px; font-weight:700; letter-spacing:2px; color:var(--color-ink); }
+ .fl-review-thanks__code button { display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:8px; background:var(--color-ink); color:white; font-size:12px; font-weight:600; }
+ .fl-review-thanks__small { font-size:12px !important; }
  .fl-reviews button:disabled { opacity:.5; cursor:not-allowed; }
  .fl-reviews nav button { min-height:44px; color:var(--color-purple-deep); }
  /* Inside the Reviews row: no box of its own, one column (the details column

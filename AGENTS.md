@@ -111,6 +111,9 @@ pages, their admin editors or the product card's colours.
 Read `WOMEN_MEN.md` before changing the header switch, `/men` routes, links in
 content/menus/cards, or anything that lists designs. Keep the mode in the URL.
 
+Read `REVIEWS.md` before changing reviews, review request emails, review
+rewards or the checkout discount code field.
+
 Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
 layout; verify real commerce changes using the isolated Medusa integration CI.

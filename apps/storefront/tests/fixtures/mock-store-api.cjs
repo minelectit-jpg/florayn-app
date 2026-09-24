@@ -212,8 +212,22 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST") presentation[section] = data.settings
     return send(res, { settings: presentation[section] })
   }
+  // The review programme: 15% / 10% rewards, three photos, and one review link.
+  if (url.pathname === "/store/product-reviews/program") {
+    const invite = url.searchParams.get("token") === "fixture-review-link"
+      ? { name: "Fixture Buyer", product_ids: ["prod_audit-bloom"], designs: ["audit-bloom"] } : null
+    return send(res, { max_photos: 3, rewards: { photo_pct: 15, text_pct: 10 }, auto_approve: false, invite, invite_invalid: Boolean(url.searchParams.get("token")) && !invite })
+  }
+  if (url.pathname === "/store/product-reviews/photos" && req.method === "POST") {
+    // Echo the shrunk photo back as its "stored" URL so the preview shows it.
+    if (typeof data.image !== "string" || !data.image.startsWith("data:image/")) return send(res, { message: "Choose a photo." }, 400)
+    return send(res, { url: data.image }, 201)
+  }
   if (url.pathname === "/store/product-reviews") {
     if (req.method === "POST") {
+      if (data.token === "fixture-review-link") {
+        return send(res, { id: "link_review_fixture", status: "pending", reward: null, pending_reward_pct: data.images?.length ? 15 : 10 }, 201)
+      }
       if (!accountFixture || req.headers.authorization !== "Bearer local-account-fixture") return send(res, { message: "Sign in to write a review." }, 401)
       if (fixtureReviews.some((r) => r.id === "submitted_fixture")) return send(res, { message: "You have already submitted a review for this design." }, 400)
       fixtureReviews.push({ ...data, id: "submitted_fixture", status: "pending", created_at: new Date().toISOString(), review_key: "design:audit-bloom", reply: "" })
@@ -409,6 +423,17 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (url.pathname.startsWith("/store/collection-pages/")) return send(res, { page: null })
+  // Discount codes: REVFIXTURE is a valid one; anything else is ignored, as Medusa does.
+  const promoMatch = url.pathname.match(/^\/store\/carts\/([^/]+)\/promotions$/)
+  if (promoMatch) {
+    const cart = carts.get(promoMatch[1])
+    if (!cart) return send(res, { message: "No test cart" }, 404)
+    cart.promotions ??= []
+    const codes = Array.isArray(data.promo_codes) ? data.promo_codes : []
+    if (req.method === "POST") for (const code of codes) if (code === "REVFIXTURE" && !cart.promotions.some((p) => p.code === code)) cart.promotions.push({ code })
+    if (req.method === "DELETE") cart.promotions = cart.promotions.filter((p) => !codes.includes(p.code))
+    return send(res, { cart })
+  }
   const cartMatch = url.pathname.match(/^\/store\/carts\/([^/]+)(\/line-items)?(?:\/([^/]+))?$/)
   if (cartMatch) {
     const cart = carts.get(cartMatch[1])

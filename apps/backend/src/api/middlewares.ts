@@ -38,7 +38,16 @@ const STOREFRONT_WRITE_PREFIXES = [
 
 export default defineMiddlewares({
   routes: [
-    { matcher: "/store/product-reviews", method: ["POST"], middlewares: [authenticate("customer", ["session", "bearer"])] },
+    // A review comes from a signed-in customer or a review request link (token
+    // checked in the workflow), so the session is read but not required.
+    { matcher: "/store/product-reviews", method: ["POST"], middlewares: [authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true })] },
+    // Review photos arrive as base64 JSON, already shrunk by the storefront.
+    {
+      matcher: "/store/product-reviews/photos",
+      method: ["POST"],
+      bodyParser: { sizeLimit: "12mb" },
+      middlewares: [authenticate("customer", ["session", "bearer"], { allowUnauthenticated: true })],
+    },
     /**
      * The design uploader sends each mockup as base64 JSON to /admin/designs/upload.
      * A single high-resolution render base64-encodes well past the default JSON body

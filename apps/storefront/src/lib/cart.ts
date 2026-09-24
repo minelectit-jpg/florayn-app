@@ -317,6 +317,57 @@ export async function submitOrder(
   return result
 }
 
+/** The store's own per-cart offers; they are managed by the quote, never typed in. */
+const INTERNAL_CODE = /^(BUNDLE|FREESHIP)-/i
+
+/** The discount codes the shopper has applied (review rewards and the like). */
+export async function cartPromoCodes(): Promise<string[]> {
+  const cartId = await readCartId()
+  if (!cartId) return []
+  try {
+    const { cart } = await sdk.store.cart.retrieve(cartId, { fields: "id,promotions.code" })
+    return ((cart as unknown as { promotions?: { code?: string }[] }).promotions ?? [])
+      .map((p) => p.code ?? "")
+      .filter((code) => code && !INTERNAL_CODE.test(code))
+  } catch {
+    return []
+  }
+}
+
+type PromoResult = { ok: true; codes: string[] } | { ok: false; message: string }
+
+/**
+ * Apply a discount code to the bag. Medusa ignores a code it cannot use
+ * (unknown, expired, used up), so success is read back from the cart itself.
+ * The checkout then asks for a fresh quote, which keeps the code alongside the
+ * bundle savings.
+ */
+export async function applyPromoCode(input: string): Promise<PromoResult> {
+  const code = String(input ?? "").trim().toUpperCase()
+  if (!/^[A-Z0-9-]{3,40}$/.test(code) || INTERNAL_CODE.test(code)) return { ok: false, message: "Enter the code as it appears in your email." }
+  const cartId = await readCartId()
+  if (!cartId) return { ok: false, message: "Your bag is empty." }
+  try {
+    await sdk.client.fetch(`/store/carts/${cartId}/promotions`, { method: "POST", body: { promo_codes: [code] } })
+  } catch {
+    return { ok: false, message: "That code isn't valid or has already been used." }
+  }
+  const codes = await cartPromoCodes()
+  return codes.includes(code) ? { ok: true, codes } : { ok: false, message: "That code isn't valid or has already been used." }
+}
+
+export async function removePromoCode(input: string): Promise<PromoResult> {
+  const code = String(input ?? "").trim()
+  const cartId = await readCartId()
+  if (!cartId || !code || INTERNAL_CODE.test(code)) return { ok: false, message: "That code is not on your bag." }
+  try {
+    await sdk.client.fetch(`/store/carts/${cartId}/promotions`, { method: "DELETE", body: { promo_codes: [code] } })
+  } catch {
+    return { ok: false, message: "Could not remove the code. Please try again." }
+  }
+  return { ok: true, codes: await cartPromoCodes() }
+}
+
 /** The cart capability stays in its httpOnly cookie, including quote requests. */
 export async function quoteCheckout(district: string) {
   const cartId = await readCartId()

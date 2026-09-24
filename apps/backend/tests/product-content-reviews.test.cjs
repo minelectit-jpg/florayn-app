@@ -10,7 +10,7 @@ function load(file, deps={}) {
  const filename=path.join(__dirname,"../src",file)
  const code=ts.transpileModule(fs.readFileSync(filename,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021}}).outputText
  const exports={}
- vm.runInNewContext(code,{exports,Date,require:(name)=>deps[name] ?? (name==="@medusajs/framework/utils"?utils: (()=>{throw new Error(name)})())})
+ vm.runInNewContext(code,{exports,Date,process:{env:{R2_PUBLIC_URL:"https://pub-fixture.r2.dev"}},require:(name)=>deps[name] ?? (name==="@medusajs/framework/utils"?utils: (()=>{throw new Error(name)})())})
  return exports
 }
 const content=load("lib/product-content.ts")
@@ -24,8 +24,10 @@ test("product content preserves automatic, hidden and custom FAQ/information mod
 })
 test("review input excludes server-controlled moderation and identity fields",()=>{
  const valid={author:" Alex ",title:" Good fit ",body:" A useful everyday case. ",rating:4,status:"approved",customer_id:"intruder",reply:"Fake reply"}
- assert.deepEqual(plain(reviews.reviewInput(valid)),{author:"Alex",title:"Good fit",body:"A useful everyday case.",rating:4})
- for(const patch of [{rating:0},{rating:5.5},{body:"tiny"},{title:"x".repeat(121)},{author:"email@example.invalid"}])assert.throws(()=>reviews.reviewInput({...valid,...patch}))
+ assert.deepEqual(plain(reviews.reviewInput(valid)),{author:"Alex",title:"Good fit",body:"A useful everyday case.",rating:4,images:[]})
+ // florayn.com reviews have no headline and can be two words ("Great 👍").
+ assert.equal(reviews.reviewInput({...valid,title:"",body:"Nice case"}).title,"")
+ for(const patch of [{rating:0},{rating:5.5},{body:"x"},{title:"x".repeat(121)},{author:"email@example.invalid"},{images:["https://evil.invalid/a.jpg"]},{images:"x"}])assert.throws(()=>reviews.reviewInput({...valid,...patch}))
 })
 test("only published, review-enabled products expose reviews; all forms of a design share a key",async()=>{
  const product={id:"phone",status:"published",metadata:{design_slug:"bloom"}}
@@ -61,3 +63,15 @@ test("review POST requires customer authentication while reads stay public",()=>
  assert.deepEqual(plain(route.method),["POST"]);assert.equal(route.middlewares[0].actor,"customer")
 })
 
+test("review photos must be this store's own uploads, within the limit",()=>{
+ const valid={author:"Alex",title:"",body:"Lovely case",rating:5}
+ const photo=(n)=>`https://pub-fixture.r2.dev/reviews/2026/09/${n}.jpg`
+ assert.deepEqual(plain(reviews.reviewInput({...valid,images:[photo(1),photo(1),photo(2)]},3).images),[photo(1),photo(2)],"duplicates collapse")
+ assert.throws(()=>reviews.reviewInput({...valid,images:[photo(1),photo(2)]},1),/up to 1/)
+ assert.throws(()=>reviews.reviewInput({...valid,images:["https://pub-fixture.r2.dev/site/logo.webp"]}),/uploaded here/)
+ assert.throws(()=>reviews.reviewInput({...valid,images:["https://pub-fixture.r2.dev/reviews/../site/x.jpg"]}))
+ const shown=plain(reviews.publicReview({id:"r",author:"A",rating:5,title:"",body:"b",reply:"",created_at:"x",images:[photo(1)],verified:true,email:"private@example.invalid",coupon_code:"REVPRIVATE"}))
+ assert.deepEqual(shown.images,[photo(1)])
+ assert.equal(shown.verified,true)
+ assert.ok(!JSON.stringify(shown).includes("private@") && !JSON.stringify(shown).includes("REVPRIVATE"),"email and code stay private")
+})

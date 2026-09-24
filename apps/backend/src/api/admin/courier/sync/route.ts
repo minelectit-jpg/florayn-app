@@ -46,6 +46,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       // Only advance forward off `shipped`; never override a manual refund.
       if (workflow !== op.workflow_status && op.workflow_status === "shipped") {
         update.workflow_status = workflow
+        update.status_changed_at = new Date()
         changed++
       }
       updates.push(update)

@@ -109,6 +109,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     // Advance only off `shipped`, so a manual refund/cancel is never overridden.
     if (op.workflow_status === "shipped" && workflow !== "shipped") {
       update.workflow_status = workflow
+      update.status_changed_at = new Date()
     }
     await svc.updateOrderOps(update)
   }

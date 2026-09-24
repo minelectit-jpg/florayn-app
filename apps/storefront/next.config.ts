@@ -62,6 +62,13 @@ const nextConfig: NextConfig = {
    */
   eslint: { ignoreDuringBuilds: true },
 
+  /*
+   * Review photos go to the backend through a Server Action as a data URL. The
+   * browser shrinks them to about 1600px first (a few hundred KB), so 4 MB is a
+   * ceiling for an unusually detailed photo, not a target.
+   */
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
+
   images: {
     /*
      * Next's on-demand image optimizer IS used (it turns the 1200px ~37KB R2

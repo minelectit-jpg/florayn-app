@@ -99,6 +99,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
           steadfast_status: r.status ?? "in_review",
           steadfast_synced_at: new Date(),
           workflow_status: "shipped",
+          status_changed_at: new Date(),
         })
         results.push({ order_id: orderId, ok: true, tracking_code: r.tracking_code, consignment_id: r.consignment_id })
       } else {

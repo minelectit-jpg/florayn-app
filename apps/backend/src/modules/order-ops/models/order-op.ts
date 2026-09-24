@@ -35,6 +35,12 @@ const OrderOp = model
     courier_meta: model.json().nullable(),
     /** Internal merchant note on the order (not shown to the customer). */
     note: model.text().nullable(),
+    /** When workflow_status last changed: the review request waits from here. */
+    status_changed_at: model.dateTime().nullable(),
+    /** When the "How is your Florayn order?" email went out (or was attempted). */
+    review_request_sent_at: model.dateTime().nullable(),
+    /** Why it was not sent, or "skipped" for orders from before requests began. */
+    review_request_note: model.text().nullable(),
   })
   .indexes([
     { on: ["order_id"], unique: true },

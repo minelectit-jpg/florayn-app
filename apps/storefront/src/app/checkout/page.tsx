@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { Check, LockKeyhole } from "lucide-react"
 
 import CheckoutForm from "@/components/checkout-form"
-import { getCart } from "@/lib/cart"
+import { cartPromoCodes, getCart } from "@/lib/cart"
 import { getCheckoutSettings, getDistricts } from "@/lib/checkout"
 import { checkoutLines } from "@/lib/checkout-form-data"
 import "./checkout.css"
@@ -12,7 +12,7 @@ export const metadata = { title: "Checkout", robots: { index: false, follow: fal
 export const dynamic = "force-dynamic"
 
 export default async function CheckoutPage() {
-  const [cart, districts, settings] = await Promise.all([getCart(), getDistricts(), getCheckoutSettings()])
+  const [cart, districts, settings, promoCodes] = await Promise.all([getCart(), getDistricts(), getCheckoutSettings(), cartPromoCodes()])
   const items = cart?.items ?? []
   if (!items.length) redirect("/cart/")
 
@@ -34,7 +34,7 @@ export default async function CheckoutPage() {
         <span className="checkout-guest"><LockKeyhole size={14} aria-hidden="true" /> Guest checkout · No account needed</span>
       </div>
       <CheckoutForm districts={districts} items={checkoutLines(items)} subtotal={cart?.subtotal ?? 0}
-        bundleDiscount={cart?.bundleDiscount ?? 0} currencyCode={cart?.currency_code ?? "bdt"} settings={settings} />
+        bundleDiscount={cart?.bundleDiscount ?? 0} currencyCode={cart?.currency_code ?? "bdt"} settings={settings} promoCodes={promoCodes} />
     </div>
   )
 }

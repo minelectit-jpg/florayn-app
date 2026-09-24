@@ -55,3 +55,35 @@ test("florayn.com reviews land approved on their designs with their original dat
   await script.default({ container })
   assert.equal(reviews.length, 4, "a second run adds nothing")
 })
+
+test("the imported reviews get florayn.com's photos and verified marks once, keeping admin edits", async () => {
+  const filename = require("node:path").join(__dirname, "../src/migration-scripts/florayn-review-photos-2026-09-25.ts")
+  const code = require("typescript").transpileModule(require("node:fs").readFileSync(filename, "utf8"), { compilerOptions: { target: 7, module: 1 } }).outputText
+  const exports = {}
+  require("node:vm").runInNewContext(code, { exports, require(name) {
+    if (name === "@medusajs/framework/utils") return { ContainerRegistrationKeys: { LOGGER: "logger" } }
+    if (name === "../modules/content") return { CONTENT_MODULE: "content" }
+    if (name === "./import-florayn-reviews-2026-09-24") return { importedReviewCustomer: (id) => `florayn-review-${id}` }
+    throw new Error(name)
+  } }, { filename })
+  const rows = [
+    { id: "r1", customer_id: "florayn-review-6872", images: null, verified: false },
+    { id: "r2", customer_id: "florayn-review-6021", images: ["https://owner/replaced.webp"], verified: false },
+    { id: "r3", customer_id: "florayn-review-148", images: null, verified: false },
+  ]
+  const content = {
+    listProductReviews: async ({ customer_id }) => rows.filter((r) => r.customer_id === customer_id).map((r) => ({ ...r })),
+    updateProductReviews: async (patch) => Object.assign(rows.find((r) => r.id === patch.id), patch),
+  }
+  const container = { resolve: (key) => (key === "logger" ? { info() {} } : content) }
+  await exports.default({ container })
+  assert.match(rows[0].images[0], /reviews\/florayn\/6872-/)
+  assert.equal(rows[0].verified, true)
+  assert.deepEqual(rows[1].images, ["https://owner/replaced.webp"], "an admin's own photos are kept")
+  assert.equal(rows[1].verified, true)
+  assert.equal(rows[2].images, null)
+  assert.equal(rows[2].verified, false)
+  const before = JSON.stringify(rows)
+  await exports.default({ container })
+  assert.equal(JSON.stringify(rows), before)
+})

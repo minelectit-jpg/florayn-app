@@ -1,5 +1,5 @@
 import { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } from "./medusa"
-export type Review = { id: string; author: string; rating: number; title: string; body: string; reply: string; created_at: string }
+export type Review = { id: string; author: string; rating: number; title: string; body: string; reply: string; created_at: string; images?: string[]; verified?: boolean }
 export type ReviewPage = { reviews: Review[]; count: number; average: number | null; distribution: number[]; offset: number; limit: number }
 export async function getProductReviews(productId: string): Promise<ReviewPage | null> {
   try {
