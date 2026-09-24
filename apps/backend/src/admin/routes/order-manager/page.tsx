@@ -17,6 +17,9 @@ import {
 } from "@medusajs/ui"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { CustomerList } from "../../components/orders/customer-list"
+import { FloraynImportDrawer } from "../../components/orders/florayn-import-drawer"
+
 type Tab = "all" | Status
 const STATUSES = [
   "processing",
@@ -69,6 +72,9 @@ type ManagedOrder = {
   steadfast_charge: number | null
   tracking_message: string | null
   label_printed_at: string | null
+  /** "florayn.com" for an order imported from there, with its number there. */
+  source: string | null
+  source_number: string | null
 }
 
 const PAGE = 30
@@ -100,15 +106,24 @@ const OrderManagerPage = () => {
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState("")
+  const [query, setQuery] = useState("")
+  const [view, setView] = useState<"orders" | "customers">("orders")
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
 
-  const load = useCallback(async (t: Tab, off: number) => {
+  // Search runs on the server across every order, a moment after typing stops.
+  useEffect(() => {
+    const timer = setTimeout(() => { setQuery(search.trim()); setOffset(0) }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const load = useCallback(async (t: Tab, off: number, q = "") => {
     setLoading(true)
     try {
-      const data = await api(`/admin/order-ops?status=${t}&limit=${PAGE}&offset=${off}`)
+      const data = await api(`/admin/order-ops?status=${t}&limit=${PAGE}&offset=${off}${q ? `&q=${encodeURIComponent(q)}` : ""}`)
       setOrders(data.orders ?? [])
       setCounts(data.counts ?? {})
       setTotal(data.count ?? 0)
@@ -121,21 +136,15 @@ const OrderManagerPage = () => {
   }, [])
 
   useEffect(() => {
-    load(tab, offset)
-  }, [tab, offset, load])
+    load(tab, offset, query)
+  }, [tab, offset, query, load])
 
   const allCount = useMemo(() => STATUSES.reduce((n, s) => n + (counts[s] ?? 0), 0), [counts])
   const tabCount = (t: Tab) => (t === "all" ? allCount : counts[t as Status] ?? 0)
+  const refresh = useCallback(() => load(tab, offset, query), [load, tab, offset, query])
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return orders
-    return orders.filter((o) =>
-      [String(o.display_id ?? ""), o.customer_name, o.phone, o.steadfast_tracking_code, o.steadfast_consignment_id]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q))
-    )
-  }, [orders, search])
+  // The server searched every order (number, florayn.com number, phone, name, email, tracking code).
+  const visible = orders
 
   const selectedIds = useMemo(() => [...selected], [selected])
   const allSelected = visible.length > 0 && visible.every((o) => selected.has(o.order_id))
@@ -166,7 +175,7 @@ const OrderManagerPage = () => {
     run("Status change", async () => {
       await api("/admin/order-ops/status", { method: "POST", body: JSON.stringify({ order_ids: ids, status }) })
       toast.success(`Moved ${ids.length} to ${LABELS[status]}`)
-      await load(tab, offset)
+      await refresh()
     })
 
   const sendToCourier = (ids: string[]) =>
@@ -175,7 +184,7 @@ const OrderManagerPage = () => {
       const failed = (data.results ?? []).filter((r: any) => !r.ok)
       toast.success(`Sent ${data.sent} to Steadfast${failed.length ? `, ${failed.length} failed` : ""}`)
       if (failed.length) toast.error(failed.map((r: any) => r.error).slice(0, 3).join(" · "))
-      await load(tab, offset)
+      await refresh()
     })
 
   const printLabels = (ids: string[]) => {
@@ -186,14 +195,14 @@ const OrderManagerPage = () => {
     run("Sync", async () => {
       const data = await api("/admin/courier/sync", { method: "POST", body: JSON.stringify(ids ? { order_ids: ids } : {}) })
       toast.success(`Checked ${data.checked}, ${data.changed} updated`)
-      await load(tab, offset)
+      await refresh()
     })
 
   const backfill = () =>
     run("Import", async () => {
       const data = await api("/admin/order-ops/backfill", { method: "POST", body: "{}" })
       toast.success(`Imported ${data.created} order${data.created === 1 ? "" : "s"}`)
-      await load(tab, offset)
+      await refresh()
     })
 
   return (
@@ -202,16 +211,26 @@ const OrderManagerPage = () => {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Heading level="h1">Order Manager</Heading>
-          <Text size="small" className="text-ui-fg-subtle">Every order and courier parcel, by status.</Text>
+          <Text size="small" className="text-ui-fg-subtle">Every order and courier parcel, by status, and everyone who has ordered.</Text>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CourierBalance />
           <Button size="small" variant="secondary" onClick={() => syncCourier()} disabled={busy}>Sync status</Button>
-          <Button size="small" variant="secondary" onClick={backfill} disabled={busy}>Import old orders</Button>
+          <Button size="small" variant="secondary" onClick={() => setShowImport(true)}>Import from florayn.com</Button>
           <Button size="small" variant="secondary" onClick={() => setShowSettings(true)}>Courier settings</Button>
         </div>
       </div>
 
+      {/* Orders / Customers */}
+      <div className="flex gap-1 self-start rounded-lg border border-ui-border-base bg-ui-bg-subtle p-1">
+        {(["orders", "customers"] as const).map((v) => (
+          <button key={v} type="button" onClick={() => setView(v)} className={`rounded-md px-3 py-1 text-sm transition-colors ${view === v ? "bg-ui-bg-base font-medium text-ui-fg-base shadow-elevation-card-rest" : "text-ui-fg-subtle hover:text-ui-fg-base"}`}>
+            {v === "orders" ? "Orders" : "Customers"}
+          </button>
+        ))}
+      </div>
+
+      {view === "customers" ? <CustomerList onOpen={(q) => { setView("orders"); setTab("all"); setSearch(q) }} /> : <>
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => {
@@ -242,7 +261,7 @@ const OrderManagerPage = () => {
         <div className="flex flex-wrap items-center gap-2 border-b border-ui-border-base px-4 py-3">
           <Input
             size="small"
-            placeholder="Search order #, name, phone, tracking…"
+            placeholder="Search every order: #, name, phone, email, tracking…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-xs"
@@ -300,7 +319,9 @@ const OrderManagerPage = () => {
                     </span>
                     <div className="min-w-0">
                       <div className="font-medium text-ui-fg-base">#{o.display_id ?? "—"}</div>
-                      {o.steadfast_tracking_code ? (
+                      {o.source ? (
+                        <div className="text-xs text-ui-fg-subtle">{o.source} #{o.source_number}</div>
+                      ) : o.steadfast_tracking_code ? (
                         <div className="flex items-center gap-1 text-xs text-ui-fg-subtle" onClick={(e) => e.stopPropagation()}>
                           <span className="font-mono">{o.steadfast_tracking_code}</span>
                           <Copy content={o.steadfast_tracking_code} className="text-ui-fg-muted" />
@@ -350,8 +371,10 @@ const OrderManagerPage = () => {
           </div>
         ) : null}
       </div>
+      </>}
 
       {showSettings ? <CourierSettingsDrawer onClose={() => setShowSettings(false)} /> : null}
+      {showImport ? <FloraynImportDrawer onClose={() => setShowImport(false)} onImported={refresh} /> : null}
       {detailId ? (
         <OrderDetailDrawer
           orderId={detailId}
@@ -445,6 +468,11 @@ type OrderDetail = {
   steadfast_charge: number | null
   tracking_message: string | null
   label_printed_at: string | null
+  source: string | null
+  source_number: string | null
+  source_status: string | null
+  payment_method: string | null
+  coupon_codes: string[]
 }
 
 function OrderDetailDrawer({
@@ -484,6 +512,15 @@ function OrderDetailDrawer({
                 <StatusBadge color={COLORS[d.workflow_status]}>{LABELS[d.workflow_status]}</StatusBadge>
                 {d.steadfast_status ? <Badge size="2xsmall">{prettyRaw(d.steadfast_status)}</Badge> : null}
               </div>
+
+              {d.source ? (
+                <Section title={`From ${d.source}`}>
+                  <Row k="Order number there">#{d.source_number}</Row>
+                  {d.source_status ? <Row k="Status there">{prettyRaw(d.source_status.replace(/^otm-/, ""))}</Row> : null}
+                  {d.coupon_codes.length ? <Row k="Coupon">{d.coupon_codes.join(", ")}</Row> : null}
+                  <Text size="xsmall" className="text-ui-fg-subtle">Imported history: it was handled on {d.source}, so it is not sent to Steadfast from here.</Text>
+                </Section>
+              ) : null}
 
               {/* Courier */}
               {d.steadfast_tracking_code ? (
@@ -527,7 +564,7 @@ function OrderDetailDrawer({
               </Section>
 
               {/* Totals */}
-              <Section title="Payment (Cash on Delivery)">
+              <Section title={`Payment (${d.payment_method || "Cash on Delivery"})`}>
                 <Row k="Subtotal">{bdt(d.subtotal)}</Row>
                 <Row k="Shipping">{d.shipping_total === 0 ? "Free" : bdt(d.shipping_total)}</Row>
                 <Row k="Total (COD)"><b>{bdt(d.total)}</b></Row>
@@ -545,7 +582,7 @@ function OrderDetailDrawer({
                   <Button size="small" variant="secondary" onClick={() => onLabel(d.order_id)}>Print label</Button>
                   <Button size="small" variant="secondary" onClick={() => onSync(d.order_id)} disabled={busy}>Sync status</Button>
                 </>
-              ) : (
+              ) : d.source ? null : (
                 <Button size="small" variant="primary" onClick={() => onSend(d.order_id)} disabled={busy}>Send to Steadfast</Button>
               )}
               <div className="grow" />

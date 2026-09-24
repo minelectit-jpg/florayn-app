@@ -1,6 +1,7 @@
 import { createStep, createWorkflow, StepResponse, WorkflowResponse } from "@medusajs/framework/workflows-sdk"
 import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { CONTENT_MODULE } from "../modules/content"
+import { bdMobile, realEmail } from "../lib/contact"
 import { reviewInput, reviewProduct } from "../lib/product-reviews"
 import { designKey, inviteFromToken } from "../lib/review-invites"
 import { loadReviewProgram } from "../lib/review-program"
@@ -18,17 +19,17 @@ const submitProductReview = createStep("submit-product-review", async (input: Su
   const { key } = await reviewProduct(container, input.productId)
   const { settings } = await loadReviewProgram(container)
   const values = reviewInput(input.body, settings.rewards.max_photos)
-  let reviewer: { customer_id: string; email: string | null; order_id: string | null; verified: boolean }
+  let reviewer: { customer_id: string; email: string | null; phone: string | null; order_id: string | null; verified: boolean }
 
   if (input.token !== undefined && input.token !== null && input.token !== "") {
     const invite = await inviteFromToken(container, input.token)
     if (!invite) throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "This review link is not valid any more. Sign in to write a review.")
     if (!invite.products.some((p) => designKey(p) === key)) throw new MedusaError(MedusaError.Types.NOT_ALLOWED, "This link is for the products in your order.")
-    reviewer = { customer_id: invite.customerId ?? `order:${invite.orderId}`, email: invite.email, order_id: invite.orderId, verified: true }
+    reviewer = { customer_id: invite.customerId ?? `order:${invite.orderId}`, email: invite.email, phone: invite.phone, order_id: invite.orderId, verified: true }
   } else {
     if (!input.customerId) throw new MedusaError(MedusaError.Types.UNAUTHORIZED, "Sign in to write a review.")
-    const customer = await container.resolve(Modules.CUSTOMER).retrieveCustomer(input.customerId, { select: ["id", "email"] })
-    reviewer = { customer_id: customer.id, email: customer.email ?? null, order_id: null, verified: false }
+    const customer = await container.resolve(Modules.CUSTOMER).retrieveCustomer(input.customerId, { select: ["id", "email", "phone"] })
+    reviewer = { customer_id: customer.id, email: realEmail(customer.email), phone: bdMobile(customer.phone), order_id: null, verified: false }
   }
 
   const service = container.resolve(CONTENT_MODULE)

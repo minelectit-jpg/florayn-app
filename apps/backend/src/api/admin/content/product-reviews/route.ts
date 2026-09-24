@@ -1,5 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { CONTENT_MODULE } from "../../../../modules/content"
+import { localMobile, realEmail } from "../../../../lib/contact"
 import { reviewProduct, publicReview } from "../../../../lib/product-reviews"
 
 /**
@@ -17,9 +18,9 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     reviews: reviews.map((r: any) => ({
       ...publicReview(r),
       status: r.status, product_id: r.product_id, review_key: r.review_key,
-      email: r.email ?? null, order_id: r.order_id ?? null,
+      email: realEmail(r.email), phone: localMobile(r.phone), order_id: r.order_id ?? null,
       coupon_code: r.coupon_code ?? null, reward_pct: r.reward_pct ?? null,
-      reward_mailed: Boolean(r.reward_mailed_at), reward_note: r.reward_note ?? null,
+      reward_mailed: Boolean(r.reward_mailed_at), reward_channel: r.reward_channel ?? null, reward_note: r.reward_note ?? null,
     })),
     count, offset, limit: 20,
   })

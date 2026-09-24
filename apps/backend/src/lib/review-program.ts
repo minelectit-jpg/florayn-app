@@ -45,14 +45,60 @@ export type ReviewProgram = {
   auto_approve: boolean
   /** Sender name on every review email. */
   from_name: string
+  /** WhatsApp, for customers who ordered with only a phone number. */
+  whatsapp: {
+    /** Review requests on WhatsApp: never, for orders without an email, or with every email too. */
+    requests: WhatsAppPolicy
+    /** Send a review's code on WhatsApp when the reviewer has no email. */
+    rewards: boolean
+    /** The approved templates' names and language in WhatsApp Manager. */
+    request_template: string
+    reward_template: string
+    language: string
+    /**
+     * What the admin's "WhatsApp" button types into the chat, to send by hand
+     * from the shop's own WhatsApp. {name} {product} {link} {photo_pct}
+     * {text_pct}; lines with a % are left out while rewards are off.
+     */
+    manual_request_text: string
+    /** {name} {code} {pct} {until} {shop} */
+    manual_reward_text: string
+  }
 }
+
+export const WHATSAPP_POLICIES = ["off", "no_email", "always"] as const
+export type WhatsAppPolicy = (typeof WHATSAPP_POLICIES)[number]
+
+export const DEFAULT_MANUAL_REQUEST_TEXT = [
+  "Hi {name}! Thank you for shopping with Florayn. How do you like your {product}?",
+  "We would love a quick review: {link}",
+  "Add a photo with your review and get {photo_pct}% off your next order ({text_pct}% for a few words).",
+].join("\n")
+
+export const DEFAULT_MANUAL_REWARD_TEXT = [
+  "Hi {name}, thank you for your review!",
+  "Here is your {pct}% off code for your next Florayn order: {code}",
+  "It works once{until}. Shop: {shop}",
+].join("\n")
 
 export const DEFAULT_REVIEW_PROGRAM: ReviewProgram = {
   requests: { enabled: false, delay_days: 4, statuses: ["delivered"], batch: 40, max_age_days: 120, started_at: null },
   rewards: { enabled: true, photo_pct: 15, text_pct: 10, expiry_days: 60, cooldown_days: 30, max_photos: 3, min_rating: 1 },
   auto_approve: false,
   from_name: "Florayn",
+  whatsapp: {
+    requests: "no_email",
+    rewards: true,
+    request_template: "florayn_review_request",
+    reward_template: "florayn_review_reward",
+    language: "en",
+    manual_request_text: DEFAULT_MANUAL_REQUEST_TEXT,
+    manual_reward_text: DEFAULT_MANUAL_REWARD_TEXT,
+  },
 }
+
+const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/
+const LANGUAGE = /^[a-z]{2,3}(_[A-Z]{2})?$/
 
 const LIMITS = {
   delay_days: [0, 60],
@@ -76,7 +122,9 @@ export function readReviewProgram(value: unknown): ReviewProgram {
   const raw = (value && typeof value === "object" ? value : {}) as Record<string, any>
   const r = raw.requests ?? {}
   const w = raw.rewards ?? {}
+  const wa = raw.whatsapp ?? {}
   const d = DEFAULT_REVIEW_PROGRAM
+  const text = (v: unknown, fallback: string) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 1000) : fallback)
   const statuses = Array.isArray(r.statuses) ? r.statuses.filter((s: unknown) => (WORKFLOW_STATUSES as readonly string[]).includes(String(s))) : []
   return {
     requests: {
@@ -98,6 +146,15 @@ export function readReviewProgram(value: unknown): ReviewProgram {
     },
     auto_approve: typeof raw.auto_approve === "boolean" ? raw.auto_approve : d.auto_approve,
     from_name: typeof raw.from_name === "string" && raw.from_name.trim() ? raw.from_name.trim().slice(0, 60) : d.from_name,
+    whatsapp: {
+      requests: (WHATSAPP_POLICIES as readonly string[]).includes(wa.requests) ? wa.requests : d.whatsapp.requests,
+      rewards: typeof wa.rewards === "boolean" ? wa.rewards : d.whatsapp.rewards,
+      request_template: TEMPLATE_NAME.test(wa.request_template ?? "") ? wa.request_template : d.whatsapp.request_template,
+      reward_template: TEMPLATE_NAME.test(wa.reward_template ?? "") ? wa.reward_template : d.whatsapp.reward_template,
+      language: LANGUAGE.test(wa.language ?? "") ? wa.language : d.whatsapp.language,
+      manual_request_text: text(wa.manual_request_text, d.whatsapp.manual_request_text),
+      manual_reward_text: text(wa.manual_reward_text, d.whatsapp.manual_reward_text),
+    },
   }
 }
 
@@ -122,6 +179,19 @@ export function parseReviewProgram(input: unknown): { settings?: ReviewProgram; 
   }
   if (raw.from_name !== undefined && (typeof raw.from_name !== "string" || !raw.from_name.trim() || raw.from_name.length > 60)) {
     errors.from_name = "Enter a sender name within 60 characters."
+  }
+  const wa = raw.whatsapp
+  if (wa !== undefined) {
+    if (wa.requests !== undefined && !(WHATSAPP_POLICIES as readonly string[]).includes(wa.requests)) errors["whatsapp.requests"] = "Choose when to use WhatsApp."
+    for (const key of ["request_template", "reward_template"] as const) {
+      if (wa[key] !== undefined && !TEMPLATE_NAME.test(String(wa[key]))) errors[`whatsapp.${key}`] = "Use lower-case letters, digits and _ only, as in WhatsApp Manager."
+    }
+    if (wa.language !== undefined && !LANGUAGE.test(String(wa.language))) errors["whatsapp.language"] = "Use a language code such as en or en_US."
+    for (const key of ["manual_request_text", "manual_reward_text"] as const) {
+      if (wa[key] !== undefined && (typeof wa[key] !== "string" || !wa[key].trim() || wa[key].length > 1000)) errors[`whatsapp.${key}`] = "Write the message (up to 1,000 characters)."
+    }
+    if (typeof wa.manual_request_text === "string" && !wa.manual_request_text.includes("{link}")) errors["whatsapp.manual_request_text"] = "Keep {link} in the message: it is the review link."
+    if (typeof wa.manual_reward_text === "string" && !wa.manual_reward_text.includes("{code}")) errors["whatsapp.manual_reward_text"] = "Keep {code} in the message."
   }
   return Object.keys(errors).length ? { errors } : { settings: readReviewProgram(raw), errors }
 }

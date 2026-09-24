@@ -41,6 +41,14 @@ const OrderOp = model
     review_request_sent_at: model.dateTime().nullable(),
     /** Why it was not sent, or "skipped" for orders from before requests began. */
     review_request_note: model.text().nullable(),
+    /** How it went out: "email", "whatsapp" or "email+whatsapp". */
+    review_request_channel: model.text().nullable(),
+    /**
+     * Set for an order imported from another shop ("florayn.com"). Such an
+     * order was handled there: it is never sent to the courier from here nor
+     * asked for a review automatically.
+     */
+    source: model.text().nullable(),
   })
   .indexes([
     { on: ["order_id"], unique: true },

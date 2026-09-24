@@ -1,6 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
+import { realEmail } from "../../../../lib/contact"
 import { opsByOrderId, DEFAULT_STATUS, type WorkflowStatus } from "../../../../lib/order-ops"
 
 const DETAIL_FIELDS = [
@@ -59,7 +60,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       order_id: order.id,
       display_id: order.display_id,
       created_at: order.created_at,
-      email: order.email,
+      email: realEmail(order.email),
       currency_code: order.currency_code ?? "bdt",
       subtotal: Number(order.item_subtotal ?? 0),
       shipping_total: Number(order.shipping_total ?? 0),
@@ -88,6 +89,11 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
       steadfast_charge: (op as any)?.courier_meta?.charge ?? null,
       tracking_message: (op as any)?.courier_meta?.tracking_message ?? null,
       label_printed_at: op?.label_printed_at ?? null,
+      source: op?.source ?? null,
+      source_number: (meta.wc_order_number as string) ?? null,
+      source_status: (meta.wc_status as string) ?? null,
+      payment_method: (meta.payment_method as string) ?? null,
+      coupon_codes: Array.isArray(meta.coupon_codes) ? meta.coupon_codes : [],
     },
   })
 }

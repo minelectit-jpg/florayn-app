@@ -212,10 +212,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST") presentation[section] = data.settings
     return send(res, { settings: presentation[section] })
   }
-  // The review programme: 15% / 10% rewards, three photos, and one review link.
+  // The review programme: 15% / 10% rewards, three photos, and two review
+  // links: one order with a single product, one with two (the /review page
+  // lists those).
   if (url.pathname === "/store/product-reviews/program") {
-    const invite = url.searchParams.get("token") === "fixture-review-link"
-      ? { name: "Fixture Buyer", product_ids: ["prod_audit-bloom"], designs: ["audit-bloom"] } : null
+    const token = url.searchParams.get("token")
+    const bloom = { id: "prod_audit-bloom", handle: "audit-bloom", title: "Audit Bloom", thumbnail: image }
+    const midnight = { id: "prod_audit-midnight", handle: "audit-midnight", title: "Audit Midnight", thumbnail: image }
+    const invite = token === "fixture-review-link"
+      ? { name: "Fixture Buyer", product_ids: [bloom.id], designs: ["audit-bloom"], products: [bloom] }
+      : token === "fixture-review-pair"
+        ? { name: "Fixture Buyer", product_ids: [bloom.id, midnight.id], designs: ["audit-bloom", "audit-midnight"], products: [bloom, midnight] }
+        : null
     return send(res, { max_photos: 3, rewards: { photo_pct: 15, text_pct: 10 }, auto_approve: false, invite, invite_invalid: Boolean(url.searchParams.get("token")) && !invite })
   }
   if (url.pathname === "/store/product-reviews/photos" && req.method === "POST") {

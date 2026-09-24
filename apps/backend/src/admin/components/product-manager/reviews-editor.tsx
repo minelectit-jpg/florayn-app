@@ -4,8 +4,8 @@ import { api, post, ManagerSelect } from "./shared"
 
 type Review = {
   id: string; author: string; rating: number; title: string; body: string; reply: string; status: string; created_at: string; review_key: string
-  images?: string[]; verified?: boolean; email?: string | null; order_id?: string | null
-  coupon_code?: string | null; reward_pct?: number | null; reward_mailed?: boolean; reward_note?: string | null
+  images?: string[]; verified?: boolean; email?: string | null; phone?: string | null; order_id?: string | null
+  coupon_code?: string | null; reward_pct?: number | null; reward_mailed?: boolean; reward_channel?: string | null; reward_note?: string | null
 }
 
 function ReviewRow({ review, onSaved }: { review: Review; onSaved: () => void }) {
@@ -17,7 +17,7 @@ function ReviewRow({ review, onSaved }: { review: Review; onSaved: () => void })
     lock.current = true; setBusy(true)
     try {
       const result = await post(`/admin/content/product-reviews/${review.id}`, { status, reply })
-      toast.success(result.reward?.code ? `Review published. Code ${result.reward.code} (${result.reward.pct}% off) created and mailed.` : "Review updated.")
+      toast.success(result.reward?.code ? `Review published. Code ${result.reward.code} (${result.reward.pct}% off) created.` : "Review updated.")
       onSaved()
     }
     catch (e: any) { toast.error(e.message) } finally { lock.current = false; setBusy(false) }
@@ -27,12 +27,12 @@ function ReviewRow({ review, onSaved }: { review: Review; onSaved: () => void })
       <Text weight="plus">{review.author} · {"★".repeat(review.rating)}<span className="text-ui-fg-muted">{"★".repeat(5 - review.rating)}</span>{review.verified ? <span className="ml-2 text-xs text-ui-fg-interactive">Verified buyer</span> : null}</Text>
       <Badge color={review.status === "approved" ? "green" : review.status === "pending" ? "orange" : "grey"}>{review.status === "approved" ? "published" : review.status === "rejected" ? "hidden" : "pending"}</Badge>
     </div>
-    <Text size="xsmall" className="text-ui-fg-subtle">{review.review_key.replace(/^design:/, "Design: ")} · {new Date(review.created_at).toLocaleDateString()}{review.email ? ` · ${review.email}` : ""}</Text>
+    <Text size="xsmall" className="text-ui-fg-subtle">{review.review_key.replace(/^design:/, "Design: ")} · {new Date(review.created_at).toLocaleDateString()}{review.email ? ` · ${review.email}` : ""}{review.phone ? ` · ${review.phone}` : ""}</Text>
     {review.title ? <Heading level="h3">{review.title}</Heading> : null}
     <Text className="whitespace-pre-wrap break-words">{review.body}</Text>
     {review.images?.length ? <div className="flex flex-wrap gap-2">{review.images.map((src) => <a key={src} href={src} target="_blank" rel="noreferrer"><img src={src} alt="" className="h-16 w-16 rounded-md border object-cover" /></a>)}</div> : null}
     {review.coupon_code
-      ? <Text size="small">Reward: <strong>{review.coupon_code}</strong> ({review.reward_pct}% off){review.reward_mailed ? " · mailed" : " · not mailed"}</Text>
+      ? <Text size="small">Reward: <strong>{review.coupon_code}</strong> ({review.reward_pct}% off){review.reward_mailed ? ` · sent${review.reward_channel ? ` by ${review.reward_channel}` : ""}` : ` · not sent yet${review.reward_note ? ` (${review.reward_note})` : ""}`}</Text>
       : review.reward_note ? <Text size="xsmall" className="text-ui-fg-muted">No code: {review.reward_note}</Text> : null}
     <Textarea aria-label={`Reply to ${review.author}`} placeholder="Reply publicly as Florayn (optional)" maxLength={2000} value={reply} onChange={(e) => setReply(e.target.value)} disabled={busy} />
     <div className="flex flex-wrap gap-2">

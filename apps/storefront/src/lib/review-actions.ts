@@ -13,7 +13,12 @@ export type ReviewProgramInfo = {
   max_photos: number
   rewards: { photo_pct: number; text_pct: number } | null
   auto_approve: boolean
-  invite: { name: string | null; product_ids: string[]; designs: string[] } | null
+  invite: {
+    name: string | null
+    product_ids: string[]
+    designs: string[]
+    products?: { id: string; handle: string; title: string; thumbnail: string | null }[]
+  } | null
   invite_invalid: boolean
 }
 

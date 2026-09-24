@@ -1,8 +1,14 @@
 # Reviews, review requests and rewards
 
 This rebuilds florayn.com's florayn-core review hub (`review-requests.php`,
-`review-rewards.php`) on Medusa. It lives in Admin > Reviews, which has three
-tabs: All reviews, Request emails and Coupon rewards.
+`review-rewards.php`) on Medusa. It lives in Admin > Reviews, which has four
+tabs: All reviews, Review requests, Coupon rewards and WhatsApp.
+
+A phone-only order (no email at checkout) is stored with the email
+`<phone>@no-email.florayn.local` (`workflows/checkout-service.ts`). Never mail
+it. Read customer emails through `realEmail()` in `lib/contact.ts`, which
+returns null for that placeholder. Mobiles go through `bdMobile()`, which
+gives the `8801XXXXXXXXX` form that WhatsApp uses.
 
 ## Settings
 
@@ -28,9 +34,12 @@ tabs: All reviews, Request emails and Coupon rewards.
   - Every place that changes `workflow_status` stamps `status_changed_at`: the
     admin, courier send, courier sync and the Steadfast webhook.
   - The daily limit counts `review_request_sent_at` over the last 24 hours.
-- Each order is mailed once. An order with no email address, or no product
-  that can be reviewed, is recorded with a note and leaves the queue. Its
-  links can still be copied in the admin and sent over WhatsApp.
+- Each order is asked once, by email and/or WhatsApp (see below).
+  - `order_op.review_request_channel` records how it went.
+  - An order that could not be reached, or has nothing to review, is
+    recorded with a note and leaves the queue.
+- Orders imported from florayn.com (`order_op.source`) are never asked
+  automatically.
 - The email copy is florayn.com's word for word (`lib/review-emails.ts`). A
   star link is `/product/<handle>/?review=<token>&r=<1-5>#customer-reviews`.
 - The token is an HMAC over the order id, signed with `JWT_SECRET`
@@ -71,6 +80,43 @@ tabs: All reviews, Request emails and Coupon rewards.
   `FREESHIP-`).
 - Unlike florayn.com, the coupon email does not claim the code is locked to an
   email address. Checkout email is optional here, so it could not be.
+
+## WhatsApp
+
+Customers who ordered with only a phone number get their review request and
+their code on WhatsApp.
+
+- **Sending by hand works today, with no setup.** The "WhatsApp" buttons on
+  the request queue, log and search, and "Send on WhatsApp" on codes not sent
+  yet, open a wa.me link to that customer's chat with the message already
+  typed. The admin then sends it from the shop's own WhatsApp.
+  - The message text is editable on the Review requests and Coupon rewards
+    tabs.
+  - Sending a request this way records it as "whatsapp by hand".
+- **Automatic sending** uses the WhatsApp Business Platform (Meta Cloud API).
+  - The connection lives in the `whatsapp_settings` row, set on the WhatsApp
+    tab. The token is shown masked only.
+  - `lib/whatsapp.ts` sends template messages. `lib/review-whatsapp.ts` holds
+    the two templates, `florayn_review_request` and `florayn_review_reward`.
+    Both are Marketing templates.
+  - "Submit templates to Meta" creates both. Meta must approve them before
+    anything sends.
+  - The request's button opens `/review/<token>` on the storefront. For one
+    product it goes straight to that product's review form; for more, it
+    lists them.
+  - The button URL holds the shop's address. After the move to florayn.com,
+    submit the request template again under a new name.
+- **Who gets WhatsApp** is set by the Review requests tab ("Ask on WhatsApp"):
+  - only orders without an email (the default);
+  - every order, as well as the email;
+  - never.
+  - Codes go on WhatsApp only when the reviewer has no email.
+- If WhatsApp is not connected:
+  - a phone-only order is recorded "no email; WhatsApp not connected" and
+    leaves the queue;
+  - a phone-only reviewer's code is still created, and it waits on Coupon
+    rewards for "Send on WhatsApp".
+- The cooldown counts by email and by mobile (`product_review.phone`).
 
 ## Imports
 

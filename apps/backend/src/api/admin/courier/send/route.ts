@@ -62,6 +62,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       })
       continue
     }
+    // An order imported from florayn.com was shipped from there; booking it
+    // again here would send a second parcel.
+    if (op?.source) {
+      results.push({ order_id: orderId, ok: false, error: `#${order.display_id} came from ${op.source} and is handled there.` })
+      continue
+    }
     const m = projectManagedOrder(order, op)
     const phone = normalizeBdPhone(m.phone)
     if (!phone) {

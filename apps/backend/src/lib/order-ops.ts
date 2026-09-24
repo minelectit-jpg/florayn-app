@@ -40,6 +40,9 @@ export type OrderOpRow = {
   status_changed_at?: string | null
   review_request_sent_at?: string | null
   review_request_note?: string | null
+  review_request_channel?: string | null
+  /** "florayn.com" for an order imported from there. */
+  source?: string | null
   courier_meta: Record<string, any> | null
   note: string | null
 }
@@ -200,24 +203,60 @@ export function projectManagedOrder(order: any, op: OrderOpRow | undefined) {
     tracking_message: op?.courier_meta?.tracking_message ?? null,
     label_printed_at: op?.label_printed_at ?? null,
     note: op?.note ?? null,
+    source: op?.source ?? null,
+    source_number: (meta.wc_order_number as string) ?? null,
   }
 }
 
 export type ManagedOrder = ReturnType<typeof projectManagedOrder>
 
 /**
+ * Order ids matching an order number (ours, or a florayn.com order number),
+ * email, phone or customer name, newest first.
+ */
+export async function searchOrderIds(container: any, q: string, limit = 10): Promise<string[]> {
+  const text = q.trim().slice(0, 100)
+  if (!text) return []
+  const knex: any = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const like = `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
+  const number = text.replace(/^#/, "")
+  const rows: { id: string }[] = await knex("order as o")
+    .leftJoin("order_address as a", "a.id", "o.shipping_address_id")
+    .whereNull("o.deleted_at")
+    .andWhere((w: any) => {
+      if (/^\d{1,9}$/.test(number)) w.orWhere("o.display_id", Number(number))
+      if (/^\d{1,12}$/.test(number)) w.orWhereRaw("o.metadata->>'wc_order_id' = ?", [number])
+      w.orWhereILike("o.email", like)
+        .orWhereILike("a.phone", like)
+        .orWhereRaw("concat_ws(' ', a.first_name, a.last_name) ilike ?", [like])
+        .orWhereExists(knex("order_op as op").whereRaw("op.order_id = o.id").whereNull("op.deleted_at")
+          .andWhere((t: any) => t.orWhereILike("op.steadfast_tracking_code", like).orWhereILike("op.steadfast_consignment_id", like)))
+    })
+    .orderBy("o.created_at", "desc")
+    .limit(limit)
+    .select("o.id")
+  return rows.map((r) => r.id)
+}
+
+/**
  * List orders for one workflow tab (or "all"), newest first, paginated. Reads
  * the op rows for that status (indexed), then hydrates the matching orders.
+ * With `q`, only orders matching the search (see searchOrderIds).
  */
 export async function listOrdersForStatus(
   container: any,
   status: WorkflowStatus | "all",
-  opts: { limit?: number; offset?: number } = {}
+  opts: { limit?: number; offset?: number; q?: string } = {}
 ): Promise<{ orders: ManagedOrder[]; count: number }> {
   const svc = opsService(container)
   const take = Math.min(Math.max(1, opts.limit ?? 50), 200)
   const skip = Math.max(0, opts.offset ?? 0)
-  const filter = status === "all" ? {} : { workflow_status: status }
+  const filter: Record<string, unknown> = status === "all" ? {} : { workflow_status: status }
+  if (opts.q?.trim()) {
+    const ids = await searchOrderIds(container, opts.q, 200)
+    if (!ids.length) return { orders: [], count: 0 }
+    filter.order_id = ids
+  }
   const [ops, count]: [OrderOpRow[], number] = await svc.listAndCountOrderOps(
     filter,
     { order: { created_at: "DESC" }, take, skip }

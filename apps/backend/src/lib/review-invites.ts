@@ -1,5 +1,6 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
+import { bdMobile, realEmail } from "./contact"
 import { readReviewToken } from "./review-links"
 
 export type InviteProduct = { id: string; handle: string; title: string; thumbnail: string | null; design: string | null }
@@ -7,7 +8,10 @@ export type InviteProduct = { id: string; handle: string; title: string; thumbna
 export type ReviewInvite = {
   orderId: string
   displayId: number | null
+  /** A real address only: null for a phone-only order's checkout placeholder. */
   email: string | null
+  /** The order's mobile for WhatsApp (8801XXXXXXXXX), when it is a BD mobile. */
+  phone: string | null
   customerId: string | null
   firstName: string | null
   fullName: string | null
@@ -24,8 +28,8 @@ export async function loadInvite(container: any, orderId: string): Promise<Revie
   const { data } = await query.graph({
     entity: "order",
     fields: [
-      "id", "display_id", "email", "customer_id",
-      "shipping_address.first_name", "shipping_address.last_name",
+      "id", "display_id", "email", "customer_id", "metadata",
+      "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone",
       "billing_address.first_name", "billing_address.last_name",
       "items.product_id", "items.thumbnail",
       "items.product.id", "items.product.handle", "items.product.title", "items.product.status", "items.product.thumbnail", "items.product.metadata",
@@ -57,7 +61,8 @@ export async function loadInvite(container: any, orderId: string): Promise<Revie
   return {
     orderId: order.id,
     displayId: order.display_id ?? null,
-    email: order.email ?? null,
+    email: realEmail(order.email),
+    phone: bdMobile(order.shipping_address?.phone) ?? bdMobile(order.metadata?.customer_phone),
     customerId: order.customer_id ?? null,
     firstName: first || null,
     fullName: [first, last].filter(Boolean).join(" ") || null,

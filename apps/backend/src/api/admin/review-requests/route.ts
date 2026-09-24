@@ -1,46 +1,32 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { CONTENT_MODULE } from "../../../modules/content"
-import { opsService } from "../../../lib/order-ops"
+import { localMobile, realEmail } from "../../../lib/contact"
+import { opsService, searchOrderIds } from "../../../lib/order-ops"
 import { loadInvite } from "../../../lib/review-invites"
 import { loadReviewProgram } from "../../../lib/review-program"
-import { changedAt, dueOrders, inviteLinks, runReviewRequests, sendReviewRequest } from "../../../lib/review-requests"
+import { changedAt, dueOrders, inviteLinks, manualRequest, runReviewRequests, sendReviewRequest } from "../../../lib/review-requests"
 
 const PAGE = 50
 
-/** Display facts for a set of orders: number, customer, email, phone. */
+/**
+ * Display facts for a set of orders: number, customer, email, phone. A
+ * phone-only order's checkout placeholder email shows as no email.
+ */
 async function orderFacts(scope: any, ids: string[]) {
   if (!ids.length) return new Map<string, any>()
   const { data } = await scope.resolve(ContainerRegistrationKeys.QUERY).graph({
     entity: "order",
-    fields: ["id", "display_id", "email", "created_at", "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone"],
+    fields: ["id", "display_id", "email", "created_at", "metadata", "shipping_address.first_name", "shipping_address.last_name", "shipping_address.phone"],
     filters: { id: ids },
   })
   return new Map<string, any>((data ?? []).map((o: any) => [o.id, {
     display_id: o.display_id,
-    email: o.email ?? null,
+    email: realEmail(o.email),
     name: [o.shipping_address?.first_name, o.shipping_address?.last_name].filter(Boolean).join(" ") || null,
     phone: o.shipping_address?.phone ?? null,
+    whatsapp: Boolean(localMobile(o.shipping_address?.phone) ?? localMobile(o.metadata?.customer_phone)),
   }]))
-}
-
-/** Order ids matching an order number, email, phone or customer name (newest first, 10 at most). */
-async function findOrders(scope: any, q: string): Promise<string[]> {
-  const knex: any = scope.resolve(ContainerRegistrationKeys.PG_CONNECTION)
-  const like = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
-  const rows: { id: string }[] = await knex("order as o")
-    .leftJoin("order_address as a", "a.id", "o.shipping_address_id")
-    .whereNull("o.deleted_at")
-    .andWhere((w: any) => {
-      if (/^\d{1,9}$/.test(q)) w.orWhere("o.display_id", Number(q))
-      w.orWhereILike("o.email", like)
-        .orWhereILike("a.phone", like)
-        .orWhereRaw("concat_ws(' ', a.first_name, a.last_name) ilike ?", [like])
-    })
-    .orderBy("o.created_at", "desc")
-    .limit(10)
-    .select("o.id")
-  return rows.map((r) => r.id)
 }
 
 /**
@@ -55,7 +41,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const content: any = req.scope.resolve(CONTENT_MODULE)
 
   if (typeof req.query.q === "string" && req.query.q.trim()) {
-    const ids = await findOrders(req.scope, req.query.q.trim().slice(0, 100))
+    const ids = await searchOrderIds(req.scope, req.query.q, 10)
     const [facts, ops] = await Promise.all([
       orderFacts(req.scope, ids),
       ids.length ? svc.listOrderOps({ order_id: ids }, { take: ids.length }) : [],
@@ -70,6 +56,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         status: op?.workflow_status ?? "processing",
         sent_at: op?.review_request_sent_at ?? null,
         note: op?.review_request_note ?? null,
+        channel: op?.review_request_channel ?? null,
         products: invite ? inviteLinks(invite).map((p) => ({ id: p.id, title: p.title, thumbnail: p.thumbnail, link: p.link })) : [],
       }
     }))
@@ -99,6 +86,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
           ...facts.get(op.order_id),
           sent_at: op.review_request_sent_at,
           note: op.review_request_note,
+          channel: op.review_request_channel ?? null,
           review: review ? { rating: review.rating, status: review.status } : null,
         }
       }),
@@ -117,21 +105,34 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 
 /**
  * POST /admin/review-requests
- *   { action: "send", order_id }  mail one order now (again, if it was sent before)
- *   { action: "run" }             send one batch of what is due now
+ *   { action: "send", order_id }      send one order now by email and/or
+ *                                     WhatsApp (again, if it was sent before)
+ *   { action: "whatsapp", order_id }  the request as a wa.me link, to send by
+ *                                     hand from the shop's WhatsApp; recorded
+ *   { action: "run" }                 send one batch of what is due now
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const body = (req.body ?? {}) as Record<string, unknown>
   const { settings } = await loadReviewProgram(req.scope)
-  if (body.action === "send" && typeof body.order_id === "string" && /^order_[A-Za-z0-9]+$/.test(body.order_id)) {
-    const result = await sendReviewRequest(req.scope, body.order_id, settings)
-    if (result.ok) { res.json({ ok: true }); return }
+  const orderId = typeof body.order_id === "string" && /^order_[A-Za-z0-9]+$/.test(body.order_id) ? body.order_id : null
+  if (body.action === "send" && orderId) {
+    const result = await sendReviewRequest(req.scope, orderId, settings)
+    if (result.ok) { res.json({ ok: true, channel: result.channel, note: result.note ?? null }); return }
     res.status(400).json({
       ok: false,
-      message: result.note === "no email"
-        ? "This order has no email address. Copy a link and send it on WhatsApp or Messenger instead."
+      message: /^no email/.test(result.note ?? "")
+        ? "This order has no email address and WhatsApp is not connected. Use the WhatsApp button to send it from your own WhatsApp."
         : `Could not send that one (${result.note}).`,
     })
+    return
+  }
+  if (body.action === "whatsapp" && orderId) {
+    const result = await manualRequest(req.scope, orderId, settings)
+    if ("error" in result) { res.status(400).json({ message: result.error }); return }
+    const svc = opsService(req.scope)
+    const [op] = await svc.listOrderOps({ order_id: orderId }, { take: 1 })
+    if (op) await svc.updateOrderOps({ id: op.id, review_request_sent_at: new Date(), review_request_note: null, review_request_channel: "whatsapp by hand" })
+    res.json({ url: result.url, text: result.text })
     return
   }
   if (body.action === "run") {

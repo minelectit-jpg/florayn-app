@@ -111,8 +111,13 @@ pages, their admin editors or the product card's colours.
 Read `WOMEN_MEN.md` before changing the header switch, `/men` routes, links in
 content/menus/cards, or anything that lists designs. Keep the mode in the URL.
 
-Read `REVIEWS.md` before changing reviews, review request emails, review
-rewards or the checkout discount code field.
+Read `REVIEWS.md` before changing reviews, review requests (email and
+WhatsApp), review rewards or the checkout discount code field. A phone-only
+order's email is a placeholder: read customer emails through `realEmail()`.
+
+Read `ORDER_IMPORT.md` before changing the florayn.com order import, the
+Customers list or order search. Imported orders are history: never book them
+with the courier.
 
 Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
