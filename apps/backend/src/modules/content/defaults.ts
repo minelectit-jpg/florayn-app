@@ -382,16 +382,41 @@ const earbuds = (group: string, rows: [string, string, string?][]): SeedItem[] =
     badge: badge ?? null,
   }))
 
+/**
+ * The header and footer menus of a fresh database, shaped like the live menus
+ * after header-navigation-2026-09-27: the header's model lists, styles and
+ * collections fill themselves (Admin > Navigation), and their links below are
+ * kept only as the old hand-made lists.
+ */
 export const DEFAULT_MENU: {
   menu: string
   label: string
   href: string | null
+  kind?: "links" | "devices" | "case_types" | "collections"
+  placement?: "all" | "drawer" | "bar"
+  config?: Record<string, unknown> | null
   items: SeedItem[]
 }[] = [
   {
     menu: "primary",
+    label: "Collections",
+    href: null,
+    kind: "collections",
+    placement: "drawer",
+    config: { title: "Collections", view_all_href: "/collections/", limit: 8 },
+    items: [
+      { label: "Leopard", href: "/collection/leopard/" },
+      { label: "Muse Marvel", href: "/collection/muse-marvel/" },
+      { label: "van Gogh Dreams", href: "/collection/van-gogh-dreams/" },
+      { label: "Bug Life", href: "/collection/bug-life/" },
+    ],
+  },
+  {
+    menu: "primary",
     label: "Phone Case",
     href: shop("iphone-17-pro-max"),
+    kind: "devices",
+    config: { families: ["iphone", "samsung"], case_type: "signature" },
     items: [
       ...iphone("iPhone 17 Series", [
         ["iPhone 17 Pro Max", "iphone-17-pro-max", "New"],
@@ -454,6 +479,8 @@ export const DEFAULT_MENU: {
     menu: "primary",
     label: "Earbuds Cases",
     href: shop("airpods-pro-3", "signature-earbuds"),
+    kind: "devices",
+    config: { families: ["airpods"], case_type: "signature-earbuds" },
     items: earbuds("Apple", [
       ["AirPods 1/2", "airpods-1-2"],
       ["AirPods 3", "airpods-3"],
@@ -467,6 +494,12 @@ export const DEFAULT_MENU: {
     menu: "primary",
     label: "Styles",
     href: null,
+    kind: "case_types",
+    config: {
+      form: "phone",
+      exclude: [],
+      links: { alcantara: "/collection/alcantara/", essentials: "/collection/essentials/" },
+    },
     items: [
       { label: "Alcantara", href: "/collection/alcantara/" },
       { label: "Essentials", href: "/collection/essentials/" },
@@ -474,17 +507,6 @@ export const DEFAULT_MENU: {
       { label: "Elite Clear", href: shop("iphone-17-pro-max", "elite-clear") },
       { label: "Armor Clear", href: shop("iphone-17-pro-max", "armor-clear") },
       { label: "Armor Black", href: shop("iphone-17-pro-max", "armor-black") },
-    ],
-  },
-  {
-    menu: "primary",
-    label: "Collections",
-    href: null,
-    items: [
-      { label: "Leopard", href: "/collection/leopard/" },
-      { label: "Muse Marvel", href: "/collection/muse-marvel/" },
-      { label: "van Gogh Dreams", href: "/collection/van-gogh-dreams/" },
-      { label: "Bug Life", href: "/collection/bug-life/" },
     ],
   },
   {
@@ -536,6 +558,42 @@ export const DEFAULT_MENU: {
 ]
 
 const R2 = "https://pub-1af88507922d437983ab3ffaf7336788.r2.dev"
+
+/**
+ * The header's catalogue values, which live on the devices and case types (and
+ * are edited in Admin > Devices and Admin > Case types), not on the menu:
+ *
+ *   - DEFAULT_DEVICE_BADGES: the pill next to a model, from the header links
+ *     above that carry one (New on the iPhone 17, Samsung S26 and AirPods Pro 3
+ *     lines), first link wins.
+ *   - DEFAULT_CASE_TYPE_IMAGES: the six "Shop by style" photos the old mega
+ *     menu hotlinked from florayn.com, copied to R2.
+ *
+ * initial-data-seed writes them when it creates a fresh catalogue, and
+ * header-navigation-2026-09-27 fills them on a catalogue seeded before they
+ * existed (only where the owner has set nothing).
+ */
+export const DEFAULT_DEVICE_BADGES: Record<string, string> = (() => {
+  const badges: Record<string, string> = {}
+  for (const section of DEFAULT_MENU) {
+    if (section.menu !== "primary") continue
+    for (const item of section.items) {
+      const slug = item.href.match(/^\/shop\/([a-z0-9-]+)\//)?.[1]
+      const badge = item.badge?.trim()
+      if (slug && badge && !badges[slug]) badges[slug] = badge
+    }
+  }
+  return badges
+})()
+
+export const DEFAULT_CASE_TYPE_IMAGES: Record<string, string> = {
+  alcantara: `${R2}/site/case-types/alcantara-d3190c32.jpg`,
+  essentials: `${R2}/site/case-types/essentials-c95650a6.jpg`,
+  signature: `${R2}/site/case-types/signature-9a3de988.jpg`,
+  "elite-clear": `${R2}/site/case-types/elite-clear-bde7403d.jpg`,
+  "armor-clear": `${R2}/site/case-types/armor-clear-4c44fbe7.jpg`,
+  "armor-black": `${R2}/site/case-types/armor-black-5115f65d.webp`,
+}
 
 /**
  * Example "Features" blocks so the band is populated the first time it renders.

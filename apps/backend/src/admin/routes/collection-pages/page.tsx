@@ -55,6 +55,8 @@ type Page = {
   design_slugs: string[]
   blocks: Block[]
   is_visible: boolean
+  /** In the Collections row of the phone menu; absent (an older backend) means shown. */
+  show_in_menu?: boolean
   position: number
 }
 
@@ -202,6 +204,16 @@ const CollectionPagesPage = () => {
     toast.success(visible ? `${titleOf(page)} is live` : `${titleOf(page)} is hidden`)
   })
 
+  const toggleMenu = (page: Page, inMenu: boolean) => run(async () => {
+    const d = await post(`/admin/content/collection-pages/${page.id}`, { show_in_menu: inMenu })
+    apply(d)
+    // A backend without the column answers without it: say so.
+    if ((d.pages ?? []).some((p: Page) => p.id === page.id && p.show_in_menu === undefined)) {
+      throw new Error("The server did not save Show in menu. Update the backend, then try again.")
+    }
+    toast.success(inMenu ? `${titleOf(page)} added to the menu` : `${titleOf(page)} removed from the menu`)
+  })
+
   const create = () => run(async () => {
     if (!creating?.slug) throw new Error("Choose which collection the page is for.")
     const body = creating.mode === "copy"
@@ -285,6 +297,9 @@ const CollectionPagesPage = () => {
             <Text size="small" className="text-ui-fg-subtle">
               Each collection&rsquo;s landing page at /collection/&lt;slug&gt;/. Start a new one from a template or duplicate an existing page onto another collection, then change its words, pictures and colours. The product cards stay the same design and take on the page&rsquo;s colours.
             </Text>
+            <Text id="show-in-menu-help" size="small" className="mt-2 text-ui-fg-subtle">
+              <span className="font-medium text-ui-fg-base">Show in menu:</span> Adds the page to the Collections row in the phone menu, in this list&apos;s order.
+            </Text>
           </div>
           <Button size="small" disabled={busy || !free.length} onClick={() => setCreating({ mode: "new", slug: free[0]?.handle ?? "", preset: presets[0]?.id ?? "classic" })}>
             + New page
@@ -345,6 +360,8 @@ const CollectionPagesPage = () => {
               <div className="flex items-center gap-x-2">
                 <Label size="small">Shown</Label>
                 <Switch checked={page.is_visible} disabled={busy} onCheckedChange={(v) => toggle(page, v)} />
+                <Label size="small" htmlFor={`menu-${page.id}`} className="ml-2">Show in menu</Label>
+                <Switch id={`menu-${page.id}`} aria-describedby="show-in-menu-help" checked={page.show_in_menu !== false} disabled={busy} onCheckedChange={(v) => toggleMenu(page, v)} />
                 <Button size="small" variant={isOpen ? "primary" : "secondary"} disabled={busy} onClick={() => open(isOpen ? null : page)}>
                   {isOpen ? "Close" : "Edit"}
                 </Button>

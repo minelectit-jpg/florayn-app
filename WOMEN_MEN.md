@@ -22,27 +22,40 @@ the owner's choice.
 - `components/use-audience.ts` resolves the mode from the path. On shared pages
   it falls back to the `fl_audience` cookie after hydration, so there is no
   mismatch.
-- `components/audience-toggle.tsx` is the switch:
-  - a sliding pill in the desktop header
-  - a full-width tab bar under the phone header on home, shop and collection
-    pages (not on product pages)
-  - the same switch at the top of the phone menu drawer
+- `components/audience-toggle.tsx` is the switch, in three variants:
+  - `pill`: a sliding pill in the desktop header
+  - `compact`: a small WOMEN | MEN switch beside the search field in the
+    phone and tablet browse row, on home, shop and collection pages only (not
+    on product, cart or search pages). The row scrolls away with the page.
+  - `tabs`: full-width tabs at the top of the phone menu drawer. Switching
+    there opens the other mode and keeps the drawer open, back on its first
+    level, with the other mode's menu. The drawer closes only when the page
+    itself changes.
 
   It opens the same page in the other mode and has `prefetch={false}`, so
-  product pages are not rendered twice.
+  product pages are not rendered twice. There is no longer a full-width tab
+  bar under the phone header. See [HEADER_SEARCH.md](HEADER_SEARCH.md).
 - The page bodies live in `components/pages/*` and take an `audience`. The files
   in `app/…` and `app/men/…` only fix the mode and their cache settings, and
   both must keep them identical.
 - Men product pages canonicalise to the root `/product/<slug>/`. Men home, shop
   and collection pages have their own canonical URLs and are in the sitemap.
 - `lib/revalidation.ts` refreshes both modes of any scoped path.
+- `/search/` is a scoped path: `/men/search/` is its Men twin. Both are one
+  static page each; the words stay in `?q=` and results are worked out in
+  the browser, Men designs first under `/men`.
 
 ## What a mode changes
 
 - **Home page:** each mode has its own `home_section` rows (`audience` column).
 - **Header menu:** Women uses `menu_section.menu = "primary"`, Men uses
-  `"primary-men"`. An empty Men menu falls back to the Women one. The footer is
-  shared.
+  `"primary-men"`. An empty Men menu falls back to the Women one, and so does
+  a Men menu that equals it apart from ids (the header sends it once). The
+  desktop bar takes its mode from the path only, so shared pages like `/cart/`
+  show the Women bar. The footer is shared.
+- **Search:** the index marks each design, collection and menu link for Women,
+  Men or both. Search lists this mode's designs first; when a mode has no
+  match it shows the other mode's designs under a note.
 - **Listings:** shop, collection pages, home rows, collection cards, "More
   designs" and the product-page strips list only designs for that mode, plus
   those for both.
@@ -61,9 +74,11 @@ the owner's choice.
 - A simple product's colour uses `variant.metadata.audience`, set in the variant
   editor (`POST /admin/products/:id/manager-variants`). Case products are tagged
   as a whole, never per variant.
-- **Admin > Home page** and **Admin > Mega menu** have Women and Men tabs.
+- **Admin > Home page** and **Admin > Navigation** (the old Mega menu, still at
+  `/app/mega-menu`) have Women and Men tabs.
   - Home page: "Copy to Men" / "Copy to Women" copies a section across.
-  - Mega menu: "Copy Women menu" starts an empty Men menu.
+  - Navigation: "Copy Women menu" starts an empty Men menu.
+- **Admin > Search** has separate Try suggestions for Women and Men.
 - `migration-scripts/men-mode-2026-09-24.ts` did the first setup:
   - tagged 42 men and 83 women designs from florayn.com's Gender attribute (the
     rest are for both)

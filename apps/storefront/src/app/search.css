@@ -1,0 +1,117 @@
+/*
+ * Search: the sheet (components/header/search-sheet.tsx) inside
+ * dialog#site-search, its lazy results (search-results.tsx) and the /search
+ * page (components/search/search-page-client.tsx). The dialog, its backdrop
+ * and data-closing are header.css and header-dialogs.tsx. On phones the sheet
+ * fills the screen; from 768px it drops from the top over the dimmed page;
+ * from 1024px the results split into a list column and a design grid.
+ */
+@layer components {
+  .fl-sheet--search .fl-search {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    background:var(--color-paper);
+    padding-top:env(safe-area-inset-top);
+    transition:opacity .2s ease, transform .26s cubic-bezier(.22,1,.36,1);
+  }
+  @starting-style {
+    .fl-sheet--search[open] .fl-search { opacity:0; transform:translateY(-12px); }
+  }
+  .fl-sheet--search[data-closing] .fl-search { opacity:0; transform:translateY(-12px); transition:opacity .16s ease-in, transform .16s ease-in; }
+  @media (min-width:768px) {
+    .fl-sheet--search .fl-search { bottom:auto; max-height:100dvh; border-radius:0 0 20px 20px; box-shadow:0 18px 48px -12px rgb(26 22 37 / .3); }
+  }
+
+  /* The results scroll on their own; the top bar stays put. */
+  .fl-search__body {
+    flex:1; min-height:0;
+    overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+    padding:0 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  @media (min-width:768px) {
+    .fl-search__body { flex:none; max-height:min(70vh,640px); padding:0 0 28px; }
+  }
+
+  /* Our own clear button replaces the browser's. */
+  .fl-search input[type="search"]::-webkit-search-cancel-button,
+  .fl-spage input[type="search"]::-webkit-search-cancel-button { -webkit-appearance:none; appearance:none; display:none; }
+  .fl-search input::placeholder,
+  .fl-spage input::placeholder { color:var(--color-ink-muted); opacity:1; }
+
+  /* Groups: Models, Designs, Collections, Styles, Categories, then See all. */
+  .fl-sr { display:flex; flex-direction:column; }
+  .fl-sr-group { padding-top:16px; }
+  .fl-sr-group__head { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:28px; margin-bottom:4px; }
+  .fl-sr-group__title { font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--color-ink-muted); }
+  .fl-sr-note { padding:16px 0 4px; font-size:14px; line-height:1.5; color:var(--color-ink-muted); }
+
+  .fl-sr-row {
+    display:flex; align-items:center; gap:12px;
+    min-height:44px; margin:0 -8px; padding:6px 8px; border-radius:10px;
+    font-size:15px; line-height:1.3; color:var(--color-ink);
+  }
+  .fl-sr-badge {
+    flex-shrink:0; border-radius:999px; background:var(--color-purple);
+    padding:2px 6px; font-size:10px; font-weight:700; line-height:1.2;
+    letter-spacing:.04em; text-transform:uppercase; color:#fff;
+  }
+
+  .fl-sr-design { display:flex; align-items:center; gap:12px; min-height:44px; margin:0 -8px; padding:6px 8px; border-radius:12px; color:var(--color-ink); }
+  .fl-sr-thumb { position:relative; flex-shrink:0; width:56px; height:56px; overflow:hidden; border-radius:10px; background:var(--color-field); }
+  .fl-sr-thumb--sm { width:40px; height:40px; border-radius:8px; }
+  .fl-sr-design__name {
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+    font-size:14px; font-weight:500; line-height:1.3; overflow-wrap:anywhere;
+  }
+  .fl-sr-design__meta { display:block; margin-top:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; line-height:1.4; color:var(--color-ink-muted); }
+
+  .fl-sr-chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .fl-sr-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    min-height:44px; padding:0 16px; border-radius:999px;
+    background:var(--color-field); font-size:14px; color:var(--color-ink);
+  }
+  .fl-sr-pair { display:inline-flex; align-items:center; border-radius:999px; background:var(--color-field); }
+  .fl-sr-pair .fl-sr-chip { padding-right:2px; background:transparent; }
+  .fl-sr-remove { display:grid; place-items:center; width:40px; height:44px; border-radius:999px; color:var(--color-ink-muted); }
+  .fl-sr-link { font-size:13px; font-weight:500; color:var(--color-ink-muted); text-decoration:underline; text-underline-offset:3px; }
+
+  .fl-sr-all {
+    order:9; display:flex; align-items:center; gap:6px;
+    min-height:48px; margin-top:8px;
+    font-size:14px; font-weight:500; color:var(--color-purple-deep);
+  }
+
+  .fl-sr-row:focus-visible, .fl-sr-design:focus-visible, .fl-sr-chip:focus-visible,
+  .fl-sr-remove:focus-visible, .fl-sr-all:focus-visible, .fl-sr-link:focus-visible { outline:2px solid var(--color-purple); outline-offset:0; }
+  @media (hover:hover) {
+    .fl-sr-row:hover, .fl-sr-design:hover { background:var(--color-field); }
+    .fl-sr-chip:hover, .fl-sr-remove:hover { color:var(--color-purple-deep); }
+    .fl-sr-all:hover, .fl-sr-link:hover { color:var(--color-purple); }
+  }
+
+  /* Desktop: Models, Collections, Styles, Categories and Try on the left; the
+     designs as a 4-column grid on the right, See all under them. */
+  @media (min-width:1024px) {
+    .fl-sr { display:grid; grid-template-columns:300px minmax(0,1fr); grid-template-rows:repeat(5,auto) 1fr; column-gap:32px; align-items:start; }
+    .fl-sr > * { grid-column:1; }
+    .fl-sr > .fl-sr-main { grid-column:2; grid-row:1 / 7; }
+    .fl-sr > .fl-sr-all { grid-column:2; grid-row:1; }
+    .fl-sr > .fl-sr-main ~ .fl-sr-all { grid-row:7; }
+    .fl-sr-designs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:20px 16px; }
+    .fl-sr-design { flex-direction:column; align-items:stretch; gap:8px; margin:0; padding:0; }
+    .fl-sr-design .fl-sr-thumb { width:100%; height:auto; aspect-ratio:1; border-radius:12px; }
+  }
+  @media (min-width:1024px) and (hover:hover) {
+    .fl-sr-design:hover { background:none; }
+    .fl-sr-design:hover .fl-sr-design__name { color:var(--color-purple-deep); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fl-sheet--search .fl-search { transition:opacity .12s linear; }
+    @starting-style {
+      .fl-sheet--search[open] .fl-search { transform:none; opacity:0; }
+    }
+    .fl-sheet--search[data-closing] .fl-search { transform:none; opacity:0; transition:opacity .12s linear; }
+  }
+}

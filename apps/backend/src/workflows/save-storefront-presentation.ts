@@ -2,13 +2,15 @@ import { createStep, createWorkflow, StepResponse, WorkflowResponse } from "@med
 import { MedusaError } from "@medusajs/framework/utils"
 import { updateStoresWorkflow } from "@medusajs/medusa/core-flows"
 import { readStorefrontPresentation } from "../lib/read-storefront-presentation"
-import { PRESENTATION_KEY, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation } from "../lib/storefront-presentation"
+import { PRESENTATION_KEY, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, validateNavigationPresentation, validateSearchPresentation } from "../lib/storefront-presentation"
 
 /** Each editable section and its validator. */
 export const PRESENTATION_VALIDATORS = {
   footer: validateFooterPresentation,
   delivery: validateDeliveryPresentation,
   buy_box: validateBuyBoxPresentation,
+  navigation: validateNavigationPresentation,
+  search: validateSearchPresentation,
 } as const
 export type PresentationSection = keyof typeof PRESENTATION_VALIDATORS
 export const isPresentationSection = (value: unknown): value is PresentationSection =>

@@ -5,10 +5,12 @@ import BuildWatcher from "@/components/build-watcher"
 import PerformanceAuditLoader from "@/components/performance-audit-loader"
 import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
+import SiteHeader from "@/components/header/site-header"
 import SiteFooter from "@/components/site-footer"
-import SiteHeader from "@/components/site-header"
 import { getBuildId } from "@/lib/build-id"
+import { getDeviceCatalog } from "@/lib/catalog"
 import { getCaseTypes, getSiteContent } from "@/lib/content"
+import { buildHeaderData, packHeaderData } from "@/lib/header-data"
 
 import "./globals.css"
 
@@ -39,9 +41,14 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [content, caseTypes] = await Promise.all([
+  // One compact header prop (lib/header-data.ts), sent in its packed wire
+  // form. Devices failing to load gives [], and the device sections then show
+  // as plain links. Nothing here reads cookies, headers or search params, so
+  // every page stays static.
+  const [content, caseTypes, devices] = await Promise.all([
     getSiteContent(),
     getCaseTypes(),
+    getDeviceCatalog(),
   ])
 
   return (
@@ -50,9 +57,9 @@ export default async function RootLayout({
         <BuildWatcher buildId={getBuildId()} />
         <PerformanceAuditLoader />
         <CartProvider>
-          <SiteHeader menu={content.primary} menMenu={content.primaryMen} caseTypes={caseTypes} />
+          <SiteHeader wire={packHeaderData(buildHeaderData(content, caseTypes, devices))} />
 
-          <main className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-6 md:px-[30px] md:py-16">
+          <main id="main" className="mx-auto min-h-[60vh] w-full max-w-[1470px] px-[15px] py-6 md:px-[30px] md:py-16">
             {children}
           </main>
 

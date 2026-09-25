@@ -1,6 +1,6 @@
 import type { Audience } from "./audience"
 import { DEFAULT_RECOMMENDATIONS, type RecommendationSettings } from "./product-recommendations"
-import { DEFAULT_PRESENTATION, readPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "./storefront-presentation"
+import { DEFAULT_PRESENTATION, readPresentation, type BuyBoxPresentation, type DeliveryPresentation, type DeviceFamilyKey, type FooterPresentation, type NavigationPresentation, type SearchPresentation } from "./storefront-presentation"
 /**
  * Home page sections, the header menu and the footer, all edited in the admin
  * rather than hardcoded here.
@@ -19,11 +19,43 @@ export type MenuLink = {
 
 export type MenuGroup = { heading: string | null; links: MenuLink[] }
 
+/**
+ * What a header section is. "links" is the hand-made list (groups); the other
+ * kinds fill themselves: "devices" from Devices (newest first), "case_types"
+ * from Case types, "collections" from Collection pages marked Show in menu.
+ */
+export type MenuKind = "links" | "devices" | "case_types" | "collections"
+/** Where a header section shows: the phone menu and the desktop bar, or one of them. */
+export type MenuPlacement = "all" | "drawer" | "bar"
+export type ProductForm = "phone" | "airpods" | "watch" | "wallet"
+export type DevicesSectionConfig = {
+  /** Ordered, non-empty, unique. */
+  families: DeviceFamilyKey[]
+  /** The case type model links open on (a slug), or null for the device's first style. */
+  case_type: string | null
+}
+export type CaseTypesSectionConfig = {
+  form: ProductForm
+  exclude: string[]
+  /** Per case-type slug link overrides, e.g. { alcantara: "/collection/alcantara/" }. */
+  links: Record<string, string>
+}
+export type CollectionsSectionConfig = { title: string; view_all_href: string; limit: number }
+export type MenuSectionConfig = DevicesSectionConfig | CaseTypesSectionConfig | CollectionsSectionConfig
+
 export type MenuSection = {
   id: string
   label: string
   href: string | null
+  /** Only for kind "links"; [] for the automatic kinds. */
   groups: MenuGroup[]
+  /** Absent on an older backend, which means "links". */
+  kind?: MenuKind
+  /** Round picture in the phone menu and the desktop promo (https). */
+  image?: string | null
+  badge?: string | null
+  placement?: MenuPlacement
+  config?: MenuSectionConfig | null
 }
 
 export type HomeSection = {
@@ -49,6 +81,8 @@ export type CollectionCard = {
   theme: Pick<CollectionTheme, "bg" | "text" | "accent" | "accent_text" | "hero_bg" | "hero_text">
   /** The modes this collection has products for. Absent (an older backend) means both. */
   audiences?: Audience[]
+  /** Collection pages' "Show in menu"; absent (an older backend) means shown. */
+  in_menu?: boolean
 }
 
 /** The collection cards that have something to show in this mode. */
@@ -68,6 +102,10 @@ export type SiteContent = {
   footerAppearance?: FooterPresentation
   social: { label: string; href: string }[]
   collections: CollectionCard[]
+  /** Admin > Navigation settings; absent on an older backend (defaults apply). */
+  navigation?: NavigationPresentation
+  /** Admin > Search, without the synonyms (those only go into the search index). */
+  search?: Omit<SearchPresentation, "synonyms">
 }
 
 /** Enough of a shell to render if the backend is unreachable. */
@@ -101,8 +139,43 @@ export type CaseTypeInfo = {
   name: string
   description: string
   price: number | null
-  /** Admin-set photo for the "Shop by style" menu card; null falls back to a default. */
+  /** Admin-set photo for the "Shop by style" menu card; null shows the name's initial. */
   image: string | null
+  /** Product forms it is sold for, from its devices (iphone/samsung = phone). */
+  forms: ProductForm[]
+  /** The lowest price over every form: the flat price or a cheaper per-device price group. */
+  fromPrice: number | null
+  /**
+   * The lowest price per form, over its active devices of that form (each at
+   * its price group's price, else the flat price). Alcantara is 3800 for a
+   * phone but 1900 for the card wallet, so a phone menu must show the phone's.
+   */
+  fromPrices: Partial<Record<ProductForm, number>>
+}
+
+/** iPhone and Samsung are one product form, "phone"; the others are their own. */
+export function formOfFamily(family: unknown): ProductForm | null {
+  if (family === "iphone" || family === "samsung") return "phone"
+  return family === "airpods" || family === "watch" || family === "wallet" ? family : null
+}
+
+/**
+ * A case type's lowest price per form: each active device of the form costs
+ * its price group's price (the group that lists its slug), else the flat
+ * price. The same rule as the search index's caseTypeFormPrice and the seed's
+ * priceForDevice, so the menu's "from" is a price a shopper can actually pay.
+ */
+function formFromPrices(price: number | null, groups: any[], devices: any[]): Partial<Record<ProductForm, number>> {
+  const out: Partial<Record<ProductForm, number>> = {}
+  for (const device of devices) {
+    const form = formOfFamily(device?.family)
+    if (!form || device?.is_active === false) continue
+    const group = groups.find((g) => Array.isArray(g?.devices) && g.devices.includes(device?.slug))
+    const own = typeof group?.price === "number" && group.price > 0 ? group.price : price
+    if (typeof own !== "number" || own <= 0) continue
+    if (out[form] === undefined || own < out[form]!) out[form] = own
+  }
+  return out
 }
 
 /** The case constructions (Signature, Elite Clear, Armor, Alcantara, …) with
@@ -121,13 +194,32 @@ export async function getCaseTypes(): Promise<CaseTypeInfo[]> {
     const arr = json.case_types ?? json.data ?? []
     return arr
       .filter((c) => c.is_active)
-      .map((c) => ({
-        slug: c.slug,
-        name: c.name,
-        description: c.description ?? "",
-        price: typeof c.price === "number" ? c.price : null,
-        image: c.image_url ?? null,
-      }))
+      .map((c) => {
+        const price = typeof c.price === "number" ? c.price : null
+        const groups: any[] = Array.isArray(c.price_groups) ? c.price_groups : []
+        const groupPrices = groups
+          .map((g: any) => g?.price)
+          .filter((p: unknown): p is number => typeof p === "number" && p > 0)
+        const all = [...(price != null ? [price] : []), ...groupPrices]
+        const devices: any[] = Array.isArray(c.devices) ? c.devices : []
+        const forms = [...new Set<ProductForm>(devices
+          .map((d: any) => formOfFamily(d?.family))
+          .filter((f: ProductForm | null): f is ProductForm => !!f))]
+        const fromPrices = formFromPrices(price, groups, devices)
+        // Over what its active devices cost when it has any; else its price and groups.
+        const payable = Object.values(fromPrices)
+        const lowest = payable.length ? payable : all
+        return {
+          slug: c.slug,
+          name: c.name,
+          description: c.description ?? "",
+          price,
+          image: c.image_url ?? null,
+          forms,
+          fromPrice: lowest.length ? Math.min(...lowest) : null,
+          fromPrices,
+        }
+      })
   } catch {
     return []
   }

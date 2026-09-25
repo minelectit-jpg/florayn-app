@@ -27,6 +27,7 @@
   .fl-footer__inner { max-width:1470px; margin:auto; padding:48px 30px 22px; }
   .fl-footer__top { display:flex; justify-content:space-between; align-items:center; gap:40px; padding-bottom:40px; border-bottom:1px solid var(--color-line); }
   .fl-footer__brand { display:inline-block; max-width:100%; font-size:42px; font-weight:500; letter-spacing:.13em; line-height:1.2; overflow-wrap:anywhere; }
+  .fl-footer__logo { display:block; width:auto; height:36px; }
   .fl-footer__tagline { margin-top:12px; max-width:380px; font-size:14px; color:var(--color-ink-muted); line-height:1.6; }
   .fl-footer__support { display:flex; align-items:center; gap:30px; max-width:520px; }
   .fl-footer__support h2 { font-size:18px; font-weight:600; letter-spacing:-.025em; }
@@ -59,6 +60,7 @@
     .fl-footer__inner { padding:32px 20px 24px; }
     .fl-footer__top { display:block; padding-bottom:24px; }
     .fl-footer__brand { font-size:32px; }
+    .fl-footer__logo { height:28px; }
     .fl-footer__tagline { margin-top:8px; font-size:13px; }
     .fl-footer__support { margin-top:24px; padding:18px; border:1px solid #e6dff0; border-radius:14px; background:#fff9; align-items:flex-start; flex-direction:column; gap:14px; max-width:none; }
     .fl-footer__support h2 { font-size:16px; }

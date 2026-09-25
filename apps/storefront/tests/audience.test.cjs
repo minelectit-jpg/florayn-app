@@ -44,6 +44,18 @@ test("admin links stay plain and pick up /men only where the page has a Men vers
   assert.equal(audience.withAudience("/men/product/x/", "women"), "/product/x/")
 })
 
+test("search has a Men page too, and keeps its query", () => {
+  assert.equal(audience.withAudience("/search/?q=x", "men"), "/men/search/?q=x")
+  assert.equal(audience.withAudience("/search/", "men"), "/men/search/")
+  assert.equal(audience.withAudience("/men/search/?q=x", "women"), "/search/?q=x")
+  assert.equal(audience.audienceFromPath("/search/"), "women")
+  assert.equal(audience.audienceFromPath("/men/search/"), "men")
+  assert.equal(audience.audienceFromPath("/searching/"), null, "only the /search segment counts")
+  assert.equal(audience.withAudience("/searching/", "men"), "/searching/")
+  assert.equal(audience.switchAudiencePath("/search/?q=leopard", "men"), "/men/search/?q=leopard")
+  assert.equal(audience.switchAudiencePath("/men/search/?q=leopard", "women"), "/search/?q=leopard")
+})
+
 test("the switch opens the same page in the other mode, or its home from a shared page", () => {
   assert.equal(audience.switchAudiencePath("/shop/iphone-17-pro-max/signature/", "men"), "/men/shop/iphone-17-pro-max/signature/")
   assert.equal(audience.switchAudiencePath("/men/product/zebra-rust/?case=signature", "women"), "/product/zebra-rust/?case=signature")

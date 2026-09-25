@@ -39,6 +39,10 @@ import {
   type DeviceSeed,
 } from "../modules/catalog/data/devices"
 import { placeholderImage } from "../modules/catalog/data/placeholder-image"
+import {
+  DEFAULT_CASE_TYPE_IMAGES,
+  DEFAULT_DEVICE_BADGES,
+} from "../modules/content/defaults"
 
 const CURRENCY = "bdt"
 const COUNTRY = "bd"
@@ -399,8 +403,15 @@ export default async function initialDataSeed({
   })
 
   logger.info(`Seeding catalog: ${DEVICES.length} devices...`)
+  // The header's New pills and "Shop by style" photos are set here, not by
+  // header-navigation-2026-09-27: on a fresh database that script runs first
+  // (scripts run in name order) and finds no catalogue to fill.
   const devices = await catalogModuleService.createDevices(
-    DEVICES.map((device, index) => ({ ...device, sort_order: index }))
+    DEVICES.map((device, index) => ({
+      ...device,
+      badge: DEFAULT_DEVICE_BADGES[device.slug] ?? null,
+      sort_order: index,
+    }))
   )
   const deviceBySlug = new Map<string, any>(
     devices.map((device: any) => [device.slug, device])
@@ -428,6 +439,7 @@ export default async function initialDataSeed({
         // Persist per-device overrides so they are admin-editable in the DB,
         // never trapped in the seed constant.
         price_groups: caseType.price_groups ?? null,
+        image_url: DEFAULT_CASE_TYPE_IMAGES[caseType.slug] ?? null,
         sort_order: index,
         devices: linked.map((device) => deviceBySlug.get(device.slug)!.id),
       }

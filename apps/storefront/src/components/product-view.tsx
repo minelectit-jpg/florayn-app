@@ -26,6 +26,56 @@ import {
 } from "@/lib/product-view-data"
 import { pairKey } from "@/lib/variant-matrix"
 
+export type ProductPick = { caseType: string; device: string }
+
+/**
+ * What the page's query asks for, read once after hydration so the page
+ * itself stays static: ?variant=<id>; else ?device=<model> (a link from an
+ * order in the admin) with an optional ?case=<slug>; else ?case=<slug> alone
+ * (a filtered shop card, the menu or search). null leaves the pick as it is.
+ *
+ * On a device page the path names the phone, so ?case= never swaps it: a
+ * case type that device is not sold in is ignored (the page keeps its own
+ * first case type) instead of snapping to another model and letting the
+ * shopper add the wrong phone to the bag. On the design page a ?case= still
+ * moves to a device that case type is sold for.
+ */
+export function pickFromQuery(
+  search: string,
+  matrix: ProductVariantMatrix,
+  caseTypeRecords: Pick<CaseTypeRecord, "slug" | "name">[] | undefined,
+  current: ProductPick,
+  devicePage: boolean
+): ProductPick | null {
+  const params = new URLSearchParams(search)
+  const variant = params.get("variant")
+  if (variant) {
+    for (const ct of matrix.caseTypes) {
+      for (const model of matrix.devicesByCaseType[ct] ?? []) {
+        if (matrix.variantIdByPair[pairKey(ct, model)] === variant) return { caseType: ct, device: model }
+      }
+    }
+  }
+  const slug = params.get("case")
+  const name = slug ? caseTypeRecords?.find((c) => c.slug === slug)?.name : undefined
+  const wanted = params.get("device")?.trim().toLowerCase()
+  const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+  const model = wanted ? Object.keys(matrix.caseTypesByDevice).find((d) => d.toLowerCase() === wanted || slugOf(d) === slugOf(wanted)) : undefined
+  if (model) {
+    // Set both at once: the case type has to be one sold for that model.
+    const fits = matrix.caseTypesByDevice[model] ?? []
+    const caseType = name && fits.includes(name) ? name : !fits.includes(current.caseType) && fits[0] ? fits[0] : current.caseType
+    return { caseType, device: model }
+  }
+  if (!name || !matrix.caseTypes.includes(name)) return null
+  if (devicePage) {
+    return (matrix.caseTypesByDevice[current.device] ?? []).includes(name) ? { caseType: name, device: current.device } : null
+  }
+  // Snap to a device that case type is sold for, as picking it by hand does.
+  const devs = matrix.devicesByCaseType[name] ?? []
+  return { caseType: name, device: !devs.includes(current.device) && devs[0] ? devs[0] : current.device }
+}
+
 /**
  * The two-column top of the product page.
  *
@@ -45,6 +95,7 @@ export default function ProductView({
   designName,
   productHandle,
   productTitle,
+  deviceName,
   initialCaseType,
   initialDevice,
   designData,
@@ -145,35 +196,14 @@ export default function ProductView({
     if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
   }
 
-  // Honour ?variant=<id>, ?device=<model> (a link from an order in the admin)
-  // and ?case=<slug> (a filtered shop card), on the client so the page itself
-  // stays static/cacheable. Runs once after hydration.
+  // Honour ?variant=, ?device= and ?case= (see pickFromQuery) on the client so
+  // the page itself stays static/cacheable. Runs once after hydration.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const variant = params.get("variant")
-    if (variant) {
-      for (const ct of matrix.caseTypes) {
-        for (const model of matrix.devicesByCaseType[ct] ?? []) {
-          if (matrix.variantIdByPair[pairKey(ct, model)] === variant) {
-            setCaseType(ct); setDevice(model); return
-          }
-        }
-      }
-    }
-    const slug = params.get("case")
-    const name = slug ? caseTypeRecords?.find((c) => c.slug === slug)?.name : undefined
-    const wanted = params.get("device")?.trim().toLowerCase()
-    const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
-    const model = wanted ? Object.keys(matrix.caseTypesByDevice).find((d) => d.toLowerCase() === wanted || slugOf(d) === slugOf(wanted)) : undefined
-    if (model) {
-      // Set both at once: the case type has to be one sold for that model.
-      const fits = matrix.caseTypesByDevice[model] ?? []
-      setDevice(model)
-      if (name && fits.includes(name)) setCaseType(name)
-      else if (!fits.includes(caseType) && fits[0]) setCaseType(fits[0])
-      return
-    }
-    if (name && matrix.caseTypes.includes(name)) selectCaseType(name)
+    const devicePage = !!deviceName && deviceName === initialDevice
+    const pick = pickFromQuery(window.location.search, matrix, caseTypeRecords, { caseType, device }, devicePage)
+    if (!pick) return
+    setCaseType(pick.caseType)
+    setDevice(pick.device)
   }, [])
 
   const selectedId = matrix.variantIdByPair[pairKey(caseType, device)]

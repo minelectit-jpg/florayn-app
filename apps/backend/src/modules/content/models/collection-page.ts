@@ -43,6 +43,8 @@ const CollectionPage = model.define("collection_page", {
   /** Ordered banner/text blocks shown below the product grid. */
   blocks: model.json().nullable(),
   is_visible: model.boolean().default(true),
+  /** In the phone menu's Collections row, in this list's order. */
+  show_in_menu: model.boolean().default(true),
   position: model.number().default(0),
 })
 

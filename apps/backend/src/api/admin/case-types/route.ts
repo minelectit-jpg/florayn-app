@@ -12,11 +12,13 @@ const seedGroupsBySlug = new Map(
  * GET /admin/case-types - the case constructions, for the admin screen where an
  * admin edits their names and prices. price_groups falls back to the seed's
  * per-device groups when the DB column is still null, so the screen always shows
- * the current per-device prices (Alcantara) even before the first edit.
+ * the current per-device prices (Alcantara) even before the first edit. Each
+ * case type carries its devices, so Admin > Navigation offers only the case
+ * types that fit a section's brands.
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const catalog: any = req.scope.resolve(CATALOG_MODULE)
-  const caseTypes = await catalog.listCaseTypes({}, { order: { sort_order: "ASC" } })
+  const caseTypes = await catalog.listCaseTypes({}, { order: { sort_order: "ASC" }, relations: ["devices"] })
   const enriched = caseTypes.map((c: any) => ({
     ...c,
     price_groups: c.price_groups ?? seedGroupsBySlug.get(c.slug) ?? null,

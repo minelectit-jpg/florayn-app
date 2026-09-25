@@ -1,20 +1,40 @@
 const http = require("node:http")
 const { createHash } = require("node:crypto")
+const fs = require("node:fs")
+const path = require("node:path")
+const vm = require("node:vm")
+const ts = require("typescript")
+
+/** A real TypeScript source (no imports, or only ones passed in), transpiled for the fixture. */
+function loadTs(file, dependencies = {}) {
+  const exports = {}
+  const code = ts.transpileModule(fs.readFileSync(path.join(__dirname, file), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  vm.runInNewContext(code, { exports, URL, require: (name) => { if (dependencies[name]) return dependencies[name]; throw new Error(`Unexpected import ${name}`) } })
+  return exports
+}
+const { DEFAULT_PRESENTATION } = loadTs("../../src/lib/storefront-presentation.ts")
+// The backend's own index builder, so /store/search-index has the real shape.
+const { buildSearchIndex } = loadTs("../../../backend/src/lib/search-index.ts", { "./audience": loadTs("../../../backend/src/lib/audience.ts") })
 
 // Local, disposable fixtures only. No request is forwarded to a real service.
 const image = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="540"><rect width="540" height="540" fill="#eee6fa"/><rect x="165" y="60" width="210" height="420" rx="36" fill="#8d66b1"/><text x="270" y="285" text-anchor="middle" fill="white" font-size="26">Test case</text></svg>')
+/** A tiny picture for the header's round menu images and style cards. */
+const dot = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" fill="#e6dcf2"/></svg>')
+// In /store/devices order: each family newest first, with the owner's badges.
 const devices = [
-  { id: "dev_16", slug: "iphone-16-pro-max", name: "iPhone 16 Pro Max", family: "iphone", brand: "Apple" },
-  { id: "dev_17", slug: "iphone-17-pro-max", name: "iPhone 17 Pro Max", family: "iphone", brand: "Apple" },
-  { id: "dev_air_max", slug: "airpods-max", name: "AirPods Max", family: "airpods", brand: "Apple" },
-  { id: "dev_air", slug: "airpods-pro-3", name: "AirPods Pro 3", family: "airpods", brand: "Apple" },
+  { id: "dev_17", slug: "iphone-17-pro-max", name: "iPhone 17 Pro Max", family: "iphone", brand: "Apple", badge: "New" },
+  { id: "dev_16", slug: "iphone-16-pro-max", name: "iPhone 16 Pro Max", family: "iphone", brand: "Apple", badge: null },
+  { id: "dev_s26", slug: "samsung-s26-ultra", name: "Samsung S26 Ultra", family: "samsung", brand: "Samsung", badge: "New" },
+  { id: "dev_air", slug: "airpods-pro-3", name: "AirPods Pro 3", family: "airpods", brand: "Apple", badge: "New" },
+  { id: "dev_air_max", slug: "airpods-max", name: "AirPods Max", family: "airpods", brand: "Apple", badge: null },
 ]
+const phoneDevices = devices.filter((d) => d.family === "iphone" || d.family === "samsung")
 // devices carries the family the storefront derives each construction's forms
 // from (getCaseTypes). Signature is phone-only; AirPods sell Signature Earbuds.
 const caseTypes = [
-  { id: "case_signature", name: "Signature", slug: "signature", price: 1400, is_active: true, description: "Test signature case", forms: ["phone"], devices: devices.filter((d) => d.family === "iphone") },
-  { id: "case_armor", name: "Armor Black", slug: "armor-black", price: 1700, is_active: true, description: "Test armor case", forms: ["phone"], devices: devices.filter((d) => d.family === "iphone") },
-  { id: "case_earbuds", name: "Signature Earbuds", slug: "signature-earbuds", price: 750, is_active: true, description: "Test earbuds case", forms: ["airpods"], devices: devices.filter((d) => d.family === "airpods") },
+  { id: "case_signature", name: "Signature", slug: "signature", price: 1400, price_groups: null, image_url: dot, is_active: true, description: "Test signature case", forms: ["phone"], devices: phoneDevices },
+  { id: "case_armor", name: "Armor Black", slug: "armor-black", price: 1700, price_groups: [{ label: "Every phone", price: 1700, devices: phoneDevices.map((d) => d.slug) }], image_url: null, is_active: true, description: "Test armor case", forms: ["phone"], devices: phoneDevices },
+  { id: "case_earbuds", name: "Signature Earbuds", slug: "signature-earbuds", price: 750, price_groups: null, image_url: null, is_active: true, description: "Test earbuds case", forms: ["airpods"], devices: devices.filter((d) => d.family === "airpods") },
 ]
 const collection = { id: "col_test", title: "Test Collection", handle: "test-collection" }
 if (process.env.UI_REFINEMENT_FIXTURE === "1") {
@@ -23,7 +43,7 @@ if (process.env.UI_REFINEMENT_FIXTURE === "1") {
 const FIXTURE_AUDIENCE = process.env.UI_REFINEMENT_FIXTURE === "1" ? { "audit-midnight": "men", "audit-rose": "women" } : {}
 function makeProduct(slug, title, form = "phone") {
   const handle = form === "phone" ? slug : `${slug}-${form}`
-  const productDevices = devices.filter((device) => form === "phone" ? device.family === "iphone" : device.family === "airpods")
+  const productDevices = form === "phone" ? phoneDevices : devices.filter((device) => device.family === "airpods")
   const formCaseTypes = caseTypes.filter((c) => c.forms.includes(form))
   const options = [
     { id: `opt_case_${handle}`, title: "Case Type", values: formCaseTypes.map((c) => ({ id: c.id, value: c.name })) },
@@ -41,10 +61,32 @@ function makeProduct(slug, title, form = "phone") {
   return { id: `prod_${handle}`, title, handle, description: "Local test product only.", subtitle: form === "phone" ? "Phone Case" : "AirPods Case", thumbnail: image, images: [{ id: `img_${handle}`, url: image }], collection, categories: [], options, variants, metadata: { design_name: title, design_slug: slug, form, card, ...(FIXTURE_AUDIENCE[slug] ? { audience: FIXTURE_AUDIENCE[slug] } : {}) } }
 }
 const products = [makeProduct("audit-bloom", "Audit Bloom"), makeProduct("audit-midnight", "Audit Midnight"), makeProduct("audit-bloom", "Audit Bloom", "airpods"), makeProduct("audit-midnight", "Audit Midnight", "airpods")]
+/**
+ * A header menu shaped like the live ones after header-navigation-2026-09-27:
+ * the Collections row (phone menu only), Phone Case and Earbuds as device
+ * lists, Styles from the case types with two link overrides, then the home
+ * page's accessories as plain links with pictures (phone menu only).
+ */
+function headerMenu(mode, accessories) {
+  const section = (id, label, href, extra) => ({ id: `menu_${mode}_${id}`, label, href, kind: "links", image: null, badge: null, placement: "all", config: null, groups: [], ...extra })
+  return [
+    section("collections", "Collections", null, { kind: "collections", placement: "drawer", config: { title: "Collections", view_all_href: "/collections/", limit: 8 } }),
+    section("phone", "Phone Case", "/shop/iphone-17-pro-max/signature/", { kind: "devices", image: dot, config: { families: ["iphone", "samsung"], case_type: "signature" } }),
+    section("earbuds", "Earbuds Cases", "/shop/airpods-pro-3/signature-earbuds/", { kind: "devices", image: dot, config: { families: ["airpods"], case_type: "signature-earbuds" } }),
+    section("styles", "Styles", null, { kind: "case_types", config: { form: "phone", exclude: [], links: { alcantara: "/collection/alcantara/", essentials: "/collection/essentials/" } } }),
+    ...accessories.map(([label, href]) => section(label.toLowerCase().replace(/\s+/g, "-"), label, href, { image: dot, placement: "drawer" })),
+  ]
+}
 const content = {
   sections: [{ key: "releases", type: "product_carousel", title: "Test products", config: { limit: 5 } }],
-  primary: [{ id: "menu_phone", label: "Phone Case", href: "/shop/iphone-17-pro-max/signature/", groups: [] }],
+  primary: headerMenu("women", [["Watch Bands", "/collection/watch-bands/"], ["Card Holder", "/collection/card-wallets/?device=Card%20Wallet"], ["Phone Charms", "/product/leather-chain-phone-charm/"], ["StickPad", "/product/audit-stickpad/"]]),
   footer: [], footerNote: "Local verification", social: [],
+  collections: [{
+    slug: collection.handle, collection_id: collection.id, title: collection.title, image: null, artwork: image, audiences: ["women", "men"], in_menu: true,
+    theme: { bg: "#ffffff", text: "#1a1625", accent: "#8d66b1", accent_text: "#ffffff", hero_bg: "#f4effa", hero_text: "#1a1625" },
+  }],
+  navigation: DEFAULT_PRESENTATION.navigation,
+  search: (({ synonyms: _synonyms, ...rest }) => rest)(DEFAULT_PRESENTATION.search),
 }
 if (process.env.UI_REFINEMENT_FIXTURE === "1") products.push({
  id: "prod_stickpad", title: "StickPad Pro", handle: "audit-stickpad", description: "Local regular product fixture.",
@@ -65,7 +107,28 @@ const menContent = {
     { key: "men-pills", type: "category_pills", config: { items: [{ label: "Phone Case", href: "/shop/iphone-17-pro-max/signature/" }, { label: "StickPad", href: "/product/audit-stickpad/" }] } },
     { key: "men-releases", type: "product_carousel", title: "Men releases", config: { limit: 5 } },
   ],
-  primary: [{ id: "menu_men_phone", label: "Men's Phone Cases", href: "/shop/iphone-17-pro-max/signature/", groups: [] }],
+  // Men's accessories differ (a Wallet link, no Phone Charms), so the header sends both menus.
+  primary: headerMenu("men", [["Watch Bands", "/collection/watch-bands/"], ["Card Holder", "/collection/card-wallets/?device=Card%20Wallet"], ["StickPad", "/product/audit-stickpad/"], ["Wallet", "/collection/card-wallets/"]]),
+}
+/** GET /store/search-index, built from this catalogue by the backend's own builder. */
+function searchIndex() {
+  const rows = (menu) => menu.map((s, position) => ({ label: s.label, href: s.href, kind: s.kind, image_url: s.image, position, is_visible: true }))
+  const designCaseTypes = new Map()
+  for (const p of products) {
+    const slug = p.metadata?.design_slug
+    if (!slug) continue
+    const list = designCaseTypes.get(slug) ?? []
+    for (const c of caseTypes.filter((c) => c.forms.includes(p.metadata.form))) if (!list.includes(c.slug)) list.push(c.slug)
+    designCaseTypes.set(slug, list)
+  }
+  return buildSearchIndex({
+    // An allowed next/image host (next.config remotePatterns) that never resolves: cards fall back.
+    img: "https://fixture-images.r2.dev",
+    products, devices, caseTypes, collections: content.collections,
+    menus: { women: rows(content.primary), men: rows(menContent.primary) },
+    search: DEFAULT_PRESENTATION.search,
+    designCaseTypes,
+  })
 }
 const bundle = { settings: { heading: "Choose a pack", single_label: "Single", free_shipping_threshold: 3000, scope: "cases", is_active: true, matching_set_enabled: true, matching_set_discount: 250, matching_set_default_airpods: "AirPods Pro 3" }, tiers: [{ id: "tier_two", quantity: 2, badge: null, discount_amount: 200, min_pct: 0, max_pct: 0 }] }
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
@@ -77,11 +140,7 @@ const orders = new Map()
 const accountFixture = process.env.UI_REFINEMENT_FIXTURE === "1"
 let presentation
 if (accountFixture) {
-  const ts = require("typescript"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm")
-  const source = fs.readFileSync(path.join(__dirname, "../../src/lib/storefront-presentation.ts"), "utf8")
-  const exports = {}
-  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports, URL })
-  presentation = structuredClone(exports.DEFAULT_PRESENTATION)
+  presentation = structuredClone(DEFAULT_PRESENTATION)
   for (const name of ["Rose", "Ocean", "Forest", "Amber", "Cloud"]) products.push(makeProduct("audit-" + name.toLowerCase(), "Audit " + name))
   content.footer = ["Customer care", "Explore", "About Florayn", "Popular models"].map((label, index) => ({
     id: "footer_" + index, label, groups: [{ heading: null, links: [
@@ -364,6 +423,7 @@ const server = http.createServer(async (req, res) => {
     case "/store/regions": return send(res, { regions: [{ id: "reg_test", currency_code: "bdt", name: "Bangladesh" }] })
     case "/store/devices": return send(res, { devices })
     case "/store/case-types": return send(res, { case_types: caseTypes })
+    case "/store/search-index": return send(res, searchIndex())
     case "/store/stock": return send(res, { stock: Object.fromEntries(Object.entries(stock).map(([key, quantity]) => [key, quantity + stockRevision])) })
     case "/store/content": return send(res, { ...content, ...(url.searchParams.get("audience") === "men" ? menContent : {}), primaryMen: menContent.primary, ...(presentation ? { footerAppearance: presentation.footer, social: presentation.footer.social } : {}), footerNote: `Local verification revision ${revision}` })
     case "/store/bundles": return send(res, bundle)

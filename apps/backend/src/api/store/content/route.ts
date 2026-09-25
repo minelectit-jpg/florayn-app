@@ -11,7 +11,9 @@ import { readStorefrontPresentation } from "../../../lib/read-storefront-present
  * its header mega menu, the footer, and the visible collection landing pages as
  * cards (each saying which modes it has designs for). The Men menu is always
  * included as `primaryMen` so one header can switch without another request;
- * while it is empty the Women menu stands in.
+ * while it is empty the Women menu stands in. `navigation` and `search` are
+ * the Admin > Navigation and Admin > Search settings the header reads; the
+ * search synonyms are left out (they only go into the search index).
  */
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const audience = req.query?.audience === "men" ? "men" : "women"
@@ -28,6 +30,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   const women = buildMenu(menuSections, items, "primary")
   const menOwn = buildMenu(menuSections, items, MEN_MENU)
   const men = menOwn.length ? menOwn : women
+  const search = settings.search
 
   res.json({
     sections: sections
@@ -49,5 +52,13 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     social: settings.footer.social,
     footerAppearance: settings.footer,
     collections,
+    navigation: settings.navigation,
+    search: search && {
+      placeholder: search.placeholder,
+      suggest_women: search.suggest_women,
+      suggest_men: search.suggest_men,
+      help_label: search.help_label,
+      help_href: search.help_href,
+    },
   })
 }

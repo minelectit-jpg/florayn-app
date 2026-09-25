@@ -1,12 +1,13 @@
 import { Button, Container, Heading, Input, Label, Switch, Text, Textarea, toast } from "@medusajs/ui"
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
-import { DELIVERY_ICONS, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
+import { DELIVERY_ICONS, DEVICE_FAMILIES, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, validateNavigationPresentation, validateSearchPresentation, type BuyBoxPresentation, type DeliveryPresentation, type DeviceFamilyKey, type FooterPresentation, type NavigationPresentation, type SearchPresentation } from "../../lib/storefront-presentation"
 import { contentApi } from "./menu-editor"
 import { ManagerSelect, useUnsaved } from "./product-manager/shared"
 
-const VALIDATORS = { footer: validateFooterPresentation, delivery: validateDeliveryPresentation, buy_box: validateBuyBoxPresentation }
+const VALIDATORS = { footer: validateFooterPresentation, delivery: validateDeliveryPresentation, buy_box: validateBuyBoxPresentation, navigation: validateNavigationPresentation, search: validateSearchPresentation }
 
-function useSettings<T>(section: "footer" | "delivery" | "buy_box") {
+/** `prepare` tidies the value (and may throw a clearer message) before the shared validator runs. */
+function useSettings<T>(section: keyof typeof VALIDATORS, prepare?: (value: T) => T) {
   const [value, setValue] = useState<T | null>(null)
   const [saved, setSaved] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,7 +31,7 @@ function useSettings<T>(section: "footer" | "delivery" | "buy_box") {
     setSaving(true)
     setError("")
     try {
-      const settings = VALIDATORS[section](value)
+      const settings = VALIDATORS[section](prepare ? prepare(value) : value)
       const data = await contentApi(path, { method: "POST", body: JSON.stringify({ settings }) })
       setValue(data.settings)
       setSaved(data.settings)
@@ -211,6 +212,145 @@ export function BuyBoxPresentationEditor() {
       <div className="grid gap-3">
         <Heading level="h2">Preview</Heading>
         <BuyBoxPreview value={value} />
+      </div>
+    </>}
+  </Frame>
+}
+
+const BRAND_FIELDS: Record<DeviceFamilyKey, string> = { iphone: "iPhone models", samsung: "Samsung models", airpods: "AirPods models", watch: "Watch models", wallet: "Wallet models" }
+
+/** Admin > Navigation, under the menus: settings both the Women and Men menus share. */
+export function NavigationPresentationEditor() {
+  const state = useSettings<NavigationPresentation>("navigation")
+  const value = state.value
+  const set = (patch: Partial<NavigationPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
+  return <Frame title="Navigation settings" description="Brand names, the links at the bottom of the phone menu and the remembered phone. The Women and Men menus share them." state={state}>
+    {value && <>
+      <div className="grid gap-4">
+        <Heading level="h2">Brand names</Heading>
+        <Text size="small" className="text-ui-fg-subtle">How each brand is named in the menu and in search.</Text>
+        <div className="grid gap-4 md:grid-cols-3">
+          {DEVICE_FAMILIES.map((family) => <Field key={family} label={BRAND_FIELDS[family]} value={value.family_labels[family]} max={30} onChange={(label) => set({ family_labels: { ...value.family_labels, [family]: label } })} />)}
+        </div>
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Menu bottom links</Heading>
+        <Text size="small" className="text-ui-fg-subtle">Up to 6 links under the phone menu, for example My account.</Text>
+        {value.drawer_links.map((row, index) => <div key={index} className="grid gap-3 rounded-lg border border-ui-border-base p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={`Link ${index + 1} label`} value={row.label} max={40} onChange={(label) => set({ drawer_links: value.drawer_links.map((item, i) => i === index ? { ...item, label } : item) })} />
+            <Field label={`Link ${index + 1} URL`} value={row.href} max={500} onChange={(href) => set({ drawer_links: value.drawer_links.map((item, i) => i === index ? { ...item, href } : item) })} hint={index === 0 ? "For example /account/." : undefined} />
+          </div>
+          <RowActions index={index} length={value.drawer_links.length} move={(delta) => set({ drawer_links: moved(value.drawer_links, index, delta) })} remove={() => set({ drawer_links: value.drawer_links.filter((_, i) => i !== index) })} />
+        </div>)}
+        <div><Button variant="secondary" disabled={value.drawer_links.length >= 6} onClick={() => set({ drawer_links: [...value.drawer_links, { label: "", href: "" }] })}>Add link</Button></div>
+      </div>
+      <Toggle id="navigation-remember-device" label="Remember the shopper's phone" checked={value.remember_device} onChange={(remember_device) => set({ remember_device })} hint="Shows Your phone at the top of the menu and search, from the models the shopper opened on this device. Nothing is sent to the server." />
+    </>}
+  </Frame>
+}
+
+const SUGGESTIONS_MAX = 8
+const SYNONYMS_MAX = 100
+const splitWords = (text: string) => text.split(",").map((word) => word.trim()).filter(Boolean)
+
+/** Try chips: add, remove and reorder, up to 8 of 40 characters or fewer. */
+function Chips({ id, label, items, onChange }: { id: string; label: string; items: string[]; onChange: (items: string[]) => void }) {
+  const [draft, setDraft] = useState("")
+  const full = items.length >= SUGGESTIONS_MAX
+  function add() {
+    const text = draft.trim()
+    if (!text || full) return
+    if (!items.some((item) => item.toLowerCase() === text.toLowerCase())) onChange([...items, text])
+    setDraft("")
+  }
+  return <div className="grid gap-2">
+    <Label htmlFor={id}>{label}</Label>
+    <div className="flex flex-wrap gap-2">
+      {items.map((item, index) => <span key={`${item}-${index}`} className="flex items-center gap-0.5 rounded-full border border-ui-border-base bg-ui-bg-subtle py-0.5 pl-3 pr-1">
+        <Text size="small">{item}</Text>
+        <Button size="small" variant="transparent" disabled={index === 0} onClick={() => onChange(moved(items, index, -1))} aria-label={`Move ${item} earlier`}>←</Button>
+        <Button size="small" variant="transparent" disabled={index === items.length - 1} onClick={() => onChange(moved(items, index, 1))} aria-label={`Move ${item} later`}>→</Button>
+        <Button size="small" variant="transparent" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`Remove ${item}`}>×</Button>
+      </span>)}
+      {!items.length && <Text size="small" className="text-ui-fg-muted">None. Search opens without Try chips.</Text>}
+    </div>
+    <div className="flex gap-2 md:max-w-md">
+      <Input id={id} value={draft} maxLength={40} disabled={full} placeholder={full ? "Up to 8. Remove one to add another." : "e.g. iPhone 17 Pro Max"} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add() } }} />
+      <Button variant="secondary" disabled={!draft.trim() || full} onClick={add}>Add</Button>
+    </div>
+  </div>
+}
+
+/**
+ * One synonym row. The words are typed as a comma list; the field keeps its
+ * own text so a trailing comma or space survives while typing.
+ */
+function SynonymRow({ index, row, onChange, onRemove }: { index: number; row: SearchPresentation["synonyms"][number]; onChange: (row: SearchPresentation["synonyms"][number]) => void; onRemove: () => void }) {
+  const [text, setText] = useState(row.words.join(", "))
+  useEffect(() => {
+    if (JSON.stringify(splitWords(text)) !== JSON.stringify(row.words)) setText(row.words.join(", "))
+  }, [row.words])
+  return <div className="grid items-center gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]">
+    <Input aria-label={`Row ${index + 1}: when shoppers type`} value={text} placeholder="cover, covers, back cover" onChange={(e) => { setText(e.target.value); onChange({ ...row, words: splitWords(e.target.value) }) }} />
+    <Input aria-label={`Row ${index + 1}: search for`} value={row.means} maxLength={40} placeholder="case" onChange={(e) => onChange({ ...row, means: e.target.value })} />
+    <Button size="small" variant="transparent" onClick={onRemove} aria-label={`Remove synonym row ${index + 1}`}>Remove</Button>
+  </div>
+}
+
+/** Drops empty rows and names the row a mistake is in, before the shared validator. */
+export function tidySearch(value: SearchPresentation): SearchPresentation {
+  const synonyms: SearchPresentation["synonyms"] = []
+  value.synonyms.forEach((row, index) => {
+    const words = row.words.map((word) => word.trim()).filter(Boolean)
+    const means = row.means.trim()
+    if (!words.length && !means) return
+    const where = `Synonym row ${index + 1}`
+    if (!words.length) throw new Error(`${where}: add the words shoppers type.`)
+    if (words.length > 10) throw new Error(`${where}: use up to 10 words.`)
+    if (words.some((word) => word.length > 40)) throw new Error(`${where}: keep each word to 40 characters or fewer.`)
+    if (!means) throw new Error(`${where}: add what to search for.`)
+    synonyms.push({ words, means })
+  })
+  return { ...value, synonyms }
+}
+
+/** Admin > Search: the search field, its Try chips, synonyms and the help link. */
+export function SearchPresentationEditor({ storefront = "" }: { storefront?: string }) {
+  const state = useSettings<SearchPresentation>("search", tidySearch)
+  const value = state.value
+  const set = (patch: Partial<SearchPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
+  return <Frame title="Search" description="The search field in the header, its Try suggestions, words shoppers use for the same thing, and the link shown when nothing matches." state={state}>
+    {value && <>
+      {storefront ? <div><a className="text-ui-fg-interactive underline" href={`${storefront}/search/`} target="_blank" rel="noreferrer noopener">Try it on the store</a></div> : null}
+      <div className="md:max-w-md">
+        <Field label="Placeholder" value={value.placeholder} max={60} onChange={(placeholder) => set({ placeholder })} hint="The grey text in the empty search field." />
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Try suggestions</Heading>
+        <Chips id="search-suggest-women" label="Try suggestions (Women)" items={value.suggest_women} onChange={(suggest_women) => set({ suggest_women })} />
+        <Chips id="search-suggest-men" label="Try suggestions (Men)" items={value.suggest_men} onChange={(suggest_men) => set({ suggest_men })} />
+        <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
+          <Text size="small">Suggestions show as Try, never as Popular, because they are chosen here, not measured.</Text>
+        </div>
+      </div>
+      <div className="grid gap-3">
+        <Heading level="h2">Synonyms</Heading>
+        <Text size="small" className="text-ui-fg-subtle">Words shoppers type for the same thing, including misspellings and Bangla. Separate words with commas, up to 10 per row.</Text>
+        <div className="hidden gap-2 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]">
+          <Text size="xsmall" weight="plus" className="text-ui-fg-muted">When shoppers type</Text>
+          <Text size="xsmall" weight="plus" className="text-ui-fg-muted">Search for</Text>
+          <span className="w-16" />
+        </div>
+        {value.synonyms.map((row, index) => <SynonymRow key={index} index={index} row={row} onChange={(next) => set({ synonyms: value.synonyms.map((item, i) => i === index ? next : item) })} onRemove={() => set({ synonyms: value.synonyms.filter((_, i) => i !== index) })} />)}
+        <div><Button variant="secondary" disabled={value.synonyms.length >= SYNONYMS_MAX} onClick={() => set({ synonyms: [...value.synonyms, { words: [], means: "" }] })}>Add synonym</Button></div>
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Help link when nothing matches</Heading>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Help link label" value={value.help_label} max={60} onChange={(help_label) => set({ help_label })} />
+          <Field label="Help link URL" value={value.help_href} max={500} onChange={(help_href) => set({ help_href })} hint="For example /contact/. Leave both fields blank to hide it." />
+        </div>
       </div>
     </>}
   </Frame>

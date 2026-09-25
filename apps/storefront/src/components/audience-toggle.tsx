@@ -20,16 +20,26 @@ const target = (option: Audience) =>
  * old one is dimmed and not clickable, and every link already points to the
  * chosen mode, so nothing sends the shopper back. The other mode's page starts
  * loading on hover or touch, not on every page view. `pill` is the desktop
- * header control; `tabs` is the full-width bar used on phones.
+ * header control; `compact` is the small switch beside the phone header's
+ * search field; `tabs` is the full-width bar at the top of the phone menu.
  */
-export default function AudienceToggle({ variant, className = "" }: { variant: "pill" | "tabs"; className?: string }) {
+export default function AudienceToggle({ variant, className = "" }: { variant: "pill" | "tabs" | "compact"; className?: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const shown = useAudience()
   const prefetched = useRef(new Set<string>())
 
-  // Once the new page is in, the URL is the source of truth again.
-  useEffect(() => setSwitchingAudience(null), [pathname])
+  // Once the new page is in, the URL is the source of truth again. Only a
+  // change of path counts, never a mount: the drawer mounts a fresh toggle on
+  // every open and every Back to its first level, and that must not cancel a
+  // switch still loading. The header's own toggles stay mounted and see the
+  // path change; a failed navigation is cleared by setSwitchingAudience's timer.
+  const shownPath = useRef(pathname)
+  useEffect(() => {
+    if (shownPath.current === pathname) return
+    shownPath.current = pathname
+    setSwitchingAudience(null)
+  }, [pathname])
 
   function warm(option: Audience) {
     if (option === shown) return

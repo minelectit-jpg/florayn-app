@@ -117,9 +117,9 @@ Decided and implemented, recorded here so they are not reopened.
   single-use promotion, recomputed server-side from the cart's own lines.
 - **The Matching Set bundle** is deliberately not built: it needs a Signature
   Pen product type that does not exist in the catalogue.
-- **Home page, header, mega menu and footer** are built from the content
-  module and edited under **Home page**, **Mega menu** and **Footer** in the
-  admin. The menu keeps the live query shape,
+- **Home page, header, navigation and footer** are built from the content
+  module and edited under **Home page**, **Navigation**, **Search** and
+  **Footer** in the admin (see HEADER_SEARCH.md). The menu keeps the live query shape,
   `/shop/?filter_device=…&filter_case-type=…`, so links copied from
   florayn.com work unchanged.
 - **Footer "Contact Us"** goes to a real `/contact/` page, not Facebook.

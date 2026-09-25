@@ -49,6 +49,36 @@ When a feature needs extra data, first check whether it can share existing data
 or load when used. Raise a budget only with a recorded before/after measurement
 and tests proving selectors, image fallbacks, prices and cart choices still work.
 
+## Header and search budgets
+
+The header (see [HEADER_SEARCH.md](HEADER_SEARCH.md)) is in every page, so its
+data and code are held small:
+
+- **Header prop: 10,000 bytes or less.** The layout sends one packed prop
+  (`packHeaderData(buildHeaderData(...))` in `lib/header-data.ts`) in every
+  page's RSC payload. `tests/header-data.test.cjs` builds the worst case (two
+  different 8-section menus with 24 links each, 60 devices, 8 case types, 12
+  collections with 100-character image URLs) and fails above 10,000 bytes. It
+  was about 14.4 KB before the header rebuild; the worst case now packs to about
+  8.5 KB.
+- **Search index: 60,000 JSON bytes and 14,000 gzip bytes or less** for 400
+  designs, 45 devices, 8 case types and 15 collections
+  (`apps/backend/tests/search-index.test.cjs`). The realistic build measured
+  59,098 bytes and 8,590 gzip bytes, so JSON is close to its limit; thumbnails
+  are the largest part.
+- **No index request on page load.** `/search-index.json` is fetched once, on
+  the first sign of wanting to search (pointer, touch, focus or hover on a
+  search trigger). It is never in the HTML or RSC payload.
+- **Lazy chunks.** The menu levels (`nav-drawer.tsx`), the desktop panels
+  (`mega-panel.tsx`) and the search results and engine (`search-results.tsx`)
+  load on intent through `React.lazy`, never `next/dynamic` with `ssr:false`.
+  The engine stays at 3 KB gzip or less and `normalize.ts` at 1.2 KB or less.
+  "First Load JS shared by all" in `next build` must not grow against the build
+  before the header rebuild.
+- **No prefetch storms.** Menu, panel and search links use `IntentLink`
+  (`prefetch={false}`, then one `router.prefetch` on pointerdown, touchstart or
+  focus), so opening the drawer prefetches nothing.
+
 ## Browser measurements
 
 Load a page with `#perf` at the end of its URL, for example
@@ -137,6 +167,13 @@ Set `NEXT_PUBLIC_MEDUSA_BACKEND_URL=http://127.0.0.1:9901` and
 offline fixture build, set `NEXT_FONT_GOOGLE_MOCKED_RESPONSES` to the absolute
 path of `apps/storefront/tests/fixtures/google-fonts.cjs`. **Do not set that font
 test hook in a deployment.** Set `NEXT_TELEMETRY_DISABLED=1` for local/CI checks.
+
+The fixture's `/store/content` returns typed header menus shaped like the live
+ones (a Collections row, Phone Case and Earbuds as device lists, Styles from the
+case types, and accessory links), `/store/devices` carries badges and
+`/store/case-types` carries devices, `price_groups` and `image_url`.
+`/store/search-index` is built from the fixture catalogue by the backend's own
+`lib/search-index.ts`.
 
 Fixture-only controls make freshness tests repeatable:
 

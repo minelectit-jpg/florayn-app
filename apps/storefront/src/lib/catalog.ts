@@ -71,6 +71,8 @@ export type DeviceRecord = {
   name: string
   family: string
   brand: string
+  /** Admin > Devices badge, e.g. "New"; null when none. */
+  badge?: string | null
 }
 
 const FAMILY_LABELS: Record<string, string> = {
@@ -96,7 +98,7 @@ export async function getDeviceFamilyMap(): Promise<Record<string, string>> {
   return map
 }
 
-/** The full device list, in catalogue order, for the collection filter bar. */
+/** The full device list, each family newest first (lib/device-order.ts). */
 export async function getDeviceCatalog(): Promise<DeviceRecord[]> {
   const data = await storeFetch<{ devices: DeviceRecord[] }>("/store/devices")
   return data?.devices ?? []

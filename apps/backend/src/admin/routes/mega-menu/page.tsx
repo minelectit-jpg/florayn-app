@@ -4,15 +4,25 @@ import { Button, Container, Text, toast } from "@medusajs/ui"
 import { useState } from "react"
 
 import MenuEditor, { contentApi } from "../../components/menu-editor"
+import { NavigationPresentationEditor } from "../../components/storefront-presentation-editor"
 
 /**
- * The header navigation, one per shopping mode. Links are entered plain
- * ("/shop/…"); on the Men site the storefront adds /men itself, so the same
- * link works in both menus.
+ * Admin > Navigation (still at /mega-menu): the phone menu and the desktop
+ * bar, one menu per shopping mode, then the settings both share. Links are
+ * entered plain ("/shop/…"); on the Men site the storefront adds /men itself,
+ * so the same link works in both menus.
  */
-const MegaMenuPage = () => {
+const NavigationPage = () => {
   const [audience, setAudience] = useState<"women" | "men">("women")
   const [version, setVersion] = useState(0)
+  const [dirty, setDirty] = useState(false)
+
+  function switchTo(next: "women" | "men") {
+    if (next === audience) return
+    if (dirty && !window.confirm("Discard the unsaved changes in this menu?")) return
+    setDirty(false)
+    setAudience(next)
+  }
 
   async function copyToMen() {
     if (!window.confirm("Start the Men menu as a copy of the Women menu? You can then edit it freely.")) return
@@ -30,7 +40,7 @@ const MegaMenuPage = () => {
       <Container className="flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Which site" className="flex gap-2">
           {(["women", "men"] as const).map((value) => (
-            <Button key={value} size="small" variant={audience === value ? "primary" : "secondary"} onClick={() => setAudience(value)}>
+            <Button key={value} size="small" variant={audience === value ? "primary" : "secondary"} onClick={() => switchTo(value)}>
               {value === "women" ? "Women (new.florayn.com)" : "Men (/men)"}
             </Button>
           ))}
@@ -45,17 +55,22 @@ const MegaMenuPage = () => {
       <MenuEditor
         key={`${audience}-${version}`}
         menu={audience === "men" ? "primary-men" : "primary"}
-        title={audience === "men" ? "Mega menu: Men" : "Mega menu: Women"}
-        description="The header navigation. Each menu holds links, and a group heading turns a flat list into a mega-menu column. Enter links without /men; the Men site adds it."
+        title={audience === "men" ? "Navigation: Men" : "Navigation: Women"}
+        description="The phone menu and the desktop bar. Automatic sections fill themselves from Devices, Case types and Collection pages."
         useGroups
+        typed
+        onDirtyChange={setDirty}
       />
+      <div className="mt-3">
+        <NavigationPresentationEditor />
+      </div>
     </div>
   )
 }
 
 export const config = defineRouteConfig({
-  label: "Mega menu",
+  label: "Navigation",
   icon: ListBullet,
 })
 
-export default MegaMenuPage
+export default NavigationPage

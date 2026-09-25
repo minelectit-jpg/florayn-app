@@ -3,6 +3,9 @@
 @import "./product-content.css";
 @import "./site-presentation.css";
 @import "./audience.css";
+@import "./header.css";
+@import "./nav-drawer.css";
+@import "./search.css";
 
 /* Account and bag share the checkout's quiet cards and rounded actions. */
 @layer components {
@@ -287,6 +290,8 @@
   --color-surface: #ffffff; /* cards and panels; separated from Paper by borders */
   --color-line: #e8e4de; /* hairline rules, warm to match Paper */
   --color-line-strong: #d6d1c9;
+  /* Search fields and the compact WOMEN/MEN switch; ink-muted on it is 5.1:1. */
+  --color-field: #f5f4f7;
 
   /*
    * Gold. Reserved for premium and limited-edition treatments only - never for

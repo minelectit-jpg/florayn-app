@@ -18,6 +18,8 @@ const Device = model.define("device", {
   sku_code: model.text(),
   sort_order: model.number().default(0),
   is_active: model.boolean().default(true),
+  // Short pill next to the model in the menu and search, e.g. New. Null for none.
+  badge: model.text().nullable(),
   case_types: model.manyToMany(() => CaseType, {
     mappedBy: "devices",
   }),

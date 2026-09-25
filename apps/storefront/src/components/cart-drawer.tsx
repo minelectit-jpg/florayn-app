@@ -4,6 +4,7 @@ import Link from "@/components/audience-link"
 import { useEffect, useRef, useState } from "react"
 
 import { useCart } from "@/components/cart-provider"
+import { useFocusTrap } from "@/components/header/header-dialogs"
 import ProductImage from "@/components/product-image"
 import {
   getCart,
@@ -60,42 +61,21 @@ export default function CartDrawer() {
   })()
   const pending = (item: CartItem) => adding && (item.id.startsWith("optimistic-") || item.variant?.id === lastAdded?.variantId)
 
-  // Escape to close + focus trap + lock body scroll while open.
+  // Escape to close and a focus trap while open (shared with the header's sheets).
+  useFocusTrap(panelRef, isDrawerOpen, closeDrawer)
+
+  // Focus the panel, lock body scroll, and hand focus back on close.
   useEffect(() => {
     if (!isDrawerOpen) return
     previouslyFocused.current = document.activeElement as HTMLElement | null
     panelRef.current?.focus()
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeDrawer()
-        return
-      }
-      if (event.key !== "Tab" || !panelRef.current) return
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
-      )
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown)
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = "hidden"
     return () => {
-      document.removeEventListener("keydown", onKeyDown)
       document.body.style.overflow = previousOverflow
       previouslyFocused.current?.focus?.()
     }
-  }, [isDrawerOpen, closeDrawer])
+  }, [isDrawerOpen])
 
   async function changeQty(item: CartItem, delta: number) {
     const next = item.quantity + delta

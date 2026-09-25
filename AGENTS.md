@@ -111,6 +111,11 @@ pages, their admin editors or the product card's colours.
 Read `WOMEN_MEN.md` before changing the header switch, `/men` routes, links in
 content/menus/cards, or anything that lists designs. Keep the mode in the URL.
 
+Read `HEADER_SEARCH.md` before changing the header, the menu drawer, the
+desktop panels, search, the search index or the Navigation and Search admin
+screens. Keep the header prop and the index inside their budgets, and never
+load the index on page load.
+
 Read `REVIEWS.md` before changing reviews, review requests (email and
 WhatsApp), review rewards or the checkout discount code field. A phone-only
 order's email is a placeholder: read customer emails through `realEmail()`.

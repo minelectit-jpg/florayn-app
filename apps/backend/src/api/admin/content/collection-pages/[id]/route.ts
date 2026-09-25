@@ -20,7 +20,10 @@ const TEXT_FIELDS = [
 ]
 const URL_FIELDS = ["hero_image_url", "hero_mobile_image_url", "card_image_url", "cta_href"]
 
-/** POST /admin/content/collection-pages/:id - edit content, look or visibility. */
+/**
+ * POST /admin/content/collection-pages/:id - edit content, look or visibility.
+ * show_in_menu puts the page in the phone menu's Collections row.
+ */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)
   const body = (req.body ?? {}) as Record<string, unknown>
@@ -42,6 +45,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     }
   }
   if (typeof body.is_visible === "boolean") patch.is_visible = body.is_visible
+  if (typeof body.show_in_menu === "boolean") patch.show_in_menu = body.show_in_menu
   if (body.template !== undefined) patch.template = normaliseTemplate(body.template)
   if (body.theme !== undefined) patch.theme = normaliseTheme(body.theme)
   if (body.blocks !== undefined) patch.blocks = normaliseBlocks(body.blocks)

@@ -76,3 +76,36 @@ test("delivery cards no longer carry lines for under the buy buttons; an old sav
   assert.ok(saved.delivery.cards.every((c) => !("buy_line" in c)))
   assert.equal("free_delivery_line" in saved.buy_box, false)
 })
+
+test("Navigation and Search settings: an old store gets the defaults, and bad values are refused", () => {
+  const { validateNavigationPresentation, validateSearchPresentation } = exportsObject
+  const read = readPresentation(null)
+  assert.deepEqual(plain(read.navigation), plain(defaults.navigation))
+  assert.deepEqual(plain(read.search), plain(defaults.search))
+  assert.equal(read.navigation.family_labels.samsung, "Samsung Galaxy")
+  assert.deepEqual(plain(read.navigation.drawer_links), [{ label: "My account", href: "/account/" }, { label: "Help & contact", href: "/contact/" }])
+  assert.equal(read.navigation.remember_device, true)
+  assert.equal(read.search.placeholder, "Search")
+  assert.deepEqual(plain(read.search.suggest_women), ["iPhone 17 Pro Max", "Samsung S26 Ultra", "AirPods Pro 3", "Alcantara"])
+  assert.equal(read.search.help_href, "/contact/")
+  assert.ok(read.search.synonyms.some((row) => row.means === "leopard" && row.words.includes("chita")))
+  // Admin > Navigation and Admin > Search save through the same workflow.
+  const workflow = fs.readFileSync(path.join(__dirname, "../src/workflows/save-storefront-presentation.ts"), "utf8")
+  assert.match(workflow, /navigation: validateNavigationPresentation,/)
+  assert.match(workflow, /search: validateSearchPresentation,/)
+
+  const s = defaults.search
+  assert.deepEqual(plain(validateSearchPresentation(s)), plain(s))
+  assert.throws(() => validateSearchPresentation({ ...s, suggest_women: Array(9).fill("Leopard") }), /up to 8/)
+  assert.throws(() => validateSearchPresentation({ ...s, suggest_men: Array(9).fill("Carbon") }), /up to 8/)
+  assert.throws(() => validateSearchPresentation({ ...s, synonyms: Array(101).fill({ words: ["chita"], means: "leopard" }) }), /100 synonym rows/)
+  assert.throws(() => validateSearchPresentation({ ...s, help_href: "javascript:alert(1)" }))
+  assert.throws(() => validateSearchPresentation({ ...s, help_href: "//evil.test" }))
+  assert.throws(() => validateSearchPresentation({ ...s, placeholder: "x".repeat(61) }))
+
+  const n = defaults.navigation
+  assert.deepEqual(plain(validateNavigationPresentation(n)), plain(n))
+  assert.throws(() => validateNavigationPresentation({ ...n, drawer_links: Array(7).fill(n.drawer_links[0]) }), /6 menu bottom links/)
+  assert.throws(() => validateNavigationPresentation({ ...n, drawer_links: [{ label: "Bad", href: "javascript:alert(1)" }] }))
+  assert.throws(() => validateNavigationPresentation({ ...n, remember_device: "yes" }))
+})

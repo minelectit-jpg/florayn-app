@@ -11,7 +11,11 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { sortNewestFirst } from "@/lib/device-order"
+import { matchesModel } from "@/lib/search/normalize"
 import { cn } from "@/lib/utils"
+
+/** A mouse or trackpad: safe to focus the search, since no on-screen keyboard will cover the list. */
+const finePointer = () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer:fine)").matches
 
 /**
  * The "SELECT MODEL" drawer, matched to florayn.com and shared by the shop
@@ -47,11 +51,11 @@ export default function ModelDrawer({
 }) {
   const [query, setQuery] = useState("")
 
+  // "15pm", "s24u" and Bangla digits find their model (lib/search/normalize.ts).
   const grouped = useMemo(() => {
-    const needle = query.trim().toLowerCase()
     const map = new Map<string, ModelItem[]>()
     for (const it of sortNewestFirst(items, (i) => i.label, (i) => i.group)) {
-      if (needle && !it.label.toLowerCase().includes(needle)) continue
+      if (!matchesModel(it.label, query)) continue
       const arr = map.get(it.group) ?? []
       arr.push(it)
       map.set(it.group, arr)
@@ -90,7 +94,7 @@ export default function ModelDrawer({
           <Search className="size-4 shrink-0 text-ink-muted" strokeWidth={1.6} />
           <input
             type="search"
-            autoFocus
+            autoFocus={finePointer()}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type to search"

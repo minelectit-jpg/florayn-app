@@ -18,7 +18,26 @@ export type BuyBoxPresentation = {
   sold_out_label: string
   sold_out_other_model_label: string
 }
-export type Presentation = { footer: FooterPresentation; delivery: DeliveryPresentation; buy_box: BuyBoxPresentation }
+/** The five device families, in the store's order. */
+export const DEVICE_FAMILIES = ["iphone", "samsung", "airpods", "watch", "wallet"] as const
+export type DeviceFamilyKey = typeof DEVICE_FAMILIES[number]
+/** Admin > Navigation settings card: brand names, the menu's bottom links, the remembered phone. */
+export type NavigationPresentation = {
+  family_labels: Record<DeviceFamilyKey, string>
+  drawer_links: { label: string; href: string }[]
+  remember_device: boolean
+}
+/** Admin > Search: the field's placeholder, the Try chips per mode, synonyms and the no-results help link. */
+export type SearchPresentation = {
+  placeholder: string
+  suggest_women: string[]
+  suggest_men: string[]
+  /** "When shoppers type" words (a comma list in the admin) and what they mean. */
+  synonyms: { words: string[]; means: string }[]
+  help_label: string
+  help_href: string
+}
+export type Presentation = { footer: FooterPresentation; delivery: DeliveryPresentation; buy_box: BuyBoxPresentation; navigation: NavigationPresentation; search: SearchPresentation }
 export const DEFAULT_PRESENTATION: Presentation = {
   footer: {
     brand: "FLORAYN", tagline: "Made to match your everyday.",
@@ -52,6 +71,30 @@ export const DEFAULT_PRESENTATION: Presentation = {
     sold_out_suggestions: true,
     sold_out_label: "Available in",
     sold_out_other_model_label: "Choose another model",
+  },
+  navigation: {
+    family_labels: { iphone: "iPhone", samsung: "Samsung Galaxy", airpods: "AirPods", watch: "Apple Watch", wallet: "Card Wallet" },
+    drawer_links: [
+      { label: "My account", href: "/account/" },
+      { label: "Help & contact", href: "/contact/" },
+    ],
+    remember_device: true,
+  },
+  search: {
+    placeholder: "Search",
+    suggest_women: ["iPhone 17 Pro Max", "Samsung S26 Ultra", "AirPods Pro 3", "Alcantara"],
+    suggest_men: ["iPhone 17 Pro Max", "Samsung S26 Ultra", "AirPods Pro 3", "Alcantara"],
+    synonyms: [
+      { words: ["cover", "covers", "back cover", "casing", "কভার", "কেস"], means: "case" },
+      { words: ["ipone", "iphon", "iphn", "i phone", "aifon", "আইফোন"], means: "iphone" },
+      { words: ["samsang", "samsun", "samsumg", "galaxy", "স্যামসাং"], means: "samsung" },
+      { words: ["airpod", "air pods", "earbud", "earbuds", "buds", "এয়ারপড"], means: "airpods" },
+      { words: ["belt", "strap", "watch belt", "watch strap"], means: "watch band" },
+      { words: ["transparent", "see through"], means: "clear" },
+      { words: ["chita", "cheetah", "চিতা"], means: "leopard" },
+    ],
+    help_label: "Can't find your model? Message us",
+    help_href: "/contact/",
   },
 }
 
@@ -106,7 +149,7 @@ function flag(value: unknown, what: string) {
 }
 function oneLine(value: unknown, name: string, max: number, required = false) {
   const result = text(value, name, max, required)
-  if (ONE_LINE.test(result)) throw new Error("Keep button text on one line.")
+  if (ONE_LINE.test(result)) throw new Error(`Keep ${name} on one line.`)
   return result
 }
 export function validateBuyBoxPresentation(value: unknown): BuyBoxPresentation {
@@ -126,14 +169,56 @@ export function validateBuyBoxPresentation(value: unknown): BuyBoxPresentation {
   }
   return result
 }
+export function validateNavigationPresentation(value: unknown): NavigationPresentation {
+  const v = object(value)
+  const labels = object(v.family_labels)
+  const family_labels = Object.fromEntries(DEVICE_FAMILIES.map((f) => [f, oneLine(labels[f], "Brand name", 30, true)])) as NavigationPresentation["family_labels"]
+  if (!Array.isArray(v.drawer_links) || v.drawer_links.length > 6) throw new Error("Use up to 6 menu bottom links.")
+  const drawer_links = v.drawer_links.map((row) => {
+    const r = object(row)
+    const label = oneLine(r.label, "Menu link label", 40, true)
+    const href = text(r.href, "Menu link", 500, true)
+    link(label, href)
+    return { label, href }
+  })
+  return { family_labels, drawer_links, remember_device: flag(v.remember_device, "remember the shopper's phone") }
+}
+function suggestions(value: unknown, name: string) {
+  if (!Array.isArray(value) || value.length > 8) throw new Error(`Use up to 8 ${name}.`)
+  return value.map((item) => oneLine(item, "Suggestion", 40, true))
+}
+export function validateSearchPresentation(value: unknown): SearchPresentation {
+  const v = object(value)
+  if (!Array.isArray(v.synonyms) || v.synonyms.length > 100) throw new Error("Use up to 100 synonym rows.")
+  const synonyms = v.synonyms.map((row) => {
+    const r = object(row)
+    if (!Array.isArray(r.words) || !r.words.length || r.words.length > 10) throw new Error("Give each synonym row 1 to 10 words.")
+    const words = r.words.map((w) => oneLine(w, "Synonym word", 40, true))
+    return { words, means: oneLine(r.means, "Search for", 40, true) }
+  })
+  const result: SearchPresentation = {
+    placeholder: oneLine(v.placeholder, "Search placeholder", 60, true),
+    suggest_women: suggestions(v.suggest_women, "Women suggestions"),
+    suggest_men: suggestions(v.suggest_men, "Men suggestions"),
+    synonyms,
+    help_label: oneLine(v.help_label, "Help link label", 60),
+    help_href: text(v.help_href, "Help link", 500),
+  }
+  link(result.help_label, result.help_href)
+  return result
+}
 /** Missing old settings use defaults; deliberate blank text and empty lists remain blank. */
 export function readPresentation(value: unknown): Presentation {
   const saved = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<Presentation> : {}
   let footer = DEFAULT_PRESENTATION.footer
   let delivery = DEFAULT_PRESENTATION.delivery
   let buy_box = DEFAULT_PRESENTATION.buy_box
+  let navigation = DEFAULT_PRESENTATION.navigation
+  let search = DEFAULT_PRESENTATION.search
   try { footer = validateFooterPresentation({ ...footer, ...saved.footer }) } catch { /* Safe legacy fallback. */ }
   try { delivery = validateDeliveryPresentation({ ...delivery, ...saved.delivery }) } catch { /* Safe legacy fallback. */ }
   try { buy_box = validateBuyBoxPresentation({ ...buy_box, ...saved.buy_box }) } catch { /* Safe legacy fallback. */ }
-  return { footer, delivery, buy_box }
+  try { navigation = validateNavigationPresentation({ ...navigation, ...saved.navigation, family_labels: { ...navigation.family_labels, ...saved.navigation?.family_labels } }) } catch { /* Safe legacy fallback. */ }
+  try { search = validateSearchPresentation({ ...search, ...saved.search }) } catch { /* Safe legacy fallback. */ }
+  return { footer, delivery, buy_box, navigation, search }
 }

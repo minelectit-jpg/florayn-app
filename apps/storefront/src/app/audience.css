@@ -1,8 +1,8 @@
 /*
  * The WOMEN / MEN switch (components/audience-toggle.tsx). One highlight slides
- * between the two options: a dark pill in the desktop header, an underline on
- * the phone tab bar. Layered as components so utilities (hidden, lg:grid)
- * still decide where each variant shows.
+ * between the two options: a dark pill in the desktop header and beside the
+ * phone search field, an underline on the menu drawer's tab bar. Layered as
+ * components so utilities (hidden, lg:grid) still decide where each variant shows.
  */
 @layer components {
   .fl-audience { position:relative; display:grid; grid-template-columns:1fr 1fr; isolation:isolate; user-select:none; }
@@ -16,6 +16,13 @@
   .fl-audience--pill .fl-audience__option { min-width:76px; height:32px; padding:0 14px; border-radius:999px; font-size:11px; letter-spacing:.09em; }
   .fl-audience--pill .fl-audience__option[aria-current] { color:#fff; }
   .fl-audience--pill .fl-audience__thumb { top:4px; bottom:4px; left:4px; width:calc(50% - 4px); border-radius:999px; background:var(--color-ink); box-shadow:0 6px 14px -6px rgba(26,22,37,.55); }
+
+  /* Beside the phone header's search field: 44px tall, about 120px wide, so a
+     320px screen still leaves the field 160px. */
+  .fl-audience--compact { padding:4px; border-radius:999px; background:var(--color-field); }
+  .fl-audience--compact .fl-audience__option { min-width:56px; height:36px; padding:0 12px; border-radius:999px; font-size:11px; letter-spacing:.09em; }
+  .fl-audience--compact .fl-audience__option[aria-current] { color:#fff; }
+  .fl-audience--compact .fl-audience__thumb { top:4px; bottom:4px; left:4px; width:calc(50% - 4px); border-radius:999px; background:var(--color-ink); }
 
   .fl-audience--tabs { border-bottom:1px solid var(--color-line); background:var(--color-paper); }
   .fl-audience--tabs .fl-audience__option { height:46px; font-size:14px; letter-spacing:.07em; }

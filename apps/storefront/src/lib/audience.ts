@@ -19,7 +19,7 @@ export const MEN_PREFIX = "/men"
 export const AUDIENCE_COOKIE = "fl_audience"
 
 /** Paths that have a Men counterpart. Everything else (cart, contact…) is shared. */
-const SCOPED = /^\/(?:$|[?#]|shop(?:[/?#]|$)|collections?(?:[/?#]|$)|product\/)/
+const SCOPED = /^\/(?:$|[?#]|shop(?:[/?#]|$)|collections?(?:[/?#]|$)|product\/|search(?:[/?#]|$))/
 
 export function isAudience(value: unknown): value is Audience {
   return value === "women" || value === "men"

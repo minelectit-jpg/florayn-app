@@ -18,7 +18,7 @@ const link = { __esModule: true, default: ({ prefetch, ...props }) => React.crea
 const deps = { "@/lib/storefront-presentation": contract, "next/link": link, "@/components/audience-link": link }
 const ShippingNote = load("components/shipping-note.tsx", deps).ShippingNote
 const FooterLinks = load("components/footer-links.tsx", deps).default
-const Footer = load("components/site-footer.tsx", { ...deps, "./footer-links": { __esModule: true, default: FooterLinks } }).default
+const Footer = load("components/site-footer.tsx", { ...deps, "./footer-links": { __esModule: true, default: FooterLinks }, "./footer-logo": { __esModule: true, default: () => React.createElement("svg", { "data-logo": "" }) } }).default
 const render = (component, props) => renderToStaticMarkup(React.createElement(component, props))
 
 test("delivery settings render customized cards and links safely and can hide the section", () => {
@@ -37,4 +37,13 @@ test("footer retains all managed links in server HTML with accessible mobile acc
   assert.ok(!html.includes("Unsafe") && !html.includes("javascript:"))
   assert.ok(html.includes('aria-expanded="true"') && html.includes('aria-expanded="false"'))
   assert.equal((html.match(/aria-controls=/g) ?? []).length, 2)
+})
+
+test("the footer shows the store name as the logo, and any other brand text as text", () => {
+  const appearance = contract.DEFAULT_PRESENTATION.footer
+  const logo = render(Footer, { columns: [], note: "", social: [], appearance })
+  assert.match(logo, /aria-label="FLORAYN home"><svg data-logo=""><\/svg><\/a>/)
+  const text = render(Footer, { columns: [], note: "", social: [], appearance: { ...appearance, brand: "Florayn Fashion" } })
+  assert.match(text, />Florayn Fashion<\/a>/)
+  assert.doesNotMatch(text, /data-logo/)
 })

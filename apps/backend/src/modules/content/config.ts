@@ -39,6 +39,9 @@ export async function getContent(service: any) {
         href: group.href,
         position: index,
         is_visible: true,
+        kind: group.kind ?? "links",
+        placement: group.placement ?? "all",
+        config: group.config ?? null,
       })
       const sectionId = Array.isArray(created) ? created[0].id : created.id
       await service.createMenuItems(
@@ -125,6 +128,8 @@ export async function copyMenu(service: any, from: string, to: string): Promise<
   for (const section of sections.filter((s: any) => s.menu === from)) {
     const created = await service.createMenuSections({
       menu: to, label: section.label, href: section.href, position: section.position, is_visible: section.is_visible,
+      kind: section.kind ?? "links", image_url: section.image_url ?? null, badge: section.badge ?? null,
+      placement: section.placement ?? "all", config: section.config ?? null,
     })
     const sectionId = Array.isArray(created) ? created[0].id : created.id
     const links = items.filter((i: any) => i.section_id === section.id)
@@ -138,7 +143,12 @@ export async function copyMenu(service: any, from: string, to: string): Promise<
   return copied
 }
 
-/** Shapes the flat rows into the nested menu the storefront renders. */
+/**
+ * Shapes the flat rows into the nested menu the storefront renders. Only a
+ * links section carries groups; the automatic kinds (devices, case_types,
+ * collections) fill themselves on the storefront from their config, and any
+ * links they had before stay in the database unused.
+ */
 export function buildMenu(
   menuSections: any[],
   items: any[],
@@ -149,7 +159,8 @@ export function buildMenu(
     .filter((s) => s.menu === menu && (!visibleOnly || s.is_visible))
     .sort((a, b) => a.position - b.position)
     .map((section) => {
-      const own = items
+      const kind = section.kind ?? "links"
+      const own = kind !== "links" ? [] : items
         .filter(
           (i) => i.section_id === section.id && (!visibleOnly || i.is_visible)
         )
@@ -176,6 +187,11 @@ export function buildMenu(
         id: section.id,
         label: section.label,
         href: section.href,
+        kind,
+        image: section.image_url ?? null,
+        badge: section.badge ?? null,
+        placement: section.placement ?? "all",
+        config: kind === "links" ? null : section.config ?? null,
         groups,
       }
     })
@@ -259,6 +275,8 @@ export async function getCollectionCards(service: any, productModule: any, knex?
       artwork: image ? null : (collection ? artwork.get(collection.id) ?? null : null),
       /** Modes with designs in it; absent when unknown (the storefront then shows it in both). */
       ...(collection && audiences.has(collection.id) ? { audiences: audiences.get(collection.id) } : {}),
+      /** "Show in menu": in the phone menu's Collections row, in this list's order. */
+      in_menu: page.show_in_menu !== false,
       theme: {
         bg: page.theme.bg,
         text: page.theme.text,

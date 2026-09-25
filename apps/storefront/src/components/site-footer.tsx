@@ -3,6 +3,7 @@ import { ArrowUpRight, ExternalLink } from "lucide-react"
 import type { MenuSection } from "@/lib/content"
 import { readPresentation, safePresentationHref, type FooterPresentation } from "@/lib/storefront-presentation"
 import FooterLinks from "./footer-links"
+import FooterLogo from "./footer-logo"
 
 function SocialIcon({ label }: { label: string }) {
   const name = label.toLowerCase()
@@ -23,7 +24,8 @@ export default function SiteFooter({ columns, note, social, appearance }: {
     <div className="fl-footer__inner">
       <div className="fl-footer__top">
         <div>
-          <Link href="/" prefetch={false} className="fl-footer__brand" aria-label={`${footer.brand} home`}>{footer.brand}</Link>
+          {/* The store's own name shows as the logo; any other brand text stays text. */}
+          <Link href="/" prefetch={false} className="fl-footer__brand" aria-label={`${footer.brand} home`}>{footer.brand.trim().toUpperCase() === "FLORAYN" ? <FooterLogo /> : footer.brand}</Link>
           {footer.tagline && <p className="fl-footer__tagline">{footer.tagline}</p>}
         </div>
         {(footer.support_title || footer.support_text || footer.support_label) && <div className="fl-footer__support">

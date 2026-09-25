@@ -1,0 +1,39 @@
+/*
+ * The site header (components/header/*): the two native <dialog> sheets (the
+ * menu drawer and search), the row-1 search icon that waits while the browse
+ * row's search field is on screen, and the desktop mega panels' entry.
+ * The drawer panel is styled in nav-drawer.css, the search sheet in search.css.
+ */
+@layer components {
+  /* Both sheets fill the viewport; the panel inside decides what shows. Closed
+     dialogs keep the browser's display:none. z-index only matters for the
+     no-showModal fallback, which is not in the top layer. */
+  dialog.fl-sheet { position:fixed; inset:0; z-index:60; width:100%; max-width:none; height:100dvh; max-height:none; margin:0; padding:0; border:0; background:transparent; color:inherit; overflow:hidden; }
+  dialog.fl-sheet::backdrop { background:rgb(26 22 37 / .4); opacity:1; transition:opacity .2s ease; }
+  @starting-style { dialog.fl-sheet[open]::backdrop { opacity:0; } }
+  dialog.fl-sheet[data-closing]::backdrop { opacity:0; }
+  /* The fallback has no ::backdrop: the dialog's own ground stands in. */
+  dialog.fl-sheet[data-fallback] { background:rgb(26 22 37 / .4); }
+  html:has(dialog.fl-sheet[open]) { overflow:hidden; }
+
+  /* The row-1 search icon keeps its slot but stays hidden while the browse
+     row's field is visible, then fades in once that row scrolls away. */
+  .fl-hdr-search { transition:opacity .15s; }
+  [data-store-header][data-row2]:not([data-row2-gone]) .fl-hdr-search { opacity:0; visibility:hidden; transition:opacity .15s, visibility 0s .15s; }
+
+  /* A desktop mega panel settles in under the nav row. */
+  .fl-mega { animation:fl-mega-in .16s var(--ease-brand) both; }
+  @keyframes fl-mega-in { from { opacity:0; transform:translateY(-4px); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    dialog.fl-sheet::backdrop { transition:none; }
+    .fl-hdr-search, [data-store-header][data-row2]:not([data-row2-gone]) .fl-hdr-search { transition:none; }
+    .fl-mega { animation:none; }
+  }
+}
+
+/* Opening a sheet hides the scrollbar; reserving its gutter on desktop keeps
+   the page from jumping sideways when it does. */
+@media (min-width:1024px) {
+  html { scrollbar-gutter:stable; }
+}

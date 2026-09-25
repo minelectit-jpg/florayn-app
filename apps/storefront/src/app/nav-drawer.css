@@ -1,0 +1,54 @@
+/*
+ * The menu drawer's panel and its levels (components/header/nav-drawer.tsx).
+ * The dialog itself, its backdrop and data-closing are header.css and
+ * header-dialogs.tsx. The panel slides in from the left; inside it, a new
+ * level slides over the old one from the right, and Back reverses that.
+ * Reduced motion keeps only short fades.
+ */
+@layer components {
+  .fl-sheet--left .fl-panel {
+    position:absolute; inset-block:0; left:0;
+    width:min(88vw,400px); height:100dvh;
+    display:flex; flex-direction:column;
+    background:var(--color-paper);
+    border-radius:0 20px 20px 0;
+    box-shadow:0 0 40px rgba(26,22,37,.18);
+    padding-bottom:env(safe-area-inset-bottom);
+    transition:transform .3s cubic-bezier(.22,1,.36,1);
+  }
+  @starting-style {
+    .fl-sheet--left[open] .fl-panel { transform:translateX(-100%); }
+  }
+  .fl-sheet--left[data-closing] .fl-panel { transform:translateX(-100%); transition:transform .22s ease-in; }
+
+  /* The levels fill the panel under its top bar; each one scrolls on its own. */
+  .fl-levels { position:relative; flex:1; min-height:0; overflow:hidden; }
+  .fl-level {
+    position:absolute; inset:0;
+    overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+    background:var(--color-paper);
+  }
+  .fl-level[data-anim="push-in"] { animation:fl-level-from-right .26s cubic-bezier(.22,1,.36,1) both; }
+  .fl-level[data-anim="push-out"] { animation:fl-level-to-left .26s cubic-bezier(.22,1,.36,1) both; }
+  .fl-level[data-anim="back-in"] { animation:fl-level-from-left .26s cubic-bezier(.22,1,.36,1) both; }
+  .fl-level[data-anim="back-out"] { animation:fl-level-to-right .26s cubic-bezier(.22,1,.36,1) both; }
+  .fl-level[data-anim$="-out"] { pointer-events:none; }
+  .fl-level [data-hscroll]::-webkit-scrollbar { display:none; }
+
+  @keyframes fl-level-from-right { from { transform:translateX(100%); } to { transform:none; } }
+  @keyframes fl-level-to-left { from { transform:none; opacity:1; } to { transform:translateX(-24%); opacity:0; } }
+  @keyframes fl-level-from-left { from { transform:translateX(-24%); opacity:0; } to { transform:none; opacity:1; } }
+  @keyframes fl-level-to-right { from { transform:none; } to { transform:translateX(100%); } }
+  @keyframes fl-level-fade-in { from { opacity:0; } to { opacity:1; } }
+  @keyframes fl-level-fade-out { from { opacity:1; } to { opacity:0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fl-sheet--left .fl-panel { transition:opacity .12s linear; }
+    @starting-style {
+      .fl-sheet--left[open] .fl-panel { transform:none; opacity:0; }
+    }
+    .fl-sheet--left[data-closing] .fl-panel { transform:none; opacity:0; transition:opacity .12s linear; }
+    .fl-level[data-anim$="-in"] { animation:fl-level-fade-in .12s linear both; }
+    .fl-level[data-anim$="-out"] { animation:fl-level-fade-out .12s linear both; }
+  }
+}
