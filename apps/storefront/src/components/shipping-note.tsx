@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { ArrowUpRight, Heart, MapPin, Package, Phone, RefreshCw, ShieldCheck, Truck, Wallet } from "lucide-react"
-import { BUY_LINE_LIMIT, DEFAULT_PRESENTATION, safePresentationHref, type DeliveryCard, type DeliveryPresentation } from "@/lib/storefront-presentation"
+import { DEFAULT_PRESENTATION, safePresentationHref, type DeliveryPresentation } from "@/lib/storefront-presentation"
 
 const icons = { truck: Truck, wallet: Wallet, "map-pin": MapPin, refresh: RefreshCw, package: Package, heart: Heart, shield: ShieldCheck, phone: Phone }
 
@@ -29,20 +29,3 @@ export function ShippingNote({ settings = DEFAULT_PRESENTATION.delivery, variant
   </Wrapper>
 }
 
-/**
- * The short promises right under the buy buttons: each Product delivery
- * card's "Line under the buy buttons" (cash on delivery, delivery charge,
- * exchange; at most three) and the Bundles free-delivery line. Plain text in
- * the server HTML: no links, no buttons, no motion.
- */
-export function BuyAssurance({ cards, freeDelivery }: { cards: DeliveryCard[]; freeDelivery: string | null }) {
-  const lines = cards.filter((card) => card.buy_line).slice(0, BUY_LINE_LIMIT).map((card) => ({ icon: card.icon, text: card.buy_line }))
-  if (freeDelivery) lines.push({ icon: "truck", text: freeDelivery })
-  if (!lines.length) return null
-  return <ul className="fl-assure" aria-label="Delivery and payment">
-    {lines.map((line, index) => {
-      const Icon = icons[line.icon] ?? Package
-      return <li key={index}><Icon size={16} strokeWidth={1.6} aria-hidden="true" /><span>{line.text}</span></li>
-    })}
-  </ul>
-}

@@ -51,11 +51,10 @@ test("the buy buttons settings default sensibly, survive deliberate blanks and r
   assert.equal(b.buy_now_label, "Buy it now")
   assert.equal(b.add_to_cart_style, "outline")
   assert.equal(b.sticky_bar, true)
-  assert.equal(b.free_delivery_line, "Free delivery on orders over {amount}")
+  assert.equal("free_delivery_line" in b, false, "no promise lines under the buttons")
   const legacy = readPresentation({ footer: defaults.footer, delivery: defaults.delivery })
   assert.deepEqual(plain(legacy.buy_box), plain(b), "a store saved before buy buttons existed gets the defaults")
-  const blanks = readPresentation({ buy_box: { free_delivery_line: "", sold_out_label: "" } })
-  assert.equal(blanks.buy_box.free_delivery_line, "")
+  const blanks = readPresentation({ buy_box: { sold_out_label: "" } })
   assert.equal(blanks.buy_box.sold_out_label, "")
   const valid = { ...b }
   assert.equal(validateBuyBoxPresentation({ ...valid, buy_now_label: "Order now" }).buy_now_label, "Order now")
@@ -67,22 +66,13 @@ test("the buy buttons settings default sensibly, survive deliberate blanks and r
     [{ add_to_cart_style: "green" }, /Outline or Filled/],
     [{ sticky_bar_action: "checkout" }, /quick-buy bar shows/],
     [{ sticky_bar: "true" }, /Choose whether to show the quick-buy bar/],
-    [{ free_delivery_line: "Free delivery" }, /\{amount\}/],
-    [{ free_delivery_line: "x".repeat(49) }, /Free-delivery line/],
   ]
   for (const [patch, message] of bad) assert.throws(() => validateBuyBoxPresentation({ ...valid, ...patch }), message, JSON.stringify(patch))
 })
 
-test("delivery cards carry a short line for under the buy buttons: defaulted for untouched cards, at most three", () => {
-  const lines = defaults.delivery.cards.map((c) => c.buy_line)
-  assert.deepEqual(plain(lines), ["", "Cash on delivery available", "Delivery 60৳ inside Dhaka · 100৳ outside", "Easy exchange within 3 days"])
-  const legacyCards = defaults.delivery.cards.map(({ buy_line, ...card }) => card)
-  const legacy = readPresentation({ delivery: { ...defaults.delivery, cards: legacyCards } })
-  assert.deepEqual(plain(legacy.delivery.cards.map((c) => c.buy_line)), plain(lines), "a saved card that is still the default keeps its line")
-  const edited = readPresentation({ delivery: { ...defaults.delivery, cards: [{ ...legacyCards[1], description: "Pay the rider in cash." }] } })
-  assert.equal(edited.delivery.cards[0].buy_line, "", "an edited card never shows a line the owner did not write")
-  const four = [...defaults.delivery.cards.slice(1), { icon: "heart", title: "Gift", description: "", buy_line: "Gift wrap on request" }, { icon: "truck", title: "Fast", description: "", buy_line: "Same-day in Dhaka" }]
-  assert.throws(() => validateDeliveryPresentation({ ...defaults.delivery, cards: four }), /at most 3 lines under the buy buttons/)
-  assert.throws(() => validateDeliveryPresentation({ ...defaults.delivery, cards: [{ ...defaults.delivery.cards[1], buy_line: "x".repeat(49) }] }), /Line under the buy buttons/)
-  assert.throws(() => validateDeliveryPresentation({ ...defaults.delivery, cards: [{ ...defaults.delivery.cards[1], buy_line: "two\nlines" }] }), /on one line/)
+test("delivery cards no longer carry lines for under the buy buttons; an old saved line is dropped", () => {
+  assert.ok(defaults.delivery.cards.every((c) => !("buy_line" in c)))
+  const saved = readPresentation({ delivery: { ...defaults.delivery, cards: defaults.delivery.cards.map((c) => ({ ...c, buy_line: "Cash on delivery available" })) }, buy_box: { ...defaults.buy_box, free_delivery_line: "Free delivery on orders over {amount}" } })
+  assert.ok(saved.delivery.cards.every((c) => !("buy_line" in c)))
+  assert.equal("free_delivery_line" in saved.buy_box, false)
 })

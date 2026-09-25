@@ -33,10 +33,9 @@ The logic is in `lib/buy-box.ts` and the tests are in `tests/buy-box.test.cjs`.
   guard. Tapping Buy it now after Add to cart on the same case goes straight
   to checkout, so there is never a second copy in the bag (`buyNowQuantity`).
   The + button stops at live stock.
-- **Lines under the buttons** (`BuyAssurance`) are in the server HTML.
-  - They are each Product delivery card's "Line under the buy buttons" (at
-    most 3), plus the Bundles free-delivery line ("{amount}" is the minimum).
-  - They show under Buy it now, or under the pack button in bundle mode.
+- **Nothing under the buttons.** The owner removed the delivery/payment
+  lines under Buy it now (2026-09-25). Delivery, cash on delivery and
+  exchanges stay in the Delivery row below. Do not add them back.
 - **Quick-buy bar** (`product-buy-bar.tsx`), below 1024px only.
   - It appears once the buttons have scrolled under the header. One
     IntersectionObserver drives it: no scroll listeners, no portal and no

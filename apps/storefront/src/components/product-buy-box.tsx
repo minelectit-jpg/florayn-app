@@ -76,7 +76,6 @@ export default function ProductBuyBox({
   imageForCaseType,
   priceForCaseType,
   moreDesigns,
-  assurance,
   buyBox,
   deliveryEstimate,
   simple = false,
@@ -110,8 +109,6 @@ export default function ProductBuyBox({
   imageForCaseType: (caseType: string) => string | null
   priceForCaseType: (caseType: string) => number | null
   moreDesigns?: ReactNode
-  /** Cash on delivery / delivery charge / exchange / free delivery lines (server HTML), under whichever buy button shows. */
-  assurance?: ReactNode
   /** Admin > Buy buttons: labels, style, the quick-buy bar and the sold-out slot. */
   buyBox: BuyBoxPresentation
   /** Admin delivery estimate shown after "In stock"; blank hides it. */
@@ -368,7 +365,6 @@ export default function ProductBuyBox({
         matchingProduct={matchingProduct}
         device={device}
         caseType={caseType}
-        assurance={assurance}
       />
       ) : null}
 
@@ -639,7 +635,6 @@ export default function ProductBuyBox({
         </p>
       ) : null}
 
-      {assurance}
       </> : null}
 
       <p role="status" aria-live="polite" className="sr-only">

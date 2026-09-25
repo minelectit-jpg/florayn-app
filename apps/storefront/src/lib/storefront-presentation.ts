@@ -1,7 +1,6 @@
 export const PRESENTATION_KEY = "florayn_presentation"
 export const DELIVERY_ICONS = ["truck", "wallet", "map-pin", "refresh", "package", "heart", "shield", "phone"] as const
-/** `buy_line` is the card's short line under the buy buttons; blank keeps it out of there. */
-export type DeliveryCard = { icon: typeof DELIVERY_ICONS[number]; title: string; description: string; buy_line: string }
+export type DeliveryCard = { icon: typeof DELIVERY_ICONS[number]; title: string; description: string }
 /** `estimate` is the line after "In stock" at the top of every product page. */
 export type DeliveryPresentation = { enabled: boolean; heading: string; cards: DeliveryCard[]; link_label: string; link_href: string; estimate: string }
 export type FooterPresentation = { brand: string; tagline: string; support_title: string; support_text: string; support_label: string; support_href: string; note: string; location: string; social: { label: string; href: string }[] }
@@ -18,11 +17,8 @@ export type BuyBoxPresentation = {
   /** Before the in-stock case types; blank shows the suggestions alone. */
   sold_out_label: string
   sold_out_other_model_label: string
-  /** "{amount}" is the Bundles free-delivery minimum; blank hides the line. */
-  free_delivery_line: string
 }
 export type Presentation = { footer: FooterPresentation; delivery: DeliveryPresentation; buy_box: BuyBoxPresentation }
-export const BUY_LINE_LIMIT = 3
 export const DEFAULT_PRESENTATION: Presentation = {
   footer: {
     brand: "FLORAYN", tagline: "Made to match your everyday.",
@@ -38,10 +34,10 @@ export const DEFAULT_PRESENTATION: Presentation = {
   delivery: {
     enabled: true, heading: "Delivery & care",
     cards: [
-      { icon: "truck", title: "Delivery in 1–3 days", description: "Delivered across Bangladesh.", buy_line: "" },
-      { icon: "wallet", title: "Cash on delivery", description: "Pay when your parcel arrives.", buy_line: "Cash on delivery available" },
-      { icon: "map-pin", title: "Delivery charges", description: "60৳ inside Dhaka · 100৳ outside.", buy_line: "Delivery 60৳ inside Dhaka · 100৳ outside" },
-      { icon: "refresh", title: "Easy exchanges", description: "Within 3 days of delivery.", buy_line: "Easy exchange within 3 days" },
+      { icon: "truck", title: "Delivery in 1–3 days", description: "Delivered across Bangladesh." },
+      { icon: "wallet", title: "Cash on delivery", description: "Pay when your parcel arrives." },
+      { icon: "map-pin", title: "Delivery charges", description: "60৳ inside Dhaka · 100৳ outside." },
+      { icon: "refresh", title: "Easy exchanges", description: "Within 3 days of delivery." },
     ],
     link_label: "Delivery & exchange help", link_href: "/contact/",
     estimate: "Delivery in 1–3 business days",
@@ -56,7 +52,6 @@ export const DEFAULT_PRESENTATION: Presentation = {
     sold_out_suggestions: true,
     sold_out_label: "Available in",
     sold_out_other_model_label: "Choose another model",
-    free_delivery_line: "Free delivery on orders over {amount}",
   },
 }
 
@@ -92,14 +87,6 @@ export function validateFooterPresentation(value: unknown): FooterPresentation {
   return result
 }
 const ONE_LINE = /[\u0000-\u001f\u007f]/
-/**
- * A card saved before buy lines existed: the default card it still is (same
- * icon, heading and description) keeps its default line; an edited card gets
- * none, so the buttons never show a claim the owner did not write.
- */
-function legacyBuyLine(card: { icon: string; title: string; description: string }) {
-  return DEFAULT_PRESENTATION.delivery.cards.find((d) => d.icon === card.icon && d.title === card.title && d.description === card.description)?.buy_line ?? ""
-}
 export function validateDeliveryPresentation(value: unknown): DeliveryPresentation {
   const v = object(value)
   if (typeof v.enabled !== "boolean") throw new Error("Choose whether to show delivery information.")
@@ -107,13 +94,9 @@ export function validateDeliveryPresentation(value: unknown): DeliveryPresentati
   const result = { enabled: v.enabled, heading: text(v.heading, "Heading", 80), link_label: text(v.link_label, "Help link label", 60), link_href: text(v.link_href, "Help link", 500), cards: v.cards.map((row) => {
     const r = object(row)
     if (!DELIVERY_ICONS.includes(r.icon as DeliveryCard["icon"])) throw new Error("Choose an available icon.")
-    const card = { icon: r.icon as DeliveryCard["icon"], title: text(r.title, "Card heading", 80, true), description: text(r.description, "Card description", 240) }
-    const buy_line = r.buy_line === undefined ? legacyBuyLine(card) : text(r.buy_line, "Line under the buy buttons", 48)
-    if (ONE_LINE.test(buy_line)) throw new Error("Keep the line under the buy buttons on one line.")
-    return { ...card, buy_line }
+    return { icon: r.icon as DeliveryCard["icon"], title: text(r.title, "Card heading", 80, true), description: text(r.description, "Card description", 240) }
   }), estimate: v.estimate === undefined ? DEFAULT_PRESENTATION.delivery.estimate : text(v.estimate, "Stock line estimate", 60) }
   if (ONE_LINE.test(result.estimate)) throw new Error("Keep the stock line estimate on one line.")
-  if (result.cards.filter((card) => card.buy_line).length > BUY_LINE_LIMIT) throw new Error(`Show at most ${BUY_LINE_LIMIT} lines under the buy buttons.`)
   link(result.link_label, result.link_href)
   return result
 }
@@ -140,9 +123,7 @@ export function validateBuyBoxPresentation(value: unknown): BuyBoxPresentation {
     sold_out_suggestions: flag(v.sold_out_suggestions, "suggest case types that are in stock"),
     sold_out_label: oneLine(v.sold_out_label, "Label before the suggestions", 24),
     sold_out_other_model_label: oneLine(v.sold_out_other_model_label, "Button when no case type is in stock", 24, true),
-    free_delivery_line: oneLine(v.free_delivery_line, "Free-delivery line", 48),
   }
-  if (result.free_delivery_line && !result.free_delivery_line.includes("{amount}")) throw new Error("Use {amount} in the free-delivery line, or leave it blank.")
   return result
 }
 /** Missing old settings use defaults; deliberate blank text and empty lists remain blank. */

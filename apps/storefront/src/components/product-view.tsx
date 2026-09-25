@@ -51,7 +51,6 @@ export default function ProductView({
   bundleConfig,
   caseTypeRecords,
   matchingProduct,
-  assurance,
   buyBox,
   deliveryEstimate,
   tabs,
@@ -91,8 +90,6 @@ export default function ProductView({
   caseTypeRecords?: CaseTypeRecord[]
   /** This design's AirPods case for the Matching Set bundle, or null. */
   matchingProduct?: MatchingProduct | null
-  /** The promises under the buy buttons (server HTML: Product delivery + Buy buttons). */
-  assurance?: ReactNode
   /** Admin > Buy buttons. */
   buyBox: BuyBoxPresentation
   /** Admin delivery estimate shown after "In stock" (Product delivery). */
@@ -305,7 +302,6 @@ export default function ProductView({
                 />
               ) : null
             }
-            assurance={assurance}
             buyBox={buyBox}
             deliveryEstimate={deliveryEstimate}
             simple={simple}

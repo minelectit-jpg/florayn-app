@@ -10,14 +10,16 @@ import {
   DrawerDescription,
   DrawerTitle,
 } from "@/components/ui/drawer"
+import { sortNewestFirst } from "@/lib/device-order"
 import { cn } from "@/lib/utils"
 
 /**
  * The "SELECT MODEL" drawer, matched to florayn.com and shared by the shop
  * selector and the product page's device picker: a left slide-in with a grey
  * search, family-grouped rows, a purple "Selected" flag and an optional per-row
- * note (e.g. "Sold out"). The caller owns the open state and decides what
- * selecting a value does (navigate vs. pick in place).
+ * note (e.g. "Sold out"). Groups keep the caller's order; inside a group the
+ * newest model is first (17, 16, 15...). The caller owns the open state and
+ * decides what selecting a value does (navigate vs. pick in place).
  */
 export type ModelItem = {
   value: string
@@ -48,7 +50,7 @@ export default function ModelDrawer({
   const grouped = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const map = new Map<string, ModelItem[]>()
-    for (const it of items) {
+    for (const it of sortNewestFirst(items, (i) => i.label, (i) => i.group)) {
       if (needle && !it.label.toLowerCase().includes(needle)) continue
       const arr = map.get(it.group) ?? []
       arr.push(it)

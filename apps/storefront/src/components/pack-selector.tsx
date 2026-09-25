@@ -41,7 +41,6 @@ export default function PackSelector({
   bundleMode,
   onModeChange,
   soldOut,
-  assurance,
 }: {
   config: BundleConfig | null
   unitPrice: number
@@ -54,8 +53,6 @@ export default function PackSelector({
   bundleMode: boolean
   onModeChange: (bundle: boolean) => void
   soldOut: boolean
-  /** The delivery and payment lines, shown under the pack button in bundle mode. */
-  assurance?: ReactNode
 }) {
   const { addMany } = useCart()
   const groupId = useId()
@@ -387,7 +384,6 @@ export default function PackSelector({
                   : `Add ${matchingOn ? "bundle" : `${tier?.quantity}-pack`} · ${formatPrice(quote?.total ?? 0)}`}
           </button>
           <p className="mt-2 text-center text-xs text-ink-muted">Delivery calculated at checkout</p>
-          {assurance}
           {error ? (
             <p role="alert" className="mt-3 text-sm text-danger">
               {error}

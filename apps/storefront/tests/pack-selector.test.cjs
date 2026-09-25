@@ -78,10 +78,3 @@ test("Admin badge copy is displayed verbatim without altering bundle pricing", (
   assert.match(html, /Save up to 20%/)
   assert.match(html, /3,588\.00/)
 })
-
-test("the delivery and payment lines show under the pack button in bundle mode only", () => {
-  const assurance = React.createElement("ul", { className: "fl-assure" }, React.createElement("li", null, "Cash on delivery available"))
-  const bundle = render({ assurance, config: { ...config, tiers: [] } })
-  assert.match(bundle, /Delivery calculated at checkout<\/p><ul class="fl-assure">/)
-  assert.doesNotMatch(render({ assurance, bundleMode: false }), /fl-assure/)
-})

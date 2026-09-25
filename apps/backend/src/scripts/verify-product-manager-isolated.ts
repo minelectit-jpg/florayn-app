@@ -134,7 +134,7 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   progress("persisted matching defaults, public projection, metadata preservation and family validation passed")
   status = 200
   const footer = { ...DEFAULT_PRESENTATION.footer, tagline: "Isolated footer copy", social: [], note: "", location: "" }
-  const delivery = { ...DEFAULT_PRESENTATION.delivery, heading: "Isolated delivery copy", cards: [{ icon: "truck", title: "Custom delivery", description: "Test information only.", buy_line: "Isolated line under the buttons" }], link_label: "", link_href: "" }
+  const delivery = { ...DEFAULT_PRESENTATION.delivery, heading: "Isolated delivery copy", cards: [{ icon: "truck", title: "Custom delivery", description: "Test information only." }], link_label: "", link_href: "" }
   const buy_box = { ...DEFAULT_PRESENTATION.buy_box, buy_now_label: "Order now", sticky_bar: false }
   await savePresentation({ scope: container, params: { section: "footer" }, body: { settings: footer } } as any, res)
   assert.equal(status, 200, response?.message)

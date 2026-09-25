@@ -1,6 +1,3 @@
-import type { BundleConfig } from "@/lib/bundles"
-import { formatPrice } from "@/lib/money"
-
 /**
  * The product page's buy buttons, the parts worth testing on their own
  * (components/product-buy-box.tsx uses them).
@@ -21,17 +18,6 @@ export function maxQuantity(available: number): number {
 export function buyNowQuantity(qty: number, addedHere: boolean, inBag: number | null): number {
   if (!addedHere || inBag === null) return qty
   return Math.max(0, qty - inBag)
-}
-
-/**
- * "Free delivery on orders over 3,400.00৳" when Bundles gives free delivery
- * (the same rule checkout applies: on, with a minimum above 0); null hides it.
- */
-export function freeDeliveryLine(template: string, config: BundleConfig | null): string | null {
-  if (!template || !config?.settings?.is_active) return null
-  const threshold = Number(config.settings.free_shipping_threshold)
-  if (!Number.isFinite(threshold) || threshold <= 0) return null
-  return template.replace("{amount}", formatPrice(threshold))
 }
 
 /**

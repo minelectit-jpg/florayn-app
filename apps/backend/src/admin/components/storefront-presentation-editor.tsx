@@ -1,7 +1,6 @@
 import { Button, Container, Heading, Input, Label, Switch, Text, Textarea, toast } from "@medusajs/ui"
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
-import { Link } from "react-router-dom"
-import { BUY_LINE_LIMIT, DELIVERY_ICONS, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
+import { DELIVERY_ICONS, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
 import { contentApi } from "./menu-editor"
 import { ManagerSelect, useUnsaved } from "./product-manager/shared"
 
@@ -138,11 +137,10 @@ export function DeliveryPresentationEditor() {
           </div>
           <Field label={`Card ${index + 1} heading`} value={card.title} max={80} onChange={(title) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, title } : item) })} />
           <Field label={`Card ${index + 1} description`} value={card.description} multiline onChange={(description) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, description } : item) })} />
-          <Field label="Line under the buy buttons" value={card.buy_line ?? ""} max={48} onChange={(buy_line) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, buy_line } : item) })} hint={`Short version shown under Buy it now on every product page. Up to ${BUY_LINE_LIMIT} cards. Leave blank to not show it there.`} />
           <RowActions index={index} length={value.cards.length} move={(delta) => set({ cards: moved(value.cards, index, delta) })} remove={() => set({ cards: value.cards.filter((_, i) => i !== index) })} />
         </div>)}
       </div>
-      <div><Button variant="secondary" disabled={value.cards.length >= 6} onClick={() => set({ cards: [...value.cards, { icon: "package", title: "", description: "", buy_line: "" }] })}>Add information card</Button></div>
+      <div><Button variant="secondary" disabled={value.cards.length >= 6} onClick={() => set({ cards: [...value.cards, { icon: "package", title: "", description: "" }] })}>Add information card</Button></div>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Help link label" value={value.link_label} max={60} onChange={(link_label) => set({ link_label })} />
         <Field label="Help link URL" value={value.link_href} max={500} onChange={(link_href) => set({ link_href })} hint="For example /contact/. Leave both link fields blank to hide it." />
@@ -209,11 +207,6 @@ export function BuyBoxPresentationEditor() {
           <Field label="Label before the suggestions" value={value.sold_out_label} max={24} onChange={(sold_out_label) => set({ sold_out_label })} hint="Leave blank to show only the suggestions." />
           <Field label="Button when no case type is in stock" value={value.sold_out_other_model_label} max={24} onChange={(sold_out_other_model_label) => set({ sold_out_other_model_label })} hint="Opens the model list." />
         </div>
-      </div>
-      <div className="grid gap-4">
-        <Heading level="h2">Under the buttons</Heading>
-        <Field label="Free-delivery line" value={value.free_delivery_line} max={48} onChange={(free_delivery_line) => set({ free_delivery_line })} hint="Use {amount} for the free-delivery minimum set in Bundles. Shown only while Bundles is on and the minimum is above 0. Leave blank to hide." />
-        <Text size="small" className="text-ui-fg-subtle">Cash on delivery, delivery charges and exchanges come from Product delivery: fill in a card's Line under the buy buttons (up to {BUY_LINE_LIMIT}). <Link to="/product-delivery" className="text-ui-fg-interactive underline">Open Product delivery</Link></Text>
       </div>
       <div className="grid gap-3">
         <Heading level="h2">Preview</Heading>

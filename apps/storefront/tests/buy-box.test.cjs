@@ -20,7 +20,7 @@ function load(relative) {
     if (name === "next/navigation") return { useRouter: () => ({ push() {}, prefetch() {} }) }
     if (name === "@/components/cart-provider") return { useCart: () => ({ add: () => { throw new Error("SSR must not touch the cart") }, items: null }) }
     if (name === "@/components/drag-scroll") return { __esModule: true, default: ({ className, children }) => React.createElement("ul", { className }, children) }
-    if (name === "@/components/pack-selector") return { __esModule: true, default: ({ assurance }) => React.createElement("div", { "data-pack": "" }, assurance) }
+    if (name === "@/components/pack-selector") return { __esModule: true, default: () => React.createElement("div", { "data-pack": "" }) }
     if (name === "@/components/wishlist-button") return { __esModule: true, default: () => React.createElement("button", { type: "button", "aria-label": "Save" }) }
     if (["@/components/model-drawer", "@/components/product-image"].includes(name)) return { __esModule: true, default: () => null }
     if (name === "@/components/ui/button") return { Spinner: () => null }
@@ -32,7 +32,7 @@ function load(relative) {
   return exports
 }
 
-const { buyNowQuantity, maxQuantity, freeDeliveryLine, soldOutAlternatives } = load("lib/buy-box.ts")
+const { buyNowQuantity, maxQuantity, soldOutAlternatives } = load("lib/buy-box.ts")
 const { DEFAULT_PRESENTATION } = load("lib/storefront-presentation.ts")
 const { pairKey } = load("lib/variant-matrix.ts")
 const BuyBox = load("components/product-buy-box.tsx").default
@@ -55,7 +55,6 @@ function render({ stock = {}, buyBox = {}, caseType = "Signature", simple = fals
     bundleConfig, packDesigns: [], caseTypeRecords: [], matchingProduct: null, thumbnail: null,
     caseType, device: simple ? "" : DEVICE, onSelectCaseType() {}, onSelectDevice() {},
     imageForCaseType: () => null, priceForCaseType: (ct) => PRICES[ct] ?? null,
-    assurance: React.createElement("ul", { className: "fl-assure" }, React.createElement("li", null, "Cash on delivery available")),
     buyBox: { ...DEFAULT_PRESENTATION.buy_box, ...buyBox },
     deliveryEstimate: "Delivery in 1–3 business days", simple, optionLabel: simple ? "Color" : undefined,
   }
@@ -79,15 +78,6 @@ test("the quantity never passes live stock", () => {
   assert.equal(maxQuantity(500), 99)
 })
 
-test("the free-delivery line follows Bundles and hides when there is no free delivery", () => {
-  const config = { settings: { is_active: true, free_shipping_threshold: 3400 } }
-  assert.equal(freeDeliveryLine("Free delivery on orders over {amount}", config), "Free delivery on orders over 3,400.00৳")
-  assert.equal(freeDeliveryLine("Free delivery on orders over {amount}", { settings: { ...config.settings, is_active: false } }), null)
-  assert.equal(freeDeliveryLine("Free delivery on orders over {amount}", { settings: { ...config.settings, free_shipping_threshold: 0 } }), null)
-  assert.equal(freeDeliveryLine("", config), null)
-  assert.equal(freeDeliveryLine("Free delivery on orders over {amount}", null), null)
-})
-
 test("sold-out suggestions are in-stock case types made for this model, in order, at most three", () => {
   const stock = { Signature: 0, "Elite Clear": 4, "Armor Black": 0, Alcantara: Infinity, "Armor Clear": 2, Leather: 1 }
   const all = ["Signature", "Elite Clear", "Armor Black", "Alcantara", "Armor Clear", "Leather"]
@@ -107,10 +97,7 @@ test("one purple button: Buy it now with the price, an outlined Add to cart, a 4
   assert.equal((html.match(/size-11/g) ?? []).length, 2, "both stepper buttons are 44px")
   assert.equal((html.match(/aria-live=/g) ?? []).length, 2, "only the quantity and the one status region are live")
   assert.doesNotMatch(html, /<a\b[^>]*>(?:(?!<\/a>)[\s\S])*<button/, "no button inside a link")
-  const primary = html.indexOf("fl-buy-cta--primary")
-  const assure = html.indexOf("fl-assure")
-  assert.ok(primary > 0 && assure > primary, "the delivery lines sit under Buy it now")
-  assert.equal((html.match(/class="fl-assure"/g) ?? []).length, 1)
+  assert.doesNotMatch(html, /Cash on delivery|Free delivery on orders/, "no promise lines under the buttons")
 })
 
 test("the admin's labels, filled style and price switch are honoured", () => {
@@ -151,15 +138,6 @@ test("a sold-out case offers the in-stock case types for the same model instead 
   assert.match(none, /<button type="button">Choose another model<\/button>/)
   const off = render({ stock: { "Signature|iPhone 17 Pro Max": 0 }, buyBox: { sold_out_suggestions: false } })
   assert.match(off, /<button type="button" disabled="" class="fl-buy-cta fl-buy-cta--primary[^"]*"[^>]*>Sold out/)
-})
-
-test("with packs on, the delivery lines are also handed to the pack control for bundle mode", () => {
-  const config = { settings: { is_active: true, free_shipping_threshold: 3000 }, tiers: [{ quantity: 2 }] }
-  const html = render({ bundleConfig: config })
-  // The stand-in pack control always shows what it is given; the real one only
-  // in bundle mode (pack-selector.test.cjs), so the page shows them once.
-  assert.match(html, /<div data-pack=""><ul class="fl-assure">/)
-  assert.ok(html.indexOf("fl-buy-cta--primary") < html.lastIndexOf('class="fl-assure"'))
 })
 
 test("the page keeps room for the bar only while the bar can show", () => {

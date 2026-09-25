@@ -216,13 +216,6 @@
   }
   @media (max-width:359px) { .fl-buy-cta { padding:0 10px; font-size:14px; } }
 
-  /* The promises under the buttons, from Admin > Product delivery + Bundles. */
-  .fl-assure { display:grid; gap:6px; margin-top:14px; font-size:13px; line-height:18px; color:var(--color-ink-muted); }
-  .fl-assure li { display:flex; align-items:flex-start; gap:8px; min-width:0; }
-  .fl-assure svg { flex:none; margin-top:1px; color:var(--color-purple-deep); }
-  @media (min-width:768px) { .fl-assure { grid-template-columns:1fr 1fr; gap:8px 16px; margin-top:16px; } }
-  .fl-offers__body .fl-assure { margin-top:12px; }
-
   /* Sold out: in-stock case types for the same model, in Buy it now's place. */
   .fl-soldout-alt { display:flex; align-items:center; gap:8px; height:50px; margin-top:8px; overflow-x:auto; scrollbar-width:none; }
   .fl-soldout-alt::-webkit-scrollbar { display:none; }
