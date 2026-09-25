@@ -21,6 +21,7 @@ import {
   getShopCatalog,
 } from "@/lib/catalog"
 import { getGalleryVideos, getProductSections } from "@/lib/content"
+import { pickDefaultPhone } from "@/lib/default-device"
 import { resolveProductPage } from "@/lib/device-page"
 import {
   applyCaseTypePrices,
@@ -315,34 +316,9 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
     matchingPromise,
   ])
 
-  /*
-   * The base page's default device: the NEWEST flagship phone (iPhone first,
-   * then Samsung), preferring one that every case type is sold for so all the
-   * Case Type tiles are enabled on first load. This keeps the opening view
-   * modern and consistent; a device page opens on its own device instead.
-   */
-  const familyByName: Record<string, string> = {}
-  const orderByName: Record<string, number> = {}
-  deviceCatalog.forEach((d, i) => {
-    familyByName[d.name] = d.family
-    orderByName[d.name] = i
-  })
-
-  // Phones only, iPhone before Samsung, newest first within each.
-  const phonesNewestFirst = matrix.devices
-    .filter(
-      (d) => familyByName[d] === "iphone" || familyByName[d] === "samsung"
-    )
-    .sort((a, b) => {
-      const rank = (n: string) => (familyByName[n] === "iphone" ? 0 : 1)
-      return rank(a) - rank(b) || (orderByName[b] ?? 0) - (orderByName[a] ?? 0)
-    })
-  const inEveryCaseType = (d: string) =>
-    (matrix.caseTypesByDevice[d] ?? []).length === matrix.caseTypes.length
-  const defaultDevice =
-    phonesNewestFirst.find(inEveryCaseType) ??
-    phonesNewestFirst[0] ??
-    matrix.devices[0]
+  // The base page opens on the newest phone (lib/default-device.ts); a device
+  // page opens on its own device instead.
+  const defaultDevice = pickDefaultPhone(matrix.devices, matrix.caseTypesByDevice, matrix.caseTypes.length, deviceCatalog)!
 
   const initialDevice =
     device && matrix.devices.includes(device.name) ? device.name : defaultDevice
