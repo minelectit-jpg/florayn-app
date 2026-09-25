@@ -189,3 +189,64 @@
 /* Rails show the slider bar instead of a native scrollbar, on every device. */
 .fl-more-designs, .fl-case-tiles, .fl-pdp-rail, .fl-swatches, .fl-gallery-thumbs { padding-bottom:2px; scrollbar-width:none; }
 .fl-more-designs::-webkit-scrollbar, .fl-case-tiles::-webkit-scrollbar, .fl-pdp-rail::-webkit-scrollbar, .fl-swatches::-webkit-scrollbar, .fl-gallery-thumbs::-webkit-scrollbar { display:none; }
+
+/* ---- Buy buttons (product-buy-box.tsx, product-buy-bar.tsx) -------------
+   Purple means only the buy action: Buy it now is the one filled button;
+   Add to cart is outlined (or ink, Admin > Buy buttons). Working states keep
+   full colour with a spinner instead of fading, which looked like an error. */
+@layer components {
+  .fl-buy-cta { display:flex; align-items:center; justify-content:center; gap:8px; height:50px; min-width:0; padding:0 16px; border:1.5px solid transparent; border-radius:30px; font-size:15px; line-height:20px; font-weight:600; white-space:nowrap; -webkit-tap-highlight-color:transparent; touch-action:manipulation; transition:background-color .15s var(--ease-brand), border-color .15s var(--ease-brand), color .15s var(--ease-brand), transform .12s var(--ease-brand); }
+  .fl-buy-cta__label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .fl-buy-cta__price { flex:none; font-variant-numeric:tabular-nums; }
+  .fl-buy-cta__sep { flex:none; opacity:.6; }
+  .fl-buy-cta--primary { background:var(--color-purple); color:#fff; }
+  .fl-buy-cta--outline { background:var(--color-paper); border-color:var(--color-ink); color:var(--color-ink); }
+  .fl-buy-cta--ink { background:var(--color-ink); color:#fff; }
+  @media (hover:hover) and (pointer:fine) {
+    .fl-buy-cta--primary:hover { background:var(--color-purple-deep); }
+    .fl-buy-cta--outline:hover { background:#f5f3f8; }
+    .fl-buy-cta--ink:hover { background:#2b2540; }
+  }
+  .fl-buy-cta--outline[data-state='added'] { background:var(--color-ink); color:#fff; }
+  .fl-buy-cta[data-state='error'] { background:var(--color-paper); border-color:var(--color-danger); color:var(--color-danger); }
+  .fl-buy-cta[aria-disabled='true'] { cursor:progress; }
+  .fl-buy-cta:disabled { background:var(--color-surface); border-color:var(--color-line-strong); color:var(--color-ink-faint); cursor:not-allowed; }
+  @media (prefers-reduced-motion:no-preference) {
+    .fl-buy-cta:active:not(:disabled):not([aria-disabled='true']) { transform:scale(.98); }
+  }
+  @media (max-width:359px) { .fl-buy-cta { padding:0 10px; font-size:14px; } }
+
+  /* The promises under the buttons, from Admin > Product delivery + Bundles. */
+  .fl-assure { display:grid; gap:6px; margin-top:14px; font-size:13px; line-height:18px; color:var(--color-ink-muted); }
+  .fl-assure li { display:flex; align-items:flex-start; gap:8px; min-width:0; }
+  .fl-assure svg { flex:none; margin-top:1px; color:var(--color-purple-deep); }
+  @media (min-width:768px) { .fl-assure { grid-template-columns:1fr 1fr; gap:8px 16px; margin-top:16px; } }
+  .fl-offers__body .fl-assure { margin-top:12px; }
+
+  /* Sold out: in-stock case types for the same model, in Buy it now's place. */
+  .fl-soldout-alt { display:flex; align-items:center; gap:8px; height:50px; margin-top:8px; overflow-x:auto; scrollbar-width:none; }
+  .fl-soldout-alt::-webkit-scrollbar { display:none; }
+  .fl-soldout-alt__label { flex:none; font-size:12px; line-height:16px; color:var(--color-ink-muted); }
+  .fl-soldout-alt button { flex:none; height:44px; padding:0 14px; border:1.5px solid var(--color-ink); border-radius:30px; background:var(--color-paper); color:var(--color-ink); font-size:13px; font-weight:600; white-space:nowrap; }
+  .fl-soldout-alt button:focus-visible { outline-offset:1px; }
+  @media (hover:hover) and (pointer:fine) { .fl-soldout-alt button:hover { background:#f5f3f8; } }
+  @media (min-width:768px) { .fl-soldout-alt { margin-top:10px; } }
+
+  /* The quick-buy bar: phones and tablets only, once the buttons scroll away.
+     Solid paper (no backdrop-filter: it costs every scroll frame on low-end
+     Android); under the header, drawers and dialogs. */
+  .fl-buybar { position:fixed; left:0; right:0; bottom:0; z-index:30; padding:8px 16px max(8px, env(safe-area-inset-bottom)); background:var(--color-paper); border-top:1px solid var(--color-line); box-shadow:0 -4px 24px color-mix(in srgb,var(--color-ink) 6%,transparent); transform:translateY(100%); visibility:hidden; transition:transform .22s var(--ease-brand), visibility 0s linear .22s; }
+  .fl-buybar[data-visible='true'] { transform:none; visibility:visible; transition:transform .22s var(--ease-brand); }
+  .fl-buybar__inner { display:flex; align-items:center; gap:12px; max-width:600px; margin:0 auto; }
+  .fl-buybar__detail { flex:1; min-width:0; min-height:48px; display:flex; flex-direction:column; justify-content:center; text-align:left; border-radius:10px; }
+  .fl-buybar__price { font-size:16px; line-height:20px; font-weight:600; color:var(--color-ink); font-variant-numeric:tabular-nums; }
+  .fl-buybar__variant { display:flex; align-items:center; gap:4px; min-width:0; font-size:12px; line-height:16px; color:var(--color-ink-muted); }
+  .fl-buybar__cta { flex:none; height:48px; min-width:148px; max-width:58%; padding:0 20px; }
+  @media (min-width:1024px) { .fl-buybar { display:none; } }
+  @media (max-width:1023px) {
+    body:has(.fl-buybar[data-armed='true']) { padding-bottom:calc(64px + env(safe-area-inset-bottom)); }
+    html:has(.fl-buybar[data-visible='true']) { scroll-padding-bottom:80px; }
+  }
+  body:has(:is(input,textarea,select):focus) .fl-buybar { display:none; }
+  @media (prefers-reduced-motion:reduce) { .fl-buybar, .fl-buybar[data-visible='true'] { transition:none; } }
+}

@@ -15,6 +15,7 @@ import ProductGallery, { type GalleryItem } from "@/components/product-gallery"
 import { MoreDesigns } from "@/components/product-sections"
 import type { BundleConfig } from "@/lib/bundles"
 import type { FeatureBlock, GalleryVideoMap } from "@/lib/content"
+import type { BuyBoxPresentation } from "@/lib/storefront-presentation"
 import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
@@ -50,7 +51,8 @@ export default function ProductView({
   bundleConfig,
   caseTypeRecords,
   matchingProduct,
-  shipping,
+  assurance,
+  buyBox,
   deliveryEstimate,
   tabs,
   reviewSummary,
@@ -89,7 +91,10 @@ export default function ProductView({
   caseTypeRecords?: CaseTypeRecord[]
   /** This design's AirPods case for the Matching Set bundle, or null. */
   matchingProduct?: MatchingProduct | null
-  shipping?: ReactNode
+  /** The promises under the buy buttons (server HTML: Product delivery + Buy buttons). */
+  assurance?: ReactNode
+  /** Admin > Buy buttons. */
+  buyBox: BuyBoxPresentation
   /** Admin delivery estimate shown after "In stock" (Product delivery). */
   deliveryEstimate?: string
   tabs: ReactNode
@@ -300,7 +305,8 @@ export default function ProductView({
                 />
               ) : null
             }
-            shipping={shipping}
+            assurance={assurance}
+            buyBox={buyBox}
             deliveryEstimate={deliveryEstimate}
             simple={simple}
             optionLabel={optionLabel}

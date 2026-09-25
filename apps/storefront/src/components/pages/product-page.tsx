@@ -6,7 +6,8 @@ import ProductView from "@/components/product-view"
 import {
   type RecommendedItem,
 } from "@/components/recommended-for-you"
-import { ShippingNote } from "@/components/shipping-note"
+import { BuyAssurance, ShippingNote } from "@/components/shipping-note"
+import { freeDeliveryLine } from "@/lib/buy-box"
 import ProductTabs, { type AccordionSlot } from "@/components/product-tabs"
 import ProductReviews from "@/components/product-reviews"
 import RatingStars from "@/components/rating-stars"
@@ -235,6 +236,10 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
     label: delivery.heading || "Delivery & care",
     body: <ShippingNote settings={delivery} variant="row" />,
   } : null
+  const buyBox = productSections.buyBox
+  // The promises under the buy buttons, in the server HTML. The free-delivery
+  // line follows Bundles (the whole store's rule), so a StickPad shows it too.
+  const assurance = <BuyAssurance cards={delivery.cards} freeDelivery={freeDeliveryLine(buyBox.free_delivery_line, bundleConfig)} />
 
   // Apply the existing fixed prices for supported case types. Variants such as
   // Alcantara retain the region-calculated prices fetched with the product.
@@ -285,6 +290,8 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
           caseTypeRecords={[]}
           matchingProduct={null}
           deliveryEstimate={delivery.estimate}
+          buyBox={buyBox}
+          assurance={assurance}
           tabs={
             <ProductTabs
               description={product.description}
@@ -447,6 +454,8 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
         caseTypeRecords={caseTypes}
         matchingProduct={matchingProduct}
         deliveryEstimate={delivery.estimate}
+        buyBox={buyBox}
+        assurance={assurance}
         tabs={
           <ProductTabs
             description={product.description}

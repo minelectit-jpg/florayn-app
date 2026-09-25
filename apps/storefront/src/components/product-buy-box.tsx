@@ -1,21 +1,24 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 
 import DragScroll from "@/components/drag-scroll"
 import type { PackDesign } from "@/components/choose-design-modal"
 import ModelDrawer, { type ModelItem } from "@/components/model-drawer"
 import PackSelector, { type MatchingProduct } from "@/components/pack-selector"
+import ProductBuyBar, { useScrolledPast } from "@/components/product-buy-bar"
 import ProductImage from "@/components/product-image"
 import WishlistButton from "@/components/wishlist-button"
 import { Spinner } from "@/components/ui/button"
 import { useCart } from "@/components/cart-provider"
 import type { BundleConfig } from "@/lib/bundles"
+import { buyNowQuantity, maxQuantity, soldOutAlternatives } from "@/lib/buy-box"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import type { ProductVariantMatrix } from "@/lib/product-view-data"
 import { formatPrice } from "@/lib/money"
+import type { BuyBoxPresentation } from "@/lib/storefront-presentation"
 import { pairKey } from "@/lib/variant-matrix"
 
 type AddState = "idle" | "adding" | "added" | "error"
@@ -73,7 +76,8 @@ export default function ProductBuyBox({
   imageForCaseType,
   priceForCaseType,
   moreDesigns,
-  shipping,
+  assurance,
+  buyBox,
   deliveryEstimate,
   simple = false,
   optionLabel,
@@ -106,7 +110,10 @@ export default function ProductBuyBox({
   imageForCaseType: (caseType: string) => string | null
   priceForCaseType: (caseType: string) => number | null
   moreDesigns?: ReactNode
-  shipping?: ReactNode
+  /** Cash on delivery / delivery charge / exchange / free delivery lines (server HTML), under whichever buy button shows. */
+  assurance?: ReactNode
+  /** Admin > Buy buttons: labels, style, the quick-buy bar and the sold-out slot. */
+  buyBox: BuyBoxPresentation
   /** Admin delivery estimate shown after "In stock"; blank hides it. */
   deliveryEstimate?: string
   /**
@@ -120,15 +127,24 @@ export default function ProductBuyBox({
   optionLabel?: string
 }) {
   const router = useRouter()
-  const { add } = useCart()
+  const { add, items: bagItems } = useCart()
   const [openModel, setOpenModel] = useState(false)
   const [qty, setQty] = useState(1)
   const [packMode, setPackMode] = useState(false)
   const hasOffers = !simple && !!bundleConfig?.settings.is_active && (bundleConfig.tiers.some((tier) => tier.quantity > 1) || ((bundleConfig.settings.matching_set_enabled ?? true) && Object.keys(matchingProduct?.variants ?? {}).length > 0))
   const bundleMode = hasOffers && packMode
   const [buying, setBuying] = useState(false)
+  const [buyError, setBuyError] = useState(false)
   const [state, setState] = useState<AddState>("idle")
+  /** What the last add was for, so "Added" and its announcement never follow another selection. */
+  const [addedFor, setAddedFor] = useState<{ id: string; label: string } | null>(null)
+  /** Variants added on this page, so Buy it now does not add the same case twice. */
+  const addedHere = useRef(new Set<string>())
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ctaRef = useRef<HTMLDivElement>(null)
+  const stockLineId = useId()
+  // One action at a time: Add to cart, Buy it now and the bar share this guard.
+  const busy = state === "adding" || buying
 
   const price = selected?.calculated_price
 
@@ -157,12 +173,57 @@ export default function ProductBuyBox({
   const availableFor = (ct: string, dev: string) =>
     liveStock[simple ? `variant:${matrix.variantIdByPair[pairKey(ct, dev)]}` : `${ct}|${dev}`] ?? Infinity
   const selectedOut = availableFor(caseType, device) <= 0
+  // The quantity never passes live stock. Server and first client render use
+  // the same baked stock, so the markup matches; the refresh then clamps.
+  const maxQty = maxQuantity(availableFor(caseType, device))
+  useEffect(() => { setQty((q) => Math.min(q, maxQty)) }, [maxQty])
 
   useEffect(() => {
     return () => {
       if (resetTimer.current) clearTimeout(resetTimer.current)
     }
   }, [])
+
+  // A new selection clears "Added" / "Try again" (never a running add) and a
+  // failed Buy it now.
+  const selectedId = selected?.id ?? null
+  useEffect(() => {
+    setState((s) => (s === "added" || s === "error" ? "idle" : s))
+    setBuyError(false)
+  }, [selectedId])
+  useEffect(() => { setBuyError(false) }, [qty])
+  const showAdded = state === "added" && addedFor?.id === selectedId
+
+  // A Back from checkout can restore this page from the browser's cache with
+  // "Taking you to checkout" still spinning; start fresh instead.
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => { if (event.persisted) { setBuying(false); setBuyError(false) } }
+    window.addEventListener("pageshow", onShow)
+    return () => window.removeEventListener("pageshow", onShow)
+  }, [])
+
+  // Picking a case type from the sold-out slot, or a model from "Choose another
+  // model", removes the button that had focus; hand focus to the buy button that
+  // takes its place so keyboard and screen-reader users are not dropped.
+  const primaryRef = useRef<HTMLButtonElement>(null)
+  const focusPrimary = useRef(false)
+  const modelFromSlot = useRef(false)
+  useEffect(() => {
+    if (!focusPrimary.current) return
+    focusPrimary.current = false
+    // After the model drawer has finished returning focus.
+    const timer = setTimeout(() => primaryRef.current?.focus(), 250)
+    return () => clearTimeout(timer)
+  }, [selectedId])
+
+  // Checkout is dynamic, so it is prefetched on intent only (hover, press,
+  // focus of a Buy it now button), once per page.
+  const prefetched = useRef(false)
+  const prefetchCheckout = useCallback(() => {
+    if (prefetched.current) return
+    prefetched.current = true
+    router.prefetch("/checkout/")
+  }, [router])
 
   // Devices available for the selected case type only (not all 39), turned into
   // the shared model-drawer's items: family-grouped in the shop's order, with a
@@ -183,56 +244,90 @@ export default function ProductBuyBox({
       })
   }, [availableDevices, families, caseType, liveStock])
 
+  const optimistic = () => ({
+    productTitle,
+    variantTitle: simple ? caseType : `${caseType} / ${device}`,
+    unitPrice: price?.calculated_amount ?? 0,
+    thumbnail,
+  })
+  const selectionLabel = simple ? caseType : `${caseType} ${device}`
+
   async function onAdd() {
-    if (!selected || state === "adding") return
+    if (!selected || selectedOut || busy) return
+    const id = selected.id
+    setAddedFor({ id, label: selectionLabel })
+    setBuyError(false)
     setState("adding")
     try {
-      await add(selected.id, qty, {
-        productTitle,
-        variantTitle: simple ? caseType : `${caseType} / ${device}`,
-        unitPrice: price?.calculated_amount ?? 0,
-        thumbnail,
-      })
+      await add(id, qty, optimistic())
+      addedHere.current.add(id)
       setState("added")
     } catch {
       setState("error")
     }
     if (resetTimer.current) clearTimeout(resetTimer.current)
-    resetTimer.current = setTimeout(() => setState("idle"), 2500)
+    resetTimer.current = setTimeout(() => setState((s) => (s === "adding" ? s : "idle")), 2500)
   }
 
-  // Buy it now: add the selected variant, then go straight to checkout instead
-  // of opening the cart drawer.
+  // Buy it now: add the selected case, then go straight to checkout instead of
+  // opening the cart drawer. A case already added on this page is not added a
+  // second time (Add to cart, then Buy it now, means "buy it").
   async function onBuyNow() {
-    if (!selected || buying || selectedOut) return
+    if (!selected || selectedOut || busy) return
+    const id = selected.id
+    setBuyError(false)
     setBuying(true)
+    const inBag = bagItems ? (bagItems.find((item) => item.variant?.id === id)?.quantity ?? 0) : null
+    const need = buyNowQuantity(qty, addedHere.current.has(id), inBag)
     try {
-      await add(
-        selected.id,
-        qty,
-        {
-          productTitle,
-          variantTitle: simple ? caseType : `${caseType} / ${device}`,
-          unitPrice: price?.calculated_amount ?? 0,
-          thumbnail,
-        },
-        { openDrawer: false }
-      )
-      router.push("/checkout")
+      if (need > 0) {
+        await add(id, need, optimistic(), { openDrawer: false })
+        addedHere.current.add(id)
+      }
+      router.push("/checkout/")
     } catch {
       setBuying(false)
-      setState("error")
+      setBuyError(true)
     }
   }
 
-  const cta = selectedOut
-    ? "Sold out"
-    : {
-        idle: "Add to cart",
-        adding: "Adding...",
-        added: "Added",
-        error: "Try again",
-      }[state]
+  const addLabel = state === "adding"
+    ? "Adding…"
+    : showAdded
+      ? "Added"
+      : state === "error"
+        ? "Try again"
+        : buyBox.add_to_cart_label
+  const unitPrice = price?.calculated_amount
+  const totalPrice = unitPrice != null ? formatPrice(unitPrice * qty, price?.currency_code) : null
+
+  // Sold out: the in-stock case types for this model, one tap each.
+  const alternatives = selectedOut && buyBox.sold_out_suggestions
+    ? soldOutAlternatives({
+        caseTypes: matrix.caseTypes,
+        current: caseType,
+        fits: simple ? () => true : (ct) => (matrix.caseTypesByDevice[device] ?? []).includes(ct),
+        available: (ct) => availableFor(ct, device),
+      })
+    : []
+
+  // The quick-buy bar: after the buttons scroll away, on phones and tablets.
+  const barOn = buyBox.sticky_bar
+  const past = useScrolledPast(ctaRef, barOn && !bundleMode)
+  const barAction = buyBox.sticky_bar_action
+  const statusText = state === "adding"
+    ? "Adding to cart"
+    : buying
+      ? "Taking you to checkout"
+      : showAdded && addedFor
+        ? `${addedFor.label} added to cart`
+        : state === "error"
+          ? "Could not add to cart. Try again."
+          : buyError
+            ? "Could not start checkout. Try again."
+            : selectedOut && selected
+              ? simple ? `${caseType} is sold out` : `${caseType} is sold out for ${device}`
+              : ""
 
   return (
     <div>
@@ -244,7 +339,7 @@ export default function ProductBuyBox({
       {/* Availability from the live (refreshed) stock, so it always agrees
           with the Add to cart button. The delivery estimate is Admin copy
           (Product delivery) and never shows beside "Sold out". */}
-      <p className={`fl-pdp-stock${selectedOut ? " is-out" : ""}`}>
+      <p id={stockLineId} className={`fl-pdp-stock${selectedOut ? " is-out" : ""}`}>
         <span>{selectedOut ? "Sold out" : "In stock"}</span>
         {!selectedOut && deliveryEstimate ? (
           <>
@@ -273,6 +368,7 @@ export default function ProductBuyBox({
         matchingProduct={matchingProduct}
         device={device}
         caseType={caseType}
+        assurance={assurance}
       />
       ) : null}
 
@@ -286,7 +382,7 @@ export default function ProductBuyBox({
         <p className="fl-pdp-label">MODEL</p>
         <button
           type="button"
-          onClick={() => setOpenModel(true)}
+          onClick={() => { modelFromSlot.current = false; setOpenModel(true) }}
           aria-haspopup="dialog"
           className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[10px] border border-[#e2e2e2] bg-surface px-3 py-2 text-left text-sm transition-colors hover:border-line-strong focus:border-purple focus:outline-none"
         >
@@ -315,9 +411,12 @@ export default function ProductBuyBox({
           items={deviceItems}
           current={device}
           onSelect={(d) => {
+            // "Added"/"Try again" clear on the new selection (the selectedId
+            // effect); a running add keeps its busy guard.
+            if (modelFromSlot.current) focusPrimary.current = true
+            modelFromSlot.current = false
             onSelectDevice(d)
             setOpenModel(false)
-            setState("idle")
           }}
         />
       </div>
@@ -419,28 +518,31 @@ export default function ProductBuyBox({
         </section>
       ) : null}
 
-      {/* Quantity + add to cart + wishlist heart (one row, florayn layout). */}
+      {/* Quantity + Add to cart + wishlist heart in one row, then the one
+          filled (purple) button: Buy it now with the price on it. The bar
+          below watches this wrapper. */}
       {!bundleMode ? <>
-      <div className="mt-3.5 flex items-stretch gap-[10px] md:mt-5">
-        <div className="flex h-[50px] items-center rounded-[30px] border border-line">
+      <div ref={ctaRef} data-buy-cta className="mt-3.5 md:mt-5">
+      <div className="flex items-stretch gap-[10px] max-[359px]:gap-2">
+        <div role="group" aria-label="Quantity" className="flex h-[50px] items-center rounded-[30px] border border-line">
           <button
             type="button"
             onClick={() => setQty((q) => Math.max(1, q - 1))}
             disabled={qty <= 1}
             aria-label="Decrease quantity"
-            className="grid size-[38px] place-items-center rounded-full text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
+            className="grid size-11 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline-offset-[-2px] disabled:opacity-40"
           >
             &minus;
           </button>
-          <span aria-live="polite" className="w-6 text-center text-sm tabular-nums">
+          <span aria-live="polite" aria-atomic="true" className="w-7 text-center text-sm tabular-nums max-[359px]:w-6">
             {qty}
           </span>
           <button
             type="button"
-            onClick={() => setQty((q) => Math.min(99, q + 1))}
-            disabled={qty >= 99}
+            onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+            disabled={qty >= maxQty}
             aria-label="Increase quantity"
-            className="grid size-[38px] place-items-center rounded-full text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
+            className="grid size-11 place-items-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline-offset-[-2px] disabled:opacity-40"
           >
             +
           </button>
@@ -448,19 +550,17 @@ export default function ProductBuyBox({
 
         <button
           type="button"
-          onClick={onAdd}
-          disabled={!selected || selectedOut || state === "adding"}
-          className={[
-            "flex h-[50px] flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-[30px] px-4 text-[15px] font-semibold transition-colors",
-            state === "error"
-              ? "border border-danger text-danger"
-              : "bg-ink text-white hover:bg-purple",
-            "disabled:opacity-60",
-          ].join(" ")}
+          onClick={() => { if (!buying) void onAdd() }}
+          disabled={!selected || selectedOut}
+          aria-disabled={buying || undefined}
+          aria-busy={state === "adding" || undefined}
+          aria-describedby={selectedOut ? stockLineId : undefined}
+          data-state={showAdded ? "added" : state === "error" ? "error" : undefined}
+          className={`fl-buy-cta flex-1 ${buyBox.add_to_cart_style === "filled" ? "fl-buy-cta--ink" : "fl-buy-cta--outline"}`}
         >
           {state === "adding" ? <Spinner /> : null}
-          {cta}
-          {state === "added" ? (
+          <span className="fl-buy-cta__label">{selectedOut ? "Sold out" : addLabel}</span>
+          {showAdded ? (
             <span aria-hidden="true" className="text-base leading-none">
               &#10003;
             </span>
@@ -474,36 +574,95 @@ export default function ProductBuyBox({
         />
       </div>
 
-      {/* Buy it now - full-width purple, straight to checkout. */}
-      <button
-        type="button"
-        onClick={onBuyNow}
-        disabled={!selected || selectedOut || buying}
-        className="mt-2 flex h-[50px] w-full md:mt-[10px] items-center justify-center gap-2 rounded-[30px] bg-purple px-6 text-[15px] font-semibold text-white transition-colors hover:bg-purple-deep disabled:opacity-60"
-      >
-        {buying ? <Spinner /> : null}
-        {buying ? "Taking you to checkout..." : "Buy it now"}
-      </button>
-
-      </> : null}
-
-      <p role="status" aria-live="polite" className="sr-only">
-        {state === "adding"
-          ? "Adding to cart"
-          : state === "added"
-            ? `${caseType} ${device} added to cart`
-            : state === "error"
-              ? "Could not add to cart. Try again."
-              : ""}
-      </p>
+      {/* The primary slot: Buy it now, or, when the case is sold out, the case
+          types that are in stock for this model (same height, nothing moves). */}
+      {selectedOut && selected && buyBox.sold_out_suggestions ? (
+        alternatives.length ? (
+          <div className="fl-soldout-alt" role="group" aria-label={buyBox.sold_out_label || "Available case types"}>
+            {buyBox.sold_out_label ? <span className="fl-soldout-alt__label">{buyBox.sold_out_label}</span> : null}
+            {alternatives.map((ct) => {
+              const altPrice = priceForCaseType(ct)
+              return (
+                <button key={ct} type="button" onClick={() => { focusPrimary.current = true; onSelectCaseType(ct) }}>
+                  {ct}{altPrice != null ? ` · ${formatPrice(altPrice)}` : ""}
+                </button>
+              )
+            })}
+          </div>
+        ) : !simple ? (
+          <div className="fl-soldout-alt">
+            <button type="button" onClick={() => { modelFromSlot.current = true; setOpenModel(true) }}>{buyBox.sold_out_other_model_label}</button>
+          </div>
+        ) : (
+          <button type="button" disabled className="fl-buy-cta fl-buy-cta--primary mt-2 w-full md:mt-[10px]">Sold out</button>
+        )
+      ) : (
+        <button
+          ref={primaryRef}
+          type="button"
+          onClick={() => { if (state !== "adding") void onBuyNow() }}
+          onPointerEnter={prefetchCheckout}
+          onPointerDown={prefetchCheckout}
+          onFocus={prefetchCheckout}
+          disabled={!selected || selectedOut}
+          aria-disabled={state === "adding" || buying || undefined}
+          aria-busy={buying || undefined}
+          className="fl-buy-cta fl-buy-cta--primary mt-2 w-full md:mt-[10px]"
+        >
+          {buying ? (
+            <><Spinner />Taking you to checkout…</>
+          ) : selectedOut ? (
+            "Sold out"
+          ) : (
+            <>
+              <span className="fl-buy-cta__label">{buyBox.buy_now_label}</span>
+              {buyBox.show_price_in_buy_now && selected && totalPrice ? (
+                <>
+                  <span className="fl-buy-cta__sep" aria-hidden="true">·</span>
+                  <span className="fl-buy-cta__price">{totalPrice}</span>
+                </>
+              ) : null}
+            </>
+          )}
+        </button>
+      )}
+      </div>
 
       {state === "error" ? (
-        <p className="mt-3 text-sm text-danger">
-          Could not add that to your cart. Check your connection and try again.
+        <p className="mt-2 text-sm text-danger">
+          Could not add that to your cart. Please try again.
+        </p>
+      ) : null}
+      {buyError ? (
+        <p className="mt-2 text-sm text-danger">
+          Could not start checkout. Please try again.
         </p>
       ) : null}
 
-      {shipping}
+      {assurance}
+      </> : null}
+
+      <p role="status" aria-live="polite" className="sr-only">
+        {statusText}
+      </p>
+
+      {barOn ? (
+        <ProductBuyBar
+          visible={past && !bundleMode && !!selected}
+          price={totalPrice ?? ""}
+          detail={simple ? caseType : `${device} · ${caseType}`}
+          onDetail={simple ? null : () => { modelFromSlot.current = false; setOpenModel(true) }}
+          armed={!bundleMode && !!selected}
+          action={barAction}
+          label={barAction === "buy_now" ? buyBox.buy_now_label : buyBox.add_to_cart_label}
+          soldOut={selectedOut}
+          busy={busy}
+          pending={barAction === "buy_now" ? buying : state === "adding"}
+          added={barAction === "add_to_cart" && showAdded}
+          onAction={barAction === "buy_now" ? () => void onBuyNow() : () => void onAdd()}
+          onIntent={barAction === "buy_now" ? prefetchCheckout : undefined}
+        />
+      ) : null}
     </div>
   )
 }

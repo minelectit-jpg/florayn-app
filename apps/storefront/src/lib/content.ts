@@ -1,6 +1,6 @@
 import type { Audience } from "./audience"
 import { DEFAULT_RECOMMENDATIONS, type RecommendationSettings } from "./product-recommendations"
-import { DEFAULT_PRESENTATION, readPresentation, type DeliveryPresentation, type FooterPresentation } from "./storefront-presentation"
+import { DEFAULT_PRESENTATION, readPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "./storefront-presentation"
 /**
  * Home page sections, the header menu and the footer, all edited in the admin
  * rather than hardcoded here.
@@ -145,6 +145,8 @@ export type FeatureBlock = {
 
 export type ProductSections = {
   delivery: DeliveryPresentation
+  /** Admin > Buy buttons. */
+  buyBox: BuyBoxPresentation
   recommendationDefaults: RecommendationSettings
   /** The "Features" band blocks, in order. */
   featureBlocks: FeatureBlock[]
@@ -163,16 +165,18 @@ export async function getProductSections(): Promise<ProductSections> {
       headers: { "x-publishable-api-key": KEY },
       next: { revalidate: 60, tags: ["content", "content:product-sections"] },
     })
-    if (!res.ok) return { delivery: DEFAULT_PRESENTATION.delivery, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
+    if (!res.ok) return { delivery: DEFAULT_PRESENTATION.delivery, buyBox: DEFAULT_PRESENTATION.buy_box, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
     const json = (await res.json()) as Partial<ProductSections>
+    const presentation = readPresentation({ delivery: json.delivery, buy_box: json.buyBox })
     return {
-      delivery: readPresentation({ delivery: json.delivery }).delivery,
+      delivery: presentation.delivery,
+      buyBox: presentation.buy_box,
       recommendationDefaults: { ...DEFAULT_RECOMMENDATIONS, ...json.recommendationDefaults },
       featureBlocks: json.featureBlocks ?? [],
       featuredPicks: json.featuredPicks ?? [],
     }
   } catch {
-    return { delivery: DEFAULT_PRESENTATION.delivery, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
+    return { delivery: DEFAULT_PRESENTATION.delivery, buyBox: DEFAULT_PRESENTATION.buy_box, featureBlocks: [], featuredPicks: [], recommendationDefaults: DEFAULT_RECOMMENDATIONS }
   }
 }
 

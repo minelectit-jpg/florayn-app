@@ -113,6 +113,9 @@
   .fl-bag-empty > p:not(.eyebrow) { font-size:14px; color:var(--color-ink-muted); }
 }
 @media (min-width:1024px) {
+  /* Only from 1024px up: the quick-buy bar (product-buy-bar.tsx) is position:fixed
+     inside this panel and hidden from 1024px. If the panel ever gets sticky, a
+     transform or a filter below 1024px, move the bar to a portal. */
   .fl-product-details { position:sticky; top:var(--product-sticky-top,150px); }
   .fl-bag__summary { position:sticky; top:150px; }
 }

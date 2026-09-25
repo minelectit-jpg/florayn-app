@@ -23,6 +23,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   res.json({
     recommendationDefaults,
     delivery: settings.delivery,
+    buyBox: settings.buy_box,
     featureBlocks: blocks
       .filter((b: any) => b.is_visible)
       .map((b: any) => ({

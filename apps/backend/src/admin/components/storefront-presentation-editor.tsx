@@ -1,10 +1,13 @@
 import { Button, Container, Heading, Input, Label, Switch, Text, Textarea, toast } from "@medusajs/ui"
 import { useEffect, useId, useRef, useState, type ReactNode } from "react"
-import { DELIVERY_ICONS, validateDeliveryPresentation, validateFooterPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
+import { Link } from "react-router-dom"
+import { BUY_LINE_LIMIT, DELIVERY_ICONS, validateBuyBoxPresentation, validateDeliveryPresentation, validateFooterPresentation, type BuyBoxPresentation, type DeliveryPresentation, type FooterPresentation } from "../../lib/storefront-presentation"
 import { contentApi } from "./menu-editor"
 import { ManagerSelect, useUnsaved } from "./product-manager/shared"
 
-function useSettings<T>(section: "footer" | "delivery") {
+const VALIDATORS = { footer: validateFooterPresentation, delivery: validateDeliveryPresentation, buy_box: validateBuyBoxPresentation }
+
+function useSettings<T>(section: "footer" | "delivery" | "buy_box") {
   const [value, setValue] = useState<T | null>(null)
   const [saved, setSaved] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
@@ -28,7 +31,7 @@ function useSettings<T>(section: "footer" | "delivery") {
     setSaving(true)
     setError("")
     try {
-      const settings = section === "footer" ? validateFooterPresentation(value) : validateDeliveryPresentation(value)
+      const settings = VALIDATORS[section](value)
       const data = await contentApi(path, { method: "POST", body: JSON.stringify({ settings }) })
       setValue(data.settings)
       setSaved(data.settings)
@@ -135,13 +138,86 @@ export function DeliveryPresentationEditor() {
           </div>
           <Field label={`Card ${index + 1} heading`} value={card.title} max={80} onChange={(title) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, title } : item) })} />
           <Field label={`Card ${index + 1} description`} value={card.description} multiline onChange={(description) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, description } : item) })} />
+          <Field label="Line under the buy buttons" value={card.buy_line ?? ""} max={48} onChange={(buy_line) => set({ cards: value.cards.map((item, i) => i === index ? { ...item, buy_line } : item) })} hint={`Short version shown under Buy it now on every product page. Up to ${BUY_LINE_LIMIT} cards. Leave blank to not show it there.`} />
           <RowActions index={index} length={value.cards.length} move={(delta) => set({ cards: moved(value.cards, index, delta) })} remove={() => set({ cards: value.cards.filter((_, i) => i !== index) })} />
         </div>)}
       </div>
-      <div><Button variant="secondary" disabled={value.cards.length >= 6} onClick={() => set({ cards: [...value.cards, { icon: "package", title: "", description: "" }] })}>Add information card</Button></div>
+      <div><Button variant="secondary" disabled={value.cards.length >= 6} onClick={() => set({ cards: [...value.cards, { icon: "package", title: "", description: "", buy_line: "" }] })}>Add information card</Button></div>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Help link label" value={value.link_label} max={60} onChange={(link_label) => set({ link_label })} />
         <Field label="Help link URL" value={value.link_href} max={500} onChange={(link_href) => set({ link_href })} hint="For example /contact/. Leave both link fields blank to hide it." />
+      </div>
+    </>}
+  </Frame>
+}
+
+function Toggle({ id, label, hint, checked, onChange, disabled }: { id: string; label: string; hint?: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+  return <div className="grid gap-1">
+    <div className="flex items-center gap-3"><Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} /><Label htmlFor={id}>{label}</Label></div>
+    {hint && <Text size="small" className="text-ui-fg-subtle">{hint}</Text>}
+  </div>
+}
+
+/** A still picture of the buttons with the current values: no storefront code, just the look. */
+function BuyBoxPreview({ value }: { value: BuyBoxPresentation }) {
+  const pill = { height: 44, borderRadius: 30, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 14, whiteSpace: "nowrap" as const }
+  return <div aria-hidden="true" style={{ maxWidth: 380, padding: 16, borderRadius: 12, background: "#fbfaf8", border: "1px solid #e8e4de", color: "#1a1625" }}>
+    <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ ...pill, width: 104, border: "1px solid #e8e4de", fontWeight: 400, color: "#6b6577" }}>−&nbsp;&nbsp;&nbsp;1&nbsp;&nbsp;&nbsp;+</div>
+      <div style={{ ...pill, flex: 1, ...(value.add_to_cart_style === "filled" ? { background: "#1a1625", color: "#fff" } : { border: "1.5px solid #1a1625", background: "#fff" }) }}>{value.add_to_cart_label || "Add to cart"}</div>
+      <div style={{ ...pill, width: 44, border: "1px solid #e8e4de" }}>♡</div>
+    </div>
+    <div style={{ ...pill, marginTop: 8, background: "#7c3aed", color: "#fff" }}>{value.buy_now_label || "Buy it now"}{value.show_price_in_buy_now ? <span style={{ opacity: 0.9 }}>&nbsp;·&nbsp;1,400.00৳</span> : null}</div>
+  </div>
+}
+
+export function BuyBoxPresentationEditor() {
+  const state = useSettings<BuyBoxPresentation>("buy_box")
+  const value = state.value
+  const set = (patch: Partial<BuyBoxPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
+  return <Frame title="Buy buttons" description="The Add to cart and Buy it now buttons on every product page, the quick-buy bar on phones, and what shoppers see when a case is sold out." state={state}>
+    {value && <>
+      <div className="grid gap-4">
+        <Heading level="h2">Button labels</Heading>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Add to cart label" value={value.add_to_cart_label} max={16} onChange={(add_to_cart_label) => set({ add_to_cart_label })} />
+          <Field label="Buy it now label" value={value.buy_now_label} max={20} onChange={(buy_now_label) => set({ buy_now_label })} hint="For example Buy it now or Order now." />
+        </div>
+        <div className="grid gap-2 md:max-w-md"><Label htmlFor="buy-box-style">Add to cart style</Label>
+          <ManagerSelect id="buy-box-style" value={value.add_to_cart_style} onValueChange={(style) => set({ add_to_cart_style: style as BuyBoxPresentation["add_to_cart_style"] })}>
+            <option value="outline">Outline - Buy it now stays the one filled button</option>
+            <option value="filled">Filled ink - the florayn.com look</option>
+          </ManagerSelect>
+        </div>
+        <Toggle id="buy-box-price" label="Show the price in Buy it now" checked={value.show_price_in_buy_now} onChange={(show_price_in_buy_now) => set({ show_price_in_buy_now })} hint="Shows the selected case price times the quantity, for example Buy it now · 1,400.00৳. Delivery and pack savings are added at checkout." />
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Quick-buy bar on phones and tablets</Heading>
+        <Toggle id="buy-box-bar" label="Show the quick-buy bar" checked={value.sticky_bar} onChange={(sticky_bar) => set({ sticky_bar })} hint="Slides up at the bottom of the screen after the shopper scrolls past the buttons, with the price, the chosen model and one button. Never shown on computers, where the buttons stay in view." />
+        <div className="grid gap-2 md:max-w-md"><Label htmlFor="buy-box-bar-action">Bar button</Label>
+          <ManagerSelect id="buy-box-bar-action" value={value.sticky_bar_action} onValueChange={(action) => set({ sticky_bar_action: action as BuyBoxPresentation["sticky_bar_action"] })}>
+            <option value="buy_now">{value.buy_now_label || "Buy it now"}</option>
+            <option value="add_to_cart">{value.add_to_cart_label || "Add to cart"}</option>
+          </ManagerSelect>
+          {!value.sticky_bar ? <Text size="small" className="text-ui-fg-subtle">The bar is off.</Text> : null}
+        </div>
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">When the selected case is sold out</Heading>
+        <Toggle id="buy-box-soldout" label="Suggest case types that are in stock" checked={value.sold_out_suggestions} onChange={(sold_out_suggestions) => set({ sold_out_suggestions })} hint="Buy it now makes way for up to three in-stock case types for the same model, with their prices, one tap each." />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Label before the suggestions" value={value.sold_out_label} max={24} onChange={(sold_out_label) => set({ sold_out_label })} hint="Leave blank to show only the suggestions." />
+          <Field label="Button when no case type is in stock" value={value.sold_out_other_model_label} max={24} onChange={(sold_out_other_model_label) => set({ sold_out_other_model_label })} hint="Opens the model list." />
+        </div>
+      </div>
+      <div className="grid gap-4">
+        <Heading level="h2">Under the buttons</Heading>
+        <Field label="Free-delivery line" value={value.free_delivery_line} max={48} onChange={(free_delivery_line) => set({ free_delivery_line })} hint="Use {amount} for the free-delivery minimum set in Bundles. Shown only while Bundles is on and the minimum is above 0. Leave blank to hide." />
+        <Text size="small" className="text-ui-fg-subtle">Cash on delivery, delivery charges and exchanges come from Product delivery: fill in a card's Line under the buy buttons (up to {BUY_LINE_LIMIT}). <Link to="/product-delivery" className="text-ui-fg-interactive underline">Open Product delivery</Link></Text>
+      </div>
+      <div className="grid gap-3">
+        <Heading level="h2">Preview</Heading>
+        <BuyBoxPreview value={value} />
       </div>
     </>}
   </Frame>

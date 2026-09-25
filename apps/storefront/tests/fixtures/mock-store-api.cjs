@@ -69,6 +69,8 @@ const menContent = {
 }
 const bundle = { settings: { heading: "Choose a pack", single_label: "Single", free_shipping_threshold: 3000, scope: "cases", is_active: true, matching_set_enabled: true, matching_set_discount: 250, matching_set_default_airpods: "AirPods Pro 3" }, tiers: [{ id: "tier_two", quantity: 2, badge: null, discount_amount: 200, min_pct: 0, max_pct: 0 }] }
 const stock = Object.fromEntries(caseTypes.flatMap((c) => c.devices.map((d) => [`${c.name}|${d.name}`, 20])))
+// FIXTURE_SOLD_OUT="Signature|iPhone 17 Pro Max,Armor Black|iPhone 17 Pro Max" empties those blanks.
+for (const key of (process.env.FIXTURE_SOLD_OUT || "").split(",").map((k) => k.trim()).filter(Boolean)) stock[key] = 0
 const carts = new Map()
 const orders = new Map()
 // Opt-in account UI checks. These fake codes never send email or contact Medusa.
@@ -207,7 +209,7 @@ const server = http.createServer(async (req, res) => {
   let body = ""
   for await (const chunk of req) body += chunk
   const data = body ? JSON.parse(body) : {}
-  if (accountFixture && /^\/admin\/content\/presentation\/(footer|delivery)$/.test(url.pathname)) {
+  if (accountFixture && /^\/admin\/content\/presentation\/(footer|delivery|buy_box)$/.test(url.pathname)) {
     const section = url.pathname.split("/").pop()
     if (req.method === "POST") presentation[section] = data.settings
     return send(res, { settings: presentation[section] })
@@ -368,7 +370,7 @@ const server = http.createServer(async (req, res) => {
     case "/store/districts": return send(res, { districts, count: districts.length, inside_dhaka: ["Dhaka"], shipping: { inside_dhaka: 60, outside_dhaka: 100 } })
     case "/store/checkout-settings": return send(res, { settings: checkoutSettings })
     case "/store/contact-settings": return send(res, { settings: { ...contactSettings, ...(contactRevision ? { title: `Contact revision ${contactRevision}` } : {}) } })
-    case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"], ...(presentation ? { delivery: presentation.delivery } : {}) })
+    case "/store/content/product-sections": return send(res, { featureBlocks: [], featuredPicks: ["audit-midnight"], ...(presentation ? { delivery: presentation.delivery, buyBox: presentation.buy_box } : {}) })
     case "/store/content/gallery-videos": return send(res, { videos: {} })
     case "/store/seo": return send(res, { templates: { title: "{design} {device} Case", description: "{design} test case for {device}", heading: "{design} {device} Case", fit_copy_enabled: true }, overrides: [] })
     case "/store/shop-catalog": {

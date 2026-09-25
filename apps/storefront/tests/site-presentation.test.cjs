@@ -38,3 +38,15 @@ test("footer retains all managed links in server HTML with accessible mobile acc
   assert.ok(html.includes('aria-expanded="true"') && html.includes('aria-expanded="false"'))
   assert.equal((html.match(/aria-controls=/g) ?? []).length, 2)
 })
+
+test("the lines under the buy buttons come from the delivery cards and the free-delivery rule, as plain text", () => {
+  const { BuyAssurance } = load("components/shipping-note.tsx", deps)
+  const html = render(BuyAssurance, { cards: contract.DEFAULT_PRESENTATION.delivery.cards, freeDelivery: "Free delivery on orders over 3,400.00৳" })
+  const items = [...html.matchAll(/<li>[\s\S]*?<span>([^<]+)<\/span><\/li>/g)].map((m) => m[1])
+  assert.deepEqual(items, ["Cash on delivery available", "Delivery 60৳ inside Dhaka · 100৳ outside", "Easy exchange within 3 days", "Free delivery on orders over 3,400.00৳"])
+  assert.match(html, /aria-hidden="true"/)
+  assert.doesNotMatch(html, /<a |<button/)
+  assert.equal(render(BuyAssurance, { cards: contract.DEFAULT_PRESENTATION.delivery.cards.map((c) => ({ ...c, buy_line: "" })), freeDelivery: null }), "")
+  const four = [...contract.DEFAULT_PRESENTATION.delivery.cards, { icon: "heart", title: "Gift", description: "", buy_line: "A fourth line" }]
+  assert.doesNotMatch(render(BuyAssurance, { cards: four, freeDelivery: null }), /A fourth line/, "never more than three card lines")
+})

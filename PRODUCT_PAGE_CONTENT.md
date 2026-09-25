@@ -17,6 +17,38 @@ Read before changing product selectors, content or reviews. Applies to new.flora
 - The Reviews row carries `id="customer-reviews"` (the sign-in return link depends on it) and opens itself for any link to that anchor. Never invent ratings, reviews, verified-purchase badges or review counts: with no reviews the stars stay hollow beside "No reviews yet", and a failed review read shows no summary.
 - Phone spacing is compressed with mobile-first utility pairs that restore the desktop values at `md:`; keep that pattern.
 
+### Buy buttons
+
+These are set in Admin > Buy buttons (`buy_box` in `florayn_presentation`).
+The logic is in `lib/buy-box.ts` and the tests are in `tests/buy-box.test.cjs`.
+
+- **Layout.** One row holds the quantity stepper (44px buttons), Add to cart
+  and the wishlist heart. Below it, Buy it now fills the width.
+  - Purple means only the buy action. Buy it now is the one filled button and
+    shows the price times the quantity ("Buy it now · 1,400.00৳"). That is the
+    plain goods total; pack savings are applied at checkout.
+  - Add to cart is outlined, or filled ink as on florayn.com.
+  - A working button keeps full colour with a spinner; it never fades.
+- **One action at a time.** Add to cart, Buy it now and the bar share one busy
+  guard. Tapping Buy it now after Add to cart on the same case goes straight
+  to checkout, so there is never a second copy in the bag (`buyNowQuantity`).
+  The + button stops at live stock.
+- **Lines under the buttons** (`BuyAssurance`) are in the server HTML.
+  - They are each Product delivery card's "Line under the buy buttons" (at
+    most 3), plus the Bundles free-delivery line ("{amount}" is the minimum).
+  - They show under Buy it now, or under the pack button in bundle mode.
+- **Quick-buy bar** (`product-buy-bar.tsx`), below 1024px only.
+  - It appears once the buttons have scrolled under the header. One
+    IntersectionObserver drives it: no scroll listeners, no portal and no
+    `ssr:false`.
+  - It sits in place inside the details panel. That is safe only while the
+    panel is sticky just from 1024px up.
+  - It is hidden in bundle mode and while typing.
+- **Sold out.** Buy it now makes way for up to three in-stock case types for
+  the same model, one tap each, at the same height. With none in stock it
+  shows "Choose another model", which opens the model list. No invented
+  urgency or scarcity, ever.
+
 ## Editing
 
 Admin > Product delivery edits the delivery line under the price (`estimate`,
