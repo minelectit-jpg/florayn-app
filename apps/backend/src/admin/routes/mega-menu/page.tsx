@@ -7,7 +7,7 @@ import MenuEditor, { contentApi } from "../../components/menu-editor"
 import { NavigationPresentationEditor } from "../../components/storefront-presentation-editor"
 
 /**
- * Admin > Navigation (still at /mega-menu): the phone menu and the desktop
+ * Admin > Navigation (still at /mega-menu): the side menu and the desktop
  * bar, one menu per shopping mode, then the settings both share. Links are
  * entered plain ("/shop/…"); on the Men site the storefront adds /men itself,
  * so the same link works in both menus.
@@ -56,7 +56,7 @@ const NavigationPage = () => {
         key={`${audience}-${version}`}
         menu={audience === "men" ? "primary-men" : "primary"}
         title={audience === "men" ? "Navigation: Men" : "Navigation: Women"}
-        description="The phone menu and the desktop bar. Automatic sections fill themselves from Devices, Case types and Collection pages."
+        description="The side menu (the menu button, on phones and desktop) and the desktop bar. Automatic sections fill themselves from Devices, Case types and Collection pages."
         useGroups
         typed
         onDirtyChange={setDirty}

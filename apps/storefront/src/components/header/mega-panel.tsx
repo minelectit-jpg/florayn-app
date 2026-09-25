@@ -40,7 +40,7 @@ function Initial({ label, size = "text-[28px]" }: { label: string; size?: string
 
 /**
  * One desktop mega panel (loaded on intent by desktop-nav.tsx), drawn from the
- * same admin section and header data as the phone menu: device models by
+ * same admin section and header data as the menu drawer: device models by
  * brand and series, case styles, collections, or the section's own links.
  */
 export default function MegaPanel(props: MegaPanelProps) {
@@ -158,7 +158,7 @@ function DevicesPanel({ section, data, audience, onNavigate }: MegaPanelProps) {
               No model matches “{typed}”.
               {examples.length ? ` Try ${examples.map((example) => `“${example}”`).join(" or ")}.` : null}
             </p>
-            {/* Admin > Search: both fields blank hides the help link (as in the phone menu and search). */}
+            {/* Admin > Search: both fields blank hides the help link (as in the menu drawer and search). */}
             {data.search.help.href && data.search.help.label ? (
               <IntentLink href={data.search.help.href} onClick={onNavigate} className="mt-2 inline-block font-medium text-purple-deep underline underline-offset-4">
                 {data.search.help.label}

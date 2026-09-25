@@ -22,7 +22,7 @@ const URL_FIELDS = ["hero_image_url", "hero_mobile_image_url", "card_image_url",
 
 /**
  * POST /admin/content/collection-pages/:id - edit content, look or visibility.
- * show_in_menu puts the page in the phone menu's Collections row.
+ * show_in_menu puts the page in the side menu's Collections row.
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const service: any = req.scope.resolve(CONTENT_MODULE)

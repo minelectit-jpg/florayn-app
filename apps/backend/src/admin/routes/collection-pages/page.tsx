@@ -55,7 +55,7 @@ type Page = {
   design_slugs: string[]
   blocks: Block[]
   is_visible: boolean
-  /** In the Collections row of the phone menu; absent (an older backend) means shown. */
+  /** In the Collections row of the side menu; absent (an older backend) means shown. */
   show_in_menu?: boolean
   position: number
 }
@@ -298,7 +298,7 @@ const CollectionPagesPage = () => {
               Each collection&rsquo;s landing page at /collection/&lt;slug&gt;/. Start a new one from a template or duplicate an existing page onto another collection, then change its words, pictures and colours. The product cards stay the same design and take on the page&rsquo;s colours.
             </Text>
             <Text id="show-in-menu-help" size="small" className="mt-2 text-ui-fg-subtle">
-              <span className="font-medium text-ui-fg-base">Show in menu:</span> Adds the page to the Collections row in the phone menu, in this list&apos;s order.
+              <span className="font-medium text-ui-fg-base">Show in menu:</span> Adds the page to the Collections row of the side menu (phone and desktop), in this list&apos;s order.
             </Text>
           </div>
           <Button size="small" disabled={busy || !free.length} onClick={() => setCreating({ mode: "new", slug: free[0]?.handle ?? "", preset: presets[0]?.id ?? "classic" })}>

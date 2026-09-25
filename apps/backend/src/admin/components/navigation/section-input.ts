@@ -39,8 +39,8 @@ export const KIND_OPTIONS: { value: MenuKind; label: string }[] = [
   { value: "collections", label: "Collections row (automatic)" },
 ]
 export const PLACEMENT_OPTIONS: { value: MenuPlacement; label: string }[] = [
-  { value: "all", label: "Phone menu and desktop bar" },
-  { value: "drawer", label: "Phone menu only" },
+  { value: "all", label: "Side menu and desktop bar" },
+  { value: "drawer", label: "Side menu only" },
   { value: "bar", label: "Desktop bar only" },
 ]
 export const FORM_OPTIONS: { value: ProductForm; label: string }[] = [

@@ -25,7 +25,7 @@ export type MenuGroup = { heading: string | null; links: MenuLink[] }
  * from Case types, "collections" from Collection pages marked Show in menu.
  */
 export type MenuKind = "links" | "devices" | "case_types" | "collections"
-/** Where a header section shows: the phone menu and the desktop bar, or one of them. */
+/** Where a header section shows: the menu drawer and the desktop bar, or one of them. */
 export type MenuPlacement = "all" | "drawer" | "bar"
 export type ProductForm = "phone" | "airpods" | "watch" | "wallet"
 export type DevicesSectionConfig = {
@@ -51,7 +51,7 @@ export type MenuSection = {
   groups: MenuGroup[]
   /** Absent on an older backend, which means "links". */
   kind?: MenuKind
-  /** Round picture in the phone menu and the desktop promo (https). */
+  /** Round picture in the menu drawer and the desktop promo (https). */
   image?: string | null
   badge?: string | null
   placement?: MenuPlacement
@@ -148,7 +148,7 @@ export type CaseTypeInfo = {
   /**
    * The lowest price per form, over its active devices of that form (each at
    * its price group's price, else the flat price). Alcantara is 3800 for a
-   * phone but 1900 for the card wallet, so a phone menu must show the phone's.
+   * phone but 1900 for the card wallet, so a phone section must show the phone's.
    */
   fromPrices: Partial<Record<ProductForm, number>>
 }

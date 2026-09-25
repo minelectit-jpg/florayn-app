@@ -158,19 +158,59 @@ test("the wordmark is an inline SVG sized by attributes, hidden inside the Flora
   assert.match(checkout, /Back to bag/)
 })
 
-test("the browse row shows on home, shop and collection pages in both modes, and nowhere else", () => {
+test("the phone search field is inside the sticky header on every page but search; WOMEN/MEN only on home, shop and collection pages", () => {
+  const row = (html) => headerOnly(html).match(/<div data-header-row2="true" class="lg:hidden">[\s\S]*?<\/a>(?:<nav[\s\S]*?<\/nav>)?<\/div><\/div>/)?.[0] ?? null
   for (const at of ["/", "/men/", "/shop/iphone-16/signature/", "/collection/leopard/", "/collections/", "/men/collections/"]) {
     const html = render(at)
-    assert.match(html, /<div data-header-row2="true"/, at)
     assert.match(html, /<header data-store-header="true" data-row2=""/, at)
-    assert.match(html, /fl-audience--compact/, at)
+    const field = row(html)
+    assert.ok(field, `${at}: the search row is inside <header>`)
+    assert.match(field, /<a href="\/(?:men\/)?search\/"[^>]*class="flex h-11 min-w-0 flex-1/, at)
+    assert.match(field, /fl-audience--compact/, at)
   }
-  for (const at of ["/product/leopard/", "/cart/", "/search/", "/men/product/leopard/", "/account/", "/contact/"]) {
+  for (const at of ["/product/leopard/", "/men/product/leopard/", "/cart/", "/account/", "/contact/"]) {
     const html = render(at)
-    assert.doesNotMatch(html, /data-header-row2/, at)
-    assert.doesNotMatch(html, /data-row2/, at)
+    assert.match(html, /<header data-store-header="true" data-row2=""/, at)
+    const field = row(html)
+    assert.ok(field, `${at}: the search row is inside <header>`)
+    assert.doesNotMatch(field, /fl-audience/, `${at}: no WOMEN/MEN switch beside the field`)
+  }
+  for (const at of ["/search/", "/men/search/"]) {
+    const html = render(at)
+    assert.doesNotMatch(html, /data-header-row2|data-row2/, `${at} has its own field`)
   }
   assert.doesNotMatch(render("/"), /fl-audience--tabs/, "the full-width tab bar left the page (it lives in the drawer)")
+})
+
+test("the logo row tucks away only on phones and tablets, by its own height, and never under keyboard focus", () => {
+  const css = fs.readFileSync(src("app/header.css"), "utf8")
+  assert.match(css, /@media \(max-width:1023px\) \{[\s\S]*?\[data-store-header\]\[data-row2\]\[data-tuck\]:not\(:has\(:focus-visible\)\) \{ transform:translateY\(-56px\); \}/)
+  assert.match(css, /@media \(min-width:768px\) and \(max-width:1023px\) \{\s*\[data-store-header\]\[data-row2\]\[data-tuck\]:not\(:has\(:focus-visible\)\) \{ transform:translateY\(-64px\); \}/)
+  assert.doesNotMatch(css, /fl-hdr-search/, "the row-1 search icon is gone")
+  const shell = fs.readFileSync(src("components/header/site-header.tsx"), "utf8")
+  assert.match(shell, /matchMedia\("\(max-width:1023px\)"\)/, "desktop never tucks")
+  assert.match(shell, /addEventListener\("scroll", onScroll, \{ passive: true \}\)/)
+  assert.doesNotMatch(shell, /useState\([^)]*tuck|setTuck/i, "a DOM attribute, not state")
+  // Checkout swaps in its own <header>: searchRow is false there, so the listener re-attaches to the new header on the way back.
+  assert.match(shell, /const searchRow = !minimal && !SEARCH_PAGE\.test\(plainPath\)/)
+  assert.match(shell, /\}, \[searchRow\]\)/)
+  assert.match(shell, /Math\.min\(Math\.max\(window\.scrollY, 0\), document\.documentElement\.scrollHeight - window\.innerHeight\)/, "an iOS bounce never reads as scrolling up")
+})
+
+test("what the taller phone header changes elsewhere: the quick-buy bar, anchors, and the drawer on desktop", () => {
+  const bar = fs.readFileSync(src("components/product-buy-bar.tsx"), "utf8")
+  assert.match(bar, /attributeFilter: \["data-tuck"\]/, "the quick-buy bar re-measures when the logo row tucks or comes back")
+  assert.match(bar, /header\?\.getBoundingClientRect\(\)\.height \?\? 0\) - tucked/)
+  const content = fs.readFileSync(src("app/product-content.css"), "utf8")
+  const phone = content.slice(content.indexOf("@media(max-width:767px)"))
+  assert.match(phone, /\.fl-acc__item\[id\] \{ scroll-margin-top:128px; \}/, "a #reviews link clears the 109px header")
+  assert.match(phone, /\.fl-reviews \{[^}]*scroll-margin-top:128px; \}/)
+  const dialogs = fs.readFileSync(src("components/header/header-dialogs.tsx"), "utf8")
+  const press = dialogs.match(/export const searchPressIntent = \{[\s\S]*?\}/)[0]
+  assert.doesNotMatch(press, /onMouseEnter|onFocus/, "opening the drawer under a resting mouse never loads search")
+  const drawer = fs.readFileSync(src("components/header/nav-drawer.tsx"), "utf8")
+  assert.match(drawer, /<ul data-hscroll className="[^"]*pointer-coarse:\[scrollbar-width:none\][^"]*pointer-fine:\[scrollbar-width:thin\]"/, "a mouse can scroll the Collections row")
+  assert.match(fs.readFileSync(src("app/nav-drawer.css"), "utf8"), /@media \(pointer:coarse\) \{ \.fl-level \[data-hscroll\]::-webkit-scrollbar \{ display:none; \} \}/)
 })
 
 test("a solid bar: no backdrop blur, sticky, and the pieces the product page measures", () => {
@@ -180,7 +220,9 @@ test("a solid bar: no backdrop blur, sticky, and the pieces the product page mea
   assert.match(header, /^<header data-store-header="true"[^>]*class="sticky top-0 z-40 border-b border-line bg-paper"/)
   assert.match(header, /grid h-14 max-w-\[1470px\] grid-cols-\[1fr_auto_1fr\][^"]* md:h-16[^"]* lg:h-\[72px\]/)
   assert.match(header, /aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="site-drawer"/)
-  assert.match(header, /<a href="\/search\/" aria-label="Search"[^>]*class="fl-hdr-search /)
+  const menuButton = header.match(/<button[^>]*aria-label="Open menu"[^>]*>/)[0]
+  assert.doesNotMatch(menuButton, /lg:hidden/, "the menu drawer opens on desktop too")
+  assert.doesNotMatch(header, /aria-label="Search"/, "no separate search icon: the field is in the header")
   assert.match(header, /<a[^>]*href="\/account\/"[^>]*aria-label="My account"|<a[^>]*aria-label="My account"[^>]*href="\/account\/"/)
   assert.match(header, /aria-label="Bag, 0 items"/)
   assert.match(header, /<span class="sr-only" aria-live="polite"><\/span>/, "the bag's live region is always mounted")

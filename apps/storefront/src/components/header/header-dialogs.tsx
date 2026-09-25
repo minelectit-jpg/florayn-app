@@ -66,16 +66,17 @@ export const searchIntent = {
 }
 
 /**
- * The same without focus, for the menu drawer's search field: showModal()
- * focuses the drawer's first focusable element, which is that field, so
- * focus there means "opened the menu", not "wants to search". A shopper who
- * only browses the menu never downloads the index or the results code; one
- * who activates the field still loads it at once (openSearch preloads).
+ * The same without focus or hover, for the menu drawer's search field:
+ * showModal() focuses the drawer's first focusable element, which is that
+ * field, so focus there means "opened the menu", not "wants to search"; and
+ * on desktop the field opens right under the pointer that clicked Menu, so
+ * the browser's synthetic hover means nothing either. A shopper who only
+ * browses the menu never downloads the index or the results code; one who
+ * presses the field still loads it at once (openSearch preloads).
  */
 export const searchPressIntent = {
   onPointerDown: preloadSearch,
   onTouchStart: preloadSearch,
-  onMouseEnter: preloadSearch,
 }
 
 /* ---- Opening and closing ------------------------------------------------- */
@@ -267,10 +268,10 @@ function DrawerSkeleton() {
 }
 
 /**
- * dialog#site-drawer: the top bar (search field and Close) paints at once;
- * the levels below (nav-drawer.tsx) arrive lazily, over a skeleton the first
- * time. It closes when the page changes (a WOMEN/MEN switch keeps it open)
- * and when the window grows to the desktop layout, which has no drawer.
+ * dialog#site-drawer, on every screen size: the top bar (search field and
+ * Close) paints at once; the levels below (nav-drawer.tsx) arrive lazily,
+ * over a skeleton the first time. It closes when the page changes (a
+ * WOMEN/MEN switch keeps it open).
  */
 export function MenuDrawer({
   dialogRef,
@@ -297,16 +298,8 @@ export function MenuDrawer({
     page.current = plain
   }, [pathname, dialogRef])
 
-  useEffect(() => {
-    const desktop = window.matchMedia("(min-width:1024px)")
-    const onChange = () => {
-      if (desktop.matches) closeSheet(dialogRef.current, false)
-    }
-    desktop.addEventListener("change", onChange)
-    return () => desktop.removeEventListener("change", onChange)
-  }, [dialogRef])
-
-  // On phones and tablets, fetch the menu's code in a quiet moment after load.
+  // On phones and tablets, fetch the menu's code in a quiet moment after load
+  // (a desktop pointer fetches it on its way to the Menu button).
   useEffect(() => {
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
     if (saveData || !window.matchMedia("(max-width:1023px)").matches) return

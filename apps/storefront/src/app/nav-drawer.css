@@ -33,7 +33,8 @@
   .fl-level[data-anim="back-in"] { animation:fl-level-from-left .26s cubic-bezier(.22,1,.36,1) both; }
   .fl-level[data-anim="back-out"] { animation:fl-level-to-right .26s cubic-bezier(.22,1,.36,1) both; }
   .fl-level[data-anim$="-out"] { pointer-events:none; }
-  .fl-level [data-hscroll]::-webkit-scrollbar { display:none; }
+  /* Touch swipes the Collections row; a mouse (the drawer on desktop) gets a thin scrollbar to drag. */
+  @media (pointer:coarse) { .fl-level [data-hscroll]::-webkit-scrollbar { display:none; } }
 
   @keyframes fl-level-from-right { from { transform:translateX(100%); } to { transform:none; } }
   @keyframes fl-level-to-left { from { transform:none; opacity:1; } to { transform:translateX(-24%); opacity:0; } }

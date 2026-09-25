@@ -224,7 +224,7 @@ export function NavigationPresentationEditor() {
   const state = useSettings<NavigationPresentation>("navigation")
   const value = state.value
   const set = (patch: Partial<NavigationPresentation>) => state.setValue((current) => current ? { ...current, ...patch } : current)
-  return <Frame title="Navigation settings" description="Brand names, the links at the bottom of the phone menu and the remembered phone. The Women and Men menus share them." state={state}>
+  return <Frame title="Navigation settings" description="Brand names, the links at the bottom of the side menu and the remembered phone. The Women and Men menus share them." state={state}>
     {value && <>
       <div className="grid gap-4">
         <Heading level="h2">Brand names</Heading>
@@ -235,7 +235,7 @@ export function NavigationPresentationEditor() {
       </div>
       <div className="grid gap-4">
         <Heading level="h2">Menu bottom links</Heading>
-        <Text size="small" className="text-ui-fg-subtle">Up to 6 links under the phone menu, for example My account.</Text>
+        <Text size="small" className="text-ui-fg-subtle">Up to 6 links at the bottom of the side menu, for example My account.</Text>
         {value.drawer_links.map((row, index) => <div key={index} className="grid gap-3 rounded-lg border border-ui-border-base p-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={`Link ${index + 1} label`} value={row.label} max={40} onChange={(label) => set({ drawer_links: value.drawer_links.map((item, i) => i === index ? { ...item, label } : item) })} />

@@ -540,7 +540,7 @@ export default function MenuEditor({
                 label="Image"
                 value={draft.image_url}
                 onChange={(image_url) => edit(section, { image_url })}
-                hint="Round picture in the phone menu and the desktop panel. Square, 320 x 320 webp."
+                hint="Round picture in the side menu and the desktop panel. Square, 320 x 320 webp."
                 square
               />
               <div className="grid content-start gap-2">

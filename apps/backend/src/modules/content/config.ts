@@ -275,7 +275,7 @@ export async function getCollectionCards(service: any, productModule: any, knex?
       artwork: image ? null : (collection ? artwork.get(collection.id) ?? null : null),
       /** Modes with designs in it; absent when unknown (the storefront then shows it in both). */
       ...(collection && audiences.has(collection.id) ? { audiences: audiences.get(collection.id) } : {}),
-      /** "Show in menu": in the phone menu's Collections row, in this list's order. */
+      /** "Show in menu": in the side menu's Collections row, in this list's order. */
       in_menu: page.show_in_menu !== false,
       theme: {
         bg: page.theme.bg,

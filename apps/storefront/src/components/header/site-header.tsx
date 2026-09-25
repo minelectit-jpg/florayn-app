@@ -18,8 +18,12 @@ import DesktopNav from "./desktop-nav"
 import { MenuDrawer, SearchDialog, onSearchLinkClick, openSheet, preloadNavDrawer, searchIntent } from "./header-dialogs"
 import { DRAWER_ID } from "./types"
 
-/** Home, shop and collection pages get the browse row (search field and WOMEN/MEN) under the bar. */
-const ROW2 = /^\/(?:$|shop(?:\/|$)|collections?(?:\/|$))/
+/** Home, shop and collection pages put the WOMEN/MEN switch beside the phone header's search field. */
+const MODE_SWITCH = /^\/(?:$|shop(?:\/|$)|collections?(?:\/|$))/
+/** The search pages have their own field at the top: no second one in the header there. */
+const SEARCH_PAGE = /^\/search(?:\/|$)/
+/** Scrolled this far (px) in one direction before the logo row tucks away or comes back. */
+const TUCK_STEP = 8
 
 /** Every row-1 icon: a 44px target, purple on a fine pointer's hover, a round focus ring. */
 const ICON = "grid size-11 place-items-center rounded-full text-ink transition-colors pointer-fine:hover:text-purple focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple"
@@ -27,11 +31,13 @@ const ICON = "grid size-11 place-items-center rounded-full text-ink transition-c
 const bagLabel = (count: number) => `Bag, ${count} item${count === 1 ? "" : "s"}`
 
 /**
- * The site header. Phones and tablets: a solid 56px (64px) bar with Menu and
- * Search on the left, the wordmark centred and Account and Bag on the right,
- * plus a browse row (search field and a compact WOMEN/MEN switch) that scrolls
- * away on home, shop and collection pages. Desktop: the WOMEN/MEN pill, the
- * wordmark, a search field, Account and Bag, and the nav row with its panels.
+ * The site header. Phones and tablets: a solid 56px (64px) logo row with Menu
+ * on the left, the wordmark centred and Account and Bag on the right, and
+ * under it, in the same sticky header, the search field (with a compact
+ * WOMEN/MEN switch on home, shop and collection pages). Scrolling down tucks
+ * the logo row away and keeps the search field pinned; scrolling up brings
+ * it back. Desktop: Menu and the WOMEN/MEN pill, the wordmark, a search
+ * field, Account and Bag, and the nav row with its panels.
  *
  * Everything comes from one compact prop built by the layout (lib/header-data.ts,
  * packed for the wire and unpacked once here) and nothing depends on cookies,
@@ -45,7 +51,12 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
   const audience = useAudience()
   const { summary, openDrawer: openBag } = useCart()
   const itemCount = summary?.itemCount ?? 0
-  const row2 = ROW2.test(stripAudience(pathname))
+  const plainPath = stripAudience(pathname)
+  const orderConfirmation = /^\/order\/[^/]+\/?$/.test(pathname)
+  /** Checkout and the order page get a minimal header of their own (no menu, search or tuck). */
+  const minimal = pathname === "/checkout" || pathname === "/checkout/" || orderConfirmation
+  const searchRow = !minimal && !SEARCH_PAGE.test(plainPath)
+  const modeSwitch = MODE_SWITCH.test(plainPath)
   const searchHref = withAudience("/search/", audience)
 
   const headerRef = useRef<HTMLElement>(null)
@@ -71,35 +82,45 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
     if (slug) rememberDevice(slug)
   }, [pathname, slugs, data.rememberDevice])
 
-  // Row 1's search icon waits while the browse row's field is on screen. A DOM
-  // attribute, not state, so scrolling never re-renders the header.
+  // Phones and tablets: scrolling down tucks the logo row away (header.css
+  // slides the header up by its height) and leaves the search field pinned;
+  // scrolling up, or back to the top, brings it back. A DOM attribute, not
+  // state, so scrolling never re-renders the header. The minimal checkout
+  // header replaces this <header> element, so searchRow (false there) makes
+  // the listener re-attach to the new one on the way back.
   useEffect(() => {
     const header = headerRef.current
-    if (!header) return
-    delete header.dataset.row2Gone
-    const row = document.querySelector<HTMLElement>("[data-header-row2]")
-    if (!row || typeof IntersectionObserver === "undefined") return
-    let observer: IntersectionObserver | null = null
-    const watch = () => {
-      observer?.disconnect()
-      observer = new IntersectionObserver(
-        ([entry]) => {
-          if (entry.isIntersecting) delete header.dataset.row2Gone
-          else header.dataset.row2Gone = ""
-        },
-        { rootMargin: `-${header.offsetHeight}px 0px 0px 0px` }
-      )
-      observer.observe(row)
+    if (!header || !searchRow) return
+    const small = window.matchMedia("(max-width:1023px)")
+    let last = window.scrollY
+    let frame = 0
+    const update = () => {
+      frame = 0
+      // iOS reports positions past either end while it bounces: clamp, so the bounce never reads as scrolling up.
+      const y = Math.min(Math.max(window.scrollY, 0), document.documentElement.scrollHeight - window.innerHeight)
+      const logoRow = (header.firstElementChild as HTMLElement | null)?.offsetHeight ?? 56
+      if (!small.matches || y <= logoRow) {
+        delete header.dataset.tuck
+        last = y
+        return
+      }
+      if (Math.abs(y - last) < TUCK_STEP) return
+      if (y > last) header.dataset.tuck = ""
+      else delete header.dataset.tuck
+      last = y
     }
-    watch()
-    // The bar is 56px on phones and 64px on tablets: re-measure across that line.
-    const tablet = window.matchMedia("(min-width:768px)")
-    tablet.addEventListener("change", watch)
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update)
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    small.addEventListener("change", update)
     return () => {
-      tablet.removeEventListener("change", watch)
-      observer?.disconnect()
+      window.removeEventListener("scroll", onScroll)
+      small.removeEventListener("change", update)
+      window.cancelAnimationFrame(frame)
+      delete header.dataset.tuck
     }
-  }, [row2])
+  }, [searchRow])
 
   function openMenu(trigger: HTMLElement) {
     preloadNavDrawer().catch(() => {})
@@ -108,8 +129,7 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
     setOpenCount((count) => count + 1)
   }
 
-  const orderConfirmation = /^\/order\/[^/]+\/?$/.test(pathname)
-  if (pathname === "/checkout" || pathname === "/checkout/" || orderConfirmation) {
+  if (minimal) {
     return (
       <header className="border-b border-line bg-paper">
         <div className="mx-auto grid max-w-[1240px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-[15px] py-5 md:px-[30px] md:py-6">
@@ -130,13 +150,13 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
       </a>
 
       {/*
-       * A solid bar with no backdrop-filter: a filter would make the header the
-       * containing block of anything position:fixed inside it. The sheets and
-       * the browse row are its siblings.
+       * A solid bar with no backdrop-filter: a filter (or the tuck's transform)
+       * makes the header the containing block of anything position:fixed
+       * inside it, so nothing inside is fixed. The sheets are its siblings.
        */}
-      <header ref={headerRef} data-store-header data-row2={row2 ? "" : undefined} className="sticky top-0 z-40 border-b border-line bg-paper">
+      <header ref={headerRef} data-store-header data-row2={searchRow ? "" : undefined} className="sticky top-0 z-40 border-b border-line bg-paper">
         <div className="mx-auto grid h-14 max-w-[1470px] grid-cols-[1fr_auto_1fr] items-center px-1 md:h-16 md:px-[18px] lg:h-[72px] lg:px-[30px]">
-          <div className="flex items-center justify-self-start">
+          <div className="flex items-center justify-self-start lg:gap-2">
             <button
               type="button"
               aria-label="Open menu"
@@ -147,13 +167,10 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
               onPointerEnter={() => preloadNavDrawer().catch(() => {})}
               onTouchStart={() => preloadNavDrawer().catch(() => {})}
               onFocus={() => preloadNavDrawer().catch(() => {})}
-              className={`${ICON} lg:hidden`}
+              className={ICON}
             >
               <Menu size={22} strokeWidth={1.75} aria-hidden="true" />
             </button>
-            <a href={searchHref} aria-label="Search" onClick={onSearchLinkClick} {...searchIntent} className={`fl-hdr-search ${ICON} lg:hidden`}>
-              <Search size={20} aria-hidden="true" />
-            </a>
             <AudienceToggle variant="pill" className="hidden lg:grid" />
           </div>
 
@@ -187,25 +204,25 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
           </div>
         </div>
 
+        {searchRow ? (
+          <div data-header-row2 className="lg:hidden">
+            <div className="mx-auto flex max-w-[1470px] items-center gap-2 px-[15px] pb-2 md:px-[30px]">
+              <a
+                href={searchHref}
+                onClick={onSearchLinkClick}
+                {...searchIntent}
+                className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-field px-4 text-[14px] text-ink-muted md:max-w-[560px]"
+              >
+                <Search size={18} className="shrink-0 text-ink" aria-hidden="true" />
+                <span className="truncate">{data.search.placeholder}</span>
+              </a>
+              {modeSwitch ? <AudienceToggle variant="compact" className="shrink-0 md:ml-auto" /> : null}
+            </div>
+          </div>
+        ) : null}
+
         <DesktopNav data={data} audience={audience} pathname={pathname} />
       </header>
-
-      {row2 ? (
-        <div data-header-row2 className="border-b border-line bg-paper lg:hidden">
-          <div className="mx-auto flex h-14 max-w-[1470px] items-center gap-2 px-[15px] md:px-[30px]">
-            <a
-              href={searchHref}
-              onClick={onSearchLinkClick}
-              {...searchIntent}
-              className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-field px-4 text-[14px] text-ink-muted md:max-w-[560px]"
-            >
-              <Search size={18} className="shrink-0 text-ink" aria-hidden="true" />
-              <span className="truncate">{data.search.placeholder}</span>
-            </a>
-            <AudienceToggle variant="compact" className="shrink-0 md:ml-auto" />
-          </div>
-        </div>
-      ) : null}
 
       <MenuDrawer dialogRef={drawerRef} data={data} audience={audience} pathname={pathname} openCount={openCount} onClosed={() => setDrawerOpen(false)} />
       <SearchDialog data={data} audience={audience} pathname={pathname} />

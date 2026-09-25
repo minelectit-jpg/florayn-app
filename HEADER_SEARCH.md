@@ -1,7 +1,7 @@
 # Header, menu and search
 
 The site header (v2): a solid bar with the Florayn wordmark, a search field,
-a CASETiFY-style menu drawer on phones and tablets, a nav row with panels on
+a CASETiFY-style menu drawer on every screen size, a nav row with panels on
 desktop, and search that runs in the browser. Read this before changing the
 header, the menu drawer, the desktop panels, search, or their admin screens.
 Read [WOMEN_MEN.md](WOMEN_MEN.md) for the WOMEN | MEN switch and
@@ -9,21 +9,29 @@ Read [WOMEN_MEN.md](WOMEN_MEN.md) for the WOMEN | MEN switch and
 
 ## What the shopper sees
 
-- **Phone (under 768px):** a 56px bar with Menu and Search on the left, the
-  wordmark in the middle, Account and Bag on the right. On home, shop and
-  collection pages a browse row sits under it (search field and a compact
-  WOMEN | MEN switch) and scrolls away; the bar's search icon then fades in.
-- **Tablet (768-1023px):** the same, 64px.
-- **Desktop (1024px and up):** a 72px row (WOMEN | MEN pill, wordmark, search
-  field with a "/" hint, Account, Bag) and a 48px nav row whose sections open
-  panels on hover or with their chevron. "/" or Ctrl/Cmd+K opens search.
-- **Menu drawer:** WOMEN / MEN tabs, "Your phone" (the last phone, iPhone or
-  Samsung, the shopper opened or picked), then the menu sections in admin
-  order: the Collections row, drill rows (Phone Case > iPhone / Samsung Galaxy
-  > models, newest first, with a "Find your model" filter), Styles with
-  prices, and plain links. Bottom links come from Admin > Navigation. Opening
-  the drawer does not load search; its search field loads it on a press or
-  hover, like the header's search links.
+- **Phone (under 768px):** one sticky header with two rows: a 56px logo row
+  (Menu on the left, the wordmark in the middle, Account and Bag on the right)
+  and a 52px search row (the search field; on home, shop and collection pages
+  also a compact WOMEN | MEN switch). Every page has the search row except
+  `/search` and `/men/search`, which have their own field. Scrolling down
+  tucks the logo row away (a 56px `translateY`, so nothing below moves) and
+  leaves the search field pinned; scrolling up 8px, returning to the top, or
+  keyboard focus in the header brings it back. `site-header.tsx` sets
+  `data-tuck` on the header from a passive scroll listener; no re-render.
+- **Tablet (768-1023px):** the same, with a 64px logo row.
+- **Desktop (1024px and up):** a 72px row (Menu and the WOMEN | MEN pill,
+  wordmark, search field with a "/" hint, Account, Bag) and a 48px nav row
+  whose sections open panels on hover or with their chevron. "/" or
+  Ctrl/Cmd+K opens search. Nothing tucks.
+- **Menu drawer (every size, 400px wide at most):** WOMEN / MEN tabs, "Your
+  phone" (the last phone, iPhone or Samsung, the shopper opened or picked),
+  then the menu sections in admin order: the Collections row (its View all
+  opens every collection of the mode inside the drawer, with "Shop all
+  collections" for the page), drill rows (Phone Case > iPhone / Samsung
+  Galaxy > models, newest first, with a "Find your model" filter), Styles
+  with prices, and plain links. Bottom links come from Admin > Navigation.
+  Opening the drawer does not load search; its search field loads it on a
+  press or hover, like the header's search links.
 - **Desktop nav row:** on pages that exist in both modes (cart, account, pages)
   the row follows the same mode as the WOMEN | MEN pill and every other header
   link (the shell's `useAudience()`): Women in the static HTML, then the
@@ -41,7 +49,7 @@ Storefront (`apps/storefront/src`):
 | --- | --- |
 | `app/layout.tsx` | Reads content, case types and devices in parallel and renders `<SiteHeader wire={packHeaderData(buildHeaderData(...))} />`. No cookies, headers or search params. |
 | `lib/header-data.ts` | `buildHeaderData` (one compact `HeaderData`), `packHeaderData` / `unpackHeaderData` (the smaller wire form), `sectionsFor`. |
-| `components/header/site-header.tsx` | The client shell: bar, browse row, skip link, remembered phone, dialogs. |
+| `components/header/site-header.tsx` | The client shell: logo row, phone search row and its tuck, skip link, remembered phone, dialogs. |
 | `components/header/header-dialogs.tsx` | The two native `<dialog>` sheets (menu and search): open, animated close, focus return, `useFocusTrap`, intent preloading. |
 | `components/header/load-on-intent.tsx` | `retryImport`, `loadable`, `LoadBoundary`: lazy parts with one retry and a once-per-build reload. |
 | `components/header/nav-drawer.tsx`, `nav-model.ts` | The drawer's levels (lazy) and their pure helpers. |
@@ -93,7 +101,7 @@ Case styles saves keep the exclusions and link overrides of switched-off case
 types and of case types with no models yet; only a known case type of another
 form is dropped.
 
-`placement` is `all`, `drawer` (phone menu only) or `bar` (desktop only).
+`placement` is `all`, `drawer` (the menu drawer only) or `bar` (the desktop nav row only).
 `image_url` is the round picture in the drawer and the desktop promo. The
 footer is always Links, shown everywhere.
 

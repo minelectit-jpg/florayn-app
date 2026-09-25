@@ -18,11 +18,11 @@ const MenuSection = model.define("menu_section", {
    * lib/menu-section-input.ts for each kind's config.
    */
   kind: model.text().default("links"),
-  /** Round picture in the phone menu and the desktop panel (https). */
+  /** Round picture in the side menu and the desktop panel (https). */
   image_url: model.text().nullable(),
   /** Short pill next to the label, e.g. New. */
   badge: model.text().nullable(),
-  /** all (phone menu and desktop bar), drawer (phone menu only) or bar (desktop only). */
+  /** all (side menu and desktop bar), drawer (side menu only) or bar (desktop bar only). */
   placement: model.text().default("all"),
   /** The automatic kinds' settings; null for links. */
   config: model.json().nullable(),

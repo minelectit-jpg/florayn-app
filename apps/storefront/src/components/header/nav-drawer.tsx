@@ -31,10 +31,11 @@ import { deviceFromPath, phoneOf, readDevice, rememberDevice } from "@/lib/remem
 import { matchesModel } from "@/lib/search/normalize"
 
 /**
- * The phone and tablet menu, CASETiFY style: one level at a time, drilling
- * from the sections (Phone Case, Earbuds, Styles…) to the brands, then to the
- * models, newest first. It renders under the drawer's top bar (search and
- * Close, in the always-loaded shell) and is loaded on intent.
+ * The menu drawer on every screen size, CASETiFY style: one level at a time,
+ * drilling from the sections (Phone Case, Earbuds, Styles…) to the brands,
+ * then to the models, newest first, and from the Collections row to every
+ * collection. It renders under the drawer's top bar (search and Close, in the
+ * always-loaded shell) and is loaded on intent.
  *
  * Only the level on screen is mounted, plus the one leaving while it slides
  * away; each level keeps its scroll and filter for when the shopper comes back.
@@ -48,6 +49,7 @@ type Level =
   | { type: "models"; family: string; section: string | null; shopAll: boolean }
   | { type: "styles"; section: string }
   | { type: "links"; section: string }
+  | { type: "collections"; section: string }
 /** back: the parent's name for the Back button; opener: the data-nav-key of the row that opened it. */
 type Entry = { key: string; level: Level; back: string; opener: string | null }
 type Nav = { session: number; stack: Entry[]; leaving: { entry: Entry; dir: "push" | "back" } | null }
@@ -265,6 +267,7 @@ function LevelBody({ entry, ctx, sections }: { entry: Entry; ctx: Ctx; sections:
   if (!section) return <SubHeader entry={entry} ctx={ctx} />
   if (level.type === "brands") return <BrandsLevel entry={entry} section={section} ctx={ctx} />
   if (level.type === "styles") return <StylesLevel entry={entry} section={section} ctx={ctx} />
+  if (level.type === "collections") return <CollectionsLevel entry={entry} section={section} ctx={ctx} />
   return <LinksLevel entry={entry} section={section} ctx={ctx} />
 }
 
@@ -370,39 +373,41 @@ function linkIcon(href: string) {
   return path === "/account/" ? UserRound : path === "/contact/" ? MessageCircle : ArrowUpRight
 }
 
+/** A card's picture: campaign art cropped to fill, a product render on white contained. */
+function CollectionImage({ image, contain, sizes }: { image: string | null; contain: 0 | 1; sizes: string }) {
+  if (!image) return null
+  return <Image src={image} alt="" fill sizes={sizes} loading="lazy" unoptimized={!OPTIMISED.test(image)} className={contain ? "object-contain p-2" : "object-cover"} />
+}
+
+/** "8 collections", "1 collection". */
+const collectionCount = (count: number) => `${count} collection${count === 1 ? "" : "s"}`
+
+/** The first level's row of collection cards; View all opens every one of them inside the menu. */
 function CollectionsRow({ section, ctx }: { section: NavSection; ctx: Ctx }) {
   const config = collectionsConfig(section)
   const cards = collectionsFor(ctx.data, ctx.audience, config.limit)
   if (!cards.length) return null
+  const opener = `collections:${section.id}`
   return (
     <section className="border-b border-line pb-4 pt-5">
       <div className="flex items-center justify-between gap-3 px-4">
         <h3 className="text-[13px] font-semibold uppercase tracking-[.06em]">{config.title}</h3>
-        <IntentLink
-          href={withAudience(config.view_all_href, ctx.audience)}
-          onClick={ctx.close}
+        <button
+          type="button"
+          data-nav-key={opener}
+          onClick={() => ctx.push({ type: "collections", section: section.id }, MENU, opener)}
           className={`-mr-2 flex h-9 items-center gap-1 rounded-full px-2 text-[13px] font-medium text-ink-muted hover:text-ink ${ROW_FOCUS}`}
         >
           View all
-          <ArrowRight size={14} aria-hidden="true" />
-        </IntentLink>
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
       </div>
-      <ul data-hscroll className="mt-3 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+      <ul data-hscroll className="mt-3 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 pointer-coarse:[scrollbar-width:none] pointer-fine:pb-2 pointer-fine:[scrollbar-width:thin]">
         {cards.map(([slug, title, image, contain]) => (
           <li key={slug} className="w-[104px] shrink-0 snap-start">
             <IntentLink href={withAudience(`/collection/${slug}/`, ctx.audience)} onClick={ctx.close} className={`block rounded-[12px] ${ROW_FOCUS}`}>
               <span className="relative block size-[104px] overflow-hidden rounded-[12px] bg-field">
-                {image ? (
-                  <Image
-                    src={image}
-                    alt=""
-                    fill
-                    sizes="104px"
-                    loading="lazy"
-                    unoptimized={!OPTIMISED.test(image)}
-                    className={contain ? "object-contain p-2" : "object-cover"}
-                  />
-                ) : null}
+                <CollectionImage image={image} contain={contain} sizes="104px" />
               </span>
               <span className="mt-2 line-clamp-2 block text-center text-[13px] leading-[1.25]">{title}</span>
             </IntentLink>
@@ -691,6 +696,40 @@ function StylesLevel({ entry, section, ctx }: { entry: Entry; section: NavSectio
               </li>
             )
           })}
+        </ul>
+      </div>
+    </>
+  )
+}
+
+/** Every collection of the shopper's mode, as a grid inside the menu; the collections page is one tap further. */
+function CollectionsLevel({ entry, section, ctx }: { entry: Entry; section: NavSection; ctx: Ctx }) {
+  const config = collectionsConfig(section)
+  const cards = collectionsFor(ctx.data, ctx.audience, ctx.data.collections.length)
+  return (
+    <>
+      <SubHeader entry={entry} ctx={ctx} />
+      <LevelHeading count={collectionCount(cards.length)}>{config.title}</LevelHeading>
+      <div className="pt-2">
+        <IntentLink
+          href={withAudience(config.view_all_href, ctx.audience)}
+          onClick={ctx.close}
+          className={`flex h-[52px] items-center justify-between gap-2 px-4 text-[15px] font-medium hover:bg-field ${ROW_FOCUS}`}
+        >
+          Shop all {config.title.toLowerCase()}
+          <ArrowRight size={16} className="shrink-0" aria-hidden="true" />
+        </IntentLink>
+        <ul className="grid grid-cols-2 gap-x-3 gap-y-4 px-4 pb-6 pt-2">
+          {cards.map(([slug, title, image, contain]) => (
+            <li key={slug}>
+              <IntentLink href={withAudience(`/collection/${slug}/`, ctx.audience)} onClick={ctx.close} className={`block rounded-[12px] ${ROW_FOCUS}`}>
+                <span className="relative block aspect-square overflow-hidden rounded-[12px] bg-field">
+                  <CollectionImage image={image} contain={contain} sizes="(max-width:454px) calc(44vw - 22px), 178px" />
+                </span>
+                <span className="mt-2 line-clamp-2 block text-center text-[14px] leading-[1.25]">{title}</span>
+              </IntentLink>
+            </li>
+          ))}
         </ul>
       </div>
     </>

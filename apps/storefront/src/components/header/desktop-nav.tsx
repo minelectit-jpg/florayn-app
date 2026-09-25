@@ -11,7 +11,7 @@ import { LoadBoundary, loadable } from "./load-on-intent"
 import type { MegaPanelProps } from "./mega-panel"
 import { collectionsConfig, collectionsFor, familiesOf, stylesOf } from "./nav-model"
 
-/** An owner-set badge ("New") after a label, the same pill as in the phone menu. */
+/** An owner-set badge ("New") after a label, the same pill as in the menu drawer. */
 export function NavBadge({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <span className={`inline-flex items-center rounded-full bg-purple px-1.5 py-[2px] text-[10px] font-bold uppercase leading-[1.2] tracking-[.04em] text-white ${className}`}>

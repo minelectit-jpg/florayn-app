@@ -144,7 +144,7 @@ export function buildHeaderData(content: SiteContent, caseTypes: CaseTypeInfo[],
   }
 }
 
-/** The sections of one mode, for one surface ("drawer" = the phone menu, "bar" = the desktop row). */
+/** The sections of one mode, for one surface ("drawer" = the menu drawer, "bar" = the desktop row). */
 export function sectionsFor(data: HeaderData, audience: "women" | "men", surface: "drawer" | "bar"): NavSection[] {
   const list = audience === "men" && data.men ? data.men : data.women
   return list.filter((s) => s.placement === "all" || s.placement === surface)

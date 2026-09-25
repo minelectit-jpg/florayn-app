@@ -1,7 +1,7 @@
 /*
  * The site header (components/header/*): the two native <dialog> sheets (the
- * menu drawer and search), the row-1 search icon that waits while the browse
- * row's search field is on screen, and the desktop mega panels' entry.
+ * menu drawer and search), the phone header's logo row that tucks away while
+ * scrolling down, and the desktop mega panels' entry.
  * The drawer panel is styled in nav-drawer.css, the search sheet in search.css.
  */
 @layer components {
@@ -16,10 +16,17 @@
   dialog.fl-sheet[data-fallback] { background:rgb(26 22 37 / .4); }
   html:has(dialog.fl-sheet[open]) { overflow:hidden; }
 
-  /* The row-1 search icon keeps its slot but stays hidden while the browse
-     row's field is visible, then fades in once that row scrolls away. */
-  .fl-hdr-search { transition:opacity .15s; }
-  [data-store-header][data-row2]:not([data-row2-gone]) .fl-hdr-search { opacity:0; visibility:hidden; transition:opacity .15s, visibility 0s .15s; }
+  /* Phones and tablets: while scrolling down (site-header.tsx sets data-tuck)
+     the header slides up by its logo row (56px, 64px from 768px), so only the
+     search field stays pinned. A transform: nothing below moves. Keyboard
+     focus inside the header brings the row back. */
+  @media (max-width:1023px) {
+    [data-store-header][data-row2] { transition:transform .25s cubic-bezier(.22,1,.36,1); }
+    [data-store-header][data-row2][data-tuck]:not(:has(:focus-visible)) { transform:translateY(-56px); }
+  }
+  @media (min-width:768px) and (max-width:1023px) {
+    [data-store-header][data-row2][data-tuck]:not(:has(:focus-visible)) { transform:translateY(-64px); }
+  }
 
   /* A desktop mega panel settles in under the nav row. */
   .fl-mega { animation:fl-mega-in .16s var(--ease-brand) both; }
@@ -27,7 +34,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     dialog.fl-sheet::backdrop { transition:none; }
-    .fl-hdr-search, [data-store-header][data-row2]:not([data-row2-gone]) .fl-hdr-search { transition:none; }
+    [data-store-header][data-row2] { transition:none; }
     .fl-mega { animation:none; }
   }
 }

@@ -21,7 +21,7 @@ const target = (option: Audience) =>
  * chosen mode, so nothing sends the shopper back. The other mode's page starts
  * loading on hover or touch, not on every page view. `pill` is the desktop
  * header control; `compact` is the small switch beside the phone header's
- * search field; `tabs` is the full-width bar at the top of the phone menu.
+ * search field; `tabs` is the full-width bar at the top of the menu drawer.
  */
 export default function AudienceToggle({ variant, className = "" }: { variant: "pill" | "tabs" | "compact"; className?: string }) {
   const pathname = usePathname()

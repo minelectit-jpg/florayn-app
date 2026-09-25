@@ -143,7 +143,8 @@ test("the first level: the mode tabs, the drawer's sections in order, the bottom
   assert.match(html, />E<\/span><\/span><span class="text-\[15px\] font-medium">Earbuds/, "no picture: the first letter")
   // Collections: Women's two, campaign pictures cropped, product art contained.
   assert.match(html, /<ul data-hscroll="true"/)
-  assert.deepEqual(hrefs(html).filter((h) => h.startsWith("/collection")), ["/collections/", "/collection/leopard/", "/collection/floral/", "/collection/sale/"])
+  assert.deepEqual(hrefs(html).filter((h) => h.startsWith("/collection")), ["/collection/leopard/", "/collection/floral/", "/collection/sale/"])
+  assert.match(html, /<button type="button" data-nav-key="collections:collections"[^>]*>View all<svg/, "View all opens the list inside the menu")
   assert.match(html, /leopard.jpg" sizes="104px" loading="lazy" class="object-cover"/)
   assert.match(html, /floral.webp" sizes="104px" loading="lazy" class="object-contain p-2"/)
   assert.deepEqual(hrefs(html).slice(-3), ["/account/", "/contact/", "/size-guide/"])
@@ -295,6 +296,26 @@ test("a WOMEN/MEN switch in flight survives the drawer mounting its tabs; only a
   assert.deepEqual(calls, [null], "the new page clears it")
   header()
   assert.deepEqual(calls, [null], "once")
+})
+
+test("collections: View all lists every collection of the mode inside the menu, with the page one tap away", () => {
+  const many = { ...data, collections: [...data.collections, ...Array.from({ length: 10 }, (_, i) => [`extra-${i}`, `Extra ${i}`, `${R2}/c/extra-${i}.webp`, 0, 1])] }
+  const html = render({ data: many, pathname: "/" }, { nav: at({ type: "collections", section: "collections" }, "Menu", "collections:collections") })
+  assertNoNestedControls(html)
+  assert.match(html, /<span class="sr-only">Back to <\/span>Menu<\/span><\/button>/)
+  assert.match(html, /<h2 tabindex="-1"[^>]*>Collections<span[^>]*>12 collections<\/span><\/h2>/, "Women's 12: more than the row's limit of 8 would show")
+  const links = hrefs(html)
+  assert.equal(links[0], "/collections/", "Shop all first")
+  assert.match(html, /Shop all collections/)
+  assert.deepEqual(links.slice(1), ["/collection/leopard/", "/collection/floral/", ...Array.from({ length: 10 }, (_, i) => `/collection/extra-${i}/`)])
+  assert.match(html, /<ul class="grid grid-cols-2 /)
+  assert.match(html, /leopard.jpg" sizes="\(max-width:454px\) calc\(44vw - 22px\), 178px" loading="lazy" class="object-cover"/)
+  assert.match(html, /floral.webp" sizes="[^"]*" loading="lazy" class="object-contain p-2"/, "product art contained")
+  assert.doesNotMatch(html, /cars/, "a Men-only collection stays out of Women")
+
+  const men = render({ data: many, pathname: "/men/", audience: "men" }, { audience: "men", nav: at({ type: "collections", section: "collections" }, "Menu", "collections:collections") })
+  assert.deepEqual(hrefs(men), ["/men/collections/", "/men/collection/leopard/", "/men/collection/cars/"])
+  assert.match(men, />2 collections</)
 })
 
 test("links: Shop all first, group headings, badges", () => {
