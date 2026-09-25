@@ -85,7 +85,32 @@ export function buildCatalog(products: any[]): Catalog {
   return catalog
 }
 
-const isAirpods = (model: string) => /\bairpods\b/i.test(model)
+/**
+ * The product form a florayn.com model belongs to. A design can have up to
+ * four products here (phone, -airpods, -watch, -wallet) under one design name.
+ */
+export function modelForm(model: string): "airpods" | "watch" | "wallet" | "phone" {
+  if (/\bairpods\b/i.test(model)) return "airpods"
+  if (/\bwatch\b/i.test(model)) return "watch"
+  if (/\bwallet\b/i.test(model)) return "wallet"
+  return "phone"
+}
+/** A product's form, reading a missing form as a phone product. */
+const formOf = (p: CatalogProduct) => (p.form ?? "phone")
+
+/**
+ * The design's product for a model: the one that actually sells that model;
+ * otherwise the design's product in the model's form. Never a product of
+ * another form (a phone case line never lands on the AirPods or watch product).
+ */
+function productForModel(designs: CatalogProduct[], model: string): CatalogProduct | undefined {
+  const selling = designs.filter((p) => forModel(p, model).variants.length)
+  if (selling.length) return selling.find((p) => formOf(p) === modelForm(model)) ?? selling[0]
+  const form = modelForm(model)
+  // "Black - StickPad Pro" is a colour and an accessory, not a design "Black".
+  if (form === "phone" && !/\b(iphone|samsung|galaxy|pixel|oneplus|xiaomi|redmi)\b/i.test(model)) return undefined
+  return designs.find((p) => formOf(p) === form)
+}
 
 /** The variants of `product` for a model, and the one to show (Signature first, as the shop's default case). */
 function forModel(product: CatalogProduct, model: string) {
@@ -105,12 +130,10 @@ function byOptionValue(product: CatalogProduct, value: string): CatalogVariant |
 export function matchLine(title: string, catalog: Catalog): LineMatch | null {
   const [left, right] = splitLineTitle(title)
 
-  // "<Design> - <Model>": the design's product in the model's form.
+  // "<Design> - <Model>": the design's product that sells that model.
   if (right) {
     const designs = catalog.byDesign.get(nameKey(left)) ?? []
-    const wantAirpods = isAirpods(right)
-    const product = designs.find((p) => (wantAirpods ? p.form === "airpods" : p.form !== "airpods"))
-      ?? (designs.length === 1 && !wantAirpods ? designs[0] : undefined)
+    const product = productForModel(designs, right)
     if (product) {
       const { variants, shown } = forModel(product, right)
       return {

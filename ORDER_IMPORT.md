@@ -63,6 +63,19 @@ store.
   - Then the old copy is deleted, and the order number sequence is set after
     the highest number.
   - The drawer shows how many imports are outdated.
+- **Every step can be repeated.** Each run first finds every copy of a
+  WooCommerce order by `metadata.wc_order_id`.
+  - It adopts a copy the current version already wrote, keeps one workflow row
+    (the tracked order's, with its note) and deletes the rest.
+  - So a run stopped part-way (a deploy, a restart) is finished by the next
+    one without duplicates.
+- **Reviews follow a rebuilt order.**
+  - `product_review.order_id` moves to the new order.
+  - The new order lists its old ids in `metadata.replaced_order_ids`, so a
+    review link sent before the rebuild still opens (`inviteFromToken`).
+- **An old import that florayn.com no longer lists** (trashed or deleted
+  there) is marked `metadata.wc_missing` at the end of a full run. It is left
+  as it was and no longer counted as outdated.
 - **Products are matched by name** (`lib/florayn-import-match.ts`), because
   florayn.com sold every design-and-model as its own product.
   - "Design - Model Case" goes to the design's product (the AirPods product

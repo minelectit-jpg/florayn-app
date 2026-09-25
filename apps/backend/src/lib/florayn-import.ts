@@ -1,5 +1,6 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
+import { CONTENT_MODULE } from "../modules/content"
 import { localMobile, NO_EMAIL_DOMAIN, realEmail } from "./contact"
 import { buildCatalog, matchLine, type LineMatch } from "./florayn-import-match"
 import { opsService, type WorkflowStatus } from "./order-ops"
@@ -328,10 +329,12 @@ export type ImportProgress = {
   /** Line items linked to a product in this store, of all line items written. */
   linked: number
   lines: number
+  /** Older imports whose order florayn.com no longer lists (left as they are). */
+  missing: number
   errors: { id: string; message: string }[]
 }
 
-export const emptyProgress = (): ImportProgress => ({ total: 0, seen: 0, created: 0, rebuilt: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, adjusted: 0, linked: 0, lines: 0, errors: [] })
+export const emptyProgress = (): ImportProgress => ({ total: 0, seen: 0, created: 0, rebuilt: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, adjusted: 0, linked: 0, lines: 0, missing: 0, errors: [] })
 
 export async function getImportSettings(container: any): Promise<any> {
   const svc = opsService(container)
@@ -366,6 +369,7 @@ export async function outdatedImports(container: any): Promise<number> {
   const [{ count }] = await knex("order")
     .whereNull("deleted_at")
     .whereRaw("metadata->>'source' = ?", [IMPORT_SOURCE])
+    .whereRaw("coalesce(metadata->>'wc_missing', 'false') <> 'true'")
     .andWhere((w: any) => w.whereRaw("metadata->>'import_version' is null").orWhereRaw("(metadata->>'import_version')::int < ?", [IMPORT_VERSION]))
     .count({ count: "id" })
   return Number(count) || 0
@@ -483,74 +487,117 @@ export async function runFloraynImport(container: any, fetchImpl: Fetch = fetch)
       return created
     }
 
+    const content: any = container.resolve(CONTENT_MODULE)
+    const upToDate = (order: any) => Number(order?.metadata?.import_version) === IMPORT_VERSION
+    const seen = new Set<string>()
+
     for (let page = 1; ; page++) {
       const { data, total } = await wcGet(settings, "orders", { per_page: PAGE, page, orderby: "id", order: "asc" }, fetchImpl)
       const batch: WcOrder[] = Array.isArray(data) ? data : []
       if (page === 1) progress.total = total || batch.length
       if (!batch.length) break
-      const known = await svc.listImportedOrders({ source: IMPORT_SOURCE, source_id: batch.map((o) => String(o.id)) }, { take: batch.length })
+      const wcIds = batch.map((o) => String(o.id))
+      const known = await svc.listImportedOrders({ source: IMPORT_SOURCE, source_id: wcIds }, { take: batch.length })
       const bySource = new Map<string, any>(known.map((row: any) => [row.source_id, row]))
-      const currentOrders = known.length
-        ? await orders.listOrders({ id: known.map((row: any) => row.order_id) }, { take: known.length, select: ["id", "display_id", "customer_id", "metadata"] })
-        : []
-      const orderById = new Map<string, any>(currentOrders.map((o: any) => [o.id, o]))
+      // Every copy of these orders here, including any an interrupted run left.
+      const copyRows: any[] = await knex("order")
+        .whereNull("deleted_at")
+        .whereRaw("metadata->>'source' = ?", [IMPORT_SOURCE])
+        .whereIn(knex.raw("metadata->>'wc_order_id'"), wcIds)
+        .select("id", "display_id", "customer_id", "metadata")
+      const copiesByWc = new Map<string, any[]>()
+      for (const row of copyRows) {
+        const key = String(row.metadata?.wc_order_id)
+        copiesByWc.set(key, [...(copiesByWc.get(key) ?? []), row])
+      }
 
       for (const wc of batch) {
         progress.seen++
+        const wcId = String(wc.id)
+        seen.add(wcId)
         try {
           const status = mapWcStatus(wc.status)
           if (!status) { progress.skipped++; continue }
-          const existing = bySource.get(String(wc.id))
-          const current = existing ? orderById.get(existing.order_id) : null
+          const existing = bySource.get(wcId) ?? null
+          const copies = copiesByWc.get(wcId) ?? []
+          const current = existing ? copies.find((o) => o.id === existing.order_id) ?? null : null
 
-          if (existing && current && current.metadata?.import_version === IMPORT_VERSION) {
+          if (existing && current && upToDate(current) && copies.length === 1) {
             if (existing.source_status === wc.status) { progress.unchanged++; continue }
-            const [op] = await svc.listOrderOps({ order_id: existing.order_id }, { take: 1 })
+            const [op] = await svc.listOrderOps({ order_id: current.id }, { take: 1 })
             const changedAt = parseWcDate(wc.date_modified_gmt) ?? new Date()
             if (op) await svc.updateOrderOps({ id: op.id, workflow_status: status.workflow, status_changed_at: changedAt })
-            await orders.updateOrders(existing.order_id, { status: status.order, metadata: { ...(current.metadata ?? {}), wc_status: wc.status } })
+            await orders.updateOrders(current.id, { status: status.order, metadata: { ...(current.metadata ?? {}), wc_status: wc.status } })
             await svc.updateImportedOrders({ id: existing.id, source_status: wc.status, source_modified_at: changedAt })
             progress.updated++
             continue
           }
 
-          const contact = orderContact(wc)
-          const customerId = current?.customer_id ?? (await customerFor(container, contact))
-          const mapped = mapWcOrder(wc, { ...base, customerId, displayId: current?.display_id ?? null })!
-
-          if (existing) {
-            // Rebuild under the same number; the workflow row (status, note) moves across.
-            const created = await write(mapped, current?.display_id ?? null)
-            const [op] = await svc.listOrderOps({ order_id: existing.order_id }, { take: 1 })
-            if (op) {
-              await svc.updateOrderOps({
-                id: op.id,
-                order_id: created.id,
-                ...(existing.source_status !== wc.status ? { workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt } : {}),
-              })
-            } else {
-              const fresh = await svc.createOrderOps({ order_id: created.id, workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt, source: IMPORT_SOURCE })
-              await knex("order_op").where({ id: fresh.id }).update({ created_at: mapped.createdAt })
-            }
-            await svc.updateImportedOrders({ id: existing.id, order_id: created.id, source_status: wc.status, source_modified_at: mapped.modifiedAt })
-            if (current) await orders.deleteOrders([current.id])
-            progress.rebuilt++
-            continue
+          // Write (or rebuild) the order. Each step can be repeated: a copy this
+          // version already wrote is adopted rather than written again, so a run
+          // stopped part-way is finished by the next one without duplicates.
+          const reused = (current && upToDate(current) ? current : null) ?? copies.find(upToDate) ?? null
+          let target: any = reused
+          let targetMeta: Record<string, unknown> = reused?.metadata ?? {}
+          if (!target) {
+            const keepNumber = current?.display_id ?? copies[0]?.display_id ?? null
+            const customerId = current?.customer_id ?? copies[0]?.customer_id ?? (await customerFor(container, orderContact(wc)))
+            const mapped = mapWcOrder(wc, { ...base, customerId, displayId: keepNumber })!
+            target = await write(mapped, keepNumber)
+            targetMeta = mapped.input.metadata
           }
+          const others = copies.filter((o) => o.id !== target.id)
+          const statusAt = parseWcDate(wc.date_completed_gmt) ?? parseWcDate(wc.date_modified_gmt) ?? new Date()
+          const moveStatus = !existing || existing.source_status !== wc.status
 
-          const created = await write(mapped, null)
-          const op = await svc.createOrderOps({ order_id: created.id, workflow_status: mapped.status.workflow, status_changed_at: mapped.statusChangedAt, source: IMPORT_SOURCE })
-          await knex("order_op").where({ id: op.id }).update({ created_at: mapped.createdAt })
-          await svc.createImportedOrders({ source: IMPORT_SOURCE, source_id: String(wc.id), order_id: created.id, source_status: wc.status, source_modified_at: mapped.modifiedAt })
-          progress.created++
+          // One workflow row: the tracked order's (its status and note), else any copy's.
+          const ops: any[] = await svc.listOrderOps({ order_id: [target.id, ...others.map((o) => o.id)] }, { take: 20 })
+          const keep = ops.find((op) => op.order_id === existing?.order_id) ?? ops.find((op) => op.order_id === target.id) ?? ops[0] ?? null
+          if (keep) {
+            await svc.updateOrderOps({ id: keep.id, order_id: target.id, source: IMPORT_SOURCE, ...(moveStatus ? { workflow_status: status.workflow, status_changed_at: statusAt } : {}) })
+          } else {
+            const fresh = await svc.createOrderOps({ order_id: target.id, workflow_status: status.workflow, status_changed_at: statusAt, source: IMPORT_SOURCE })
+            await knex("order_op").where({ id: fresh.id }).update({ created_at: parseWcDate(wc.date_created_gmt) ?? new Date() })
+          }
+          const extra = ops.filter((op) => op.id !== keep?.id)
+          if (extra.length) await svc.deleteOrderOps(extra.map((op) => op.id))
+
+          if (existing) await svc.updateImportedOrders({ id: existing.id, order_id: target.id, source_status: wc.status, source_modified_at: parseWcDate(wc.date_modified_gmt) })
+          else await svc.createImportedOrders({ source: IMPORT_SOURCE, source_id: wcId, order_id: target.id, source_status: wc.status, source_modified_at: parseWcDate(wc.date_modified_gmt) })
+
+          if (others.length) {
+            // Reviews and review links already sent follow the order to its new id.
+            const ids = others.map((o) => o.id)
+            const reviews: any[] = await content.listProductReviews({ order_id: ids }, { take: 200, select: ["id"] })
+            if (reviews.length) await content.updateProductReviews(reviews.map((r) => ({ id: r.id, order_id: target.id })))
+            const replaced = [...new Set([
+              ...((targetMeta.replaced_order_ids as string[] | undefined) ?? []),
+              ...ids,
+              ...others.flatMap((o) => (o.metadata?.replaced_order_ids as string[] | undefined) ?? []),
+            ])]
+            await orders.updateOrders(target.id, { metadata: { ...targetMeta, replaced_order_ids: replaced } })
+            await orders.deleteOrders(ids)
+          }
+          if (existing) progress.rebuilt++
+          else progress.created++
         } catch (error: any) {
           progress.failed++
-          if (progress.errors.length < 50) progress.errors.push({ id: String(wc.id), message: String(error?.message ?? error).slice(0, 300) })
+          if (progress.errors.length < 50) progress.errors.push({ id: wcId, message: String(error?.message ?? error).slice(0, 300) })
         }
       }
       await saveProgress(container, settings.id, { progress })
       if (batch.length < PAGE) break
     }
+    // Imports made by an older version whose order florayn.com no longer lists
+    // (trashed or deleted there) cannot be rebuilt: mark them, so they stop
+    // counting as waiting for a rebuild.
+    const imported: any[] = await knex("order")
+      .whereNull("deleted_at")
+      .whereRaw("metadata->>'source' = ?", [IMPORT_SOURCE])
+      .select("id", "metadata")
+    const gone = imported.filter((o) => !upToDate(o) && !o.metadata?.wc_missing && !seen.has(String(o.metadata?.wc_order_id))).map((o) => o.id)
+    if (gone.length) await knex("order").whereIn("id", gone).update({ metadata: knex.raw("metadata || ?::jsonb", [JSON.stringify({ wc_missing: true })]) })
+    progress.missing = gone.length
     // A rebuild writes old numbers back; keep the next new order after the highest one.
     if (progress.rebuilt) {
       await knex.raw(`select setval(pg_get_serial_sequence('"order"', 'display_id'), greatest((select coalesce(max(display_id), 1) from "order"), 1))`)

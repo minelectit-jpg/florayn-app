@@ -23,6 +23,7 @@ function loader(globals = {}) {
       require(name) {
         if (name === "@medusajs/framework/utils") return UTILS
         if (name === "../modules/order-ops") return { ORDER_OPS_MODULE: "order_ops" }
+        if (name === "../modules/content") return { CONTENT_MODULE: "content" }
         if (name.startsWith(".")) {
           const base = path.resolve(path.dirname(file), name)
           if (fs.existsSync(`${base}.ts`)) return load(`${base}.ts`)
@@ -96,6 +97,25 @@ test("florayn.com line names find this store's product, model and colour", () =>
   assert.deepEqual(m("Beige Leather Chain Phone Charm"), { product: "prod_charm", variant: "var_charm_beige", device: null, image: "https://r2/charm.webp" }, "no dash")
   assert.equal(m("Lavender Leather Chain Phone Charm").product, "prod_charm", "a colour no longer sold still links the product")
   assert.equal(m("Linea Mint – iPhone 16 Pro Max Case"), null, "a design this store does not sell stays unlinked")
+})
+
+test("a design's phone, AirPods, watch and wallet products are told apart whatever order they load in", () => {
+  const { buildCatalog, matchLine } = loader()("lib/florayn-import-match.ts")
+  const variant = (id, device, caseType = "Signature") => ({ id, metadata: {}, options: [{ value: caseType, option: { title: "Case Type" } }, { value: device, option: { title: "Device" } }] })
+  const watch = { id: "prod_moon_watch", handle: "moon-drift-watch", title: "Moon Drift - Apple Watch Band", thumbnail: null, metadata: { design_name: "Moon Drift", form: "watch" }, variants: [variant("var_watch", "Apple Watch Band", "Leather")] }
+  const wallet = { id: "prod_moon_wallet", handle: "moon-drift-wallet", title: "Moon Drift - Card Wallet", thumbnail: null, metadata: { design_name: "Moon Drift", form: "wallet" }, variants: [variant("var_wallet", "MagSafe Wallet", "Leather")] }
+  const grapeAir = { id: "prod_grape_air", handle: "grape-goo-airpods", title: "Grape Goo - AirPods Case", thumbnail: null, metadata: { design_name: "Grape Goo", form: "airpods" }, variants: [variant("var_grape_air", "AirPods Pro 3", "Signature Earbuds")] }
+  const black = { id: "prod_black", handle: "black", title: "Black", thumbnail: null, metadata: { design_name: "Black", form: "phone" }, variants: [variant("var_black", "iPhone 16")] }
+  for (const order of [[watch, wallet, ...PRODUCTS], [...PRODUCTS, wallet, watch]]) {
+    const catalog = buildCatalog([...order, grapeAir, black])
+    const product = (title) => matchLine(title, catalog)?.product.id ?? null
+    assert.equal(product("Moon Drift - iPhone 17 Pro Max Case"), "prod_moon")
+    assert.equal(product("Moon Drift - Apple Watch Band"), "prod_moon_watch")
+    assert.equal(product("Moon Drift - MagSafe Wallet"), "prod_moon_wallet")
+    assert.equal(product("Moon Drift - AirPods Pro 3 Case"), "prod_moon_air")
+    assert.equal(product("Grape Goo - iPhone 15 Case"), null, "a phone line never lands on the only AirPods product")
+    assert.equal(product("Black - StickPad Pro"), "prod_stickpad", "a colour before an accessory is not a design called Black")
+  }
 })
 
 const FULL = { ...WC_ORDER, meta_data: [] }
@@ -221,10 +241,33 @@ test("the WooCommerce key goes in the header, falls back to the query on hosts t
   await assert.rejects(wcGet(key, "orders", {}, refuse), /refused the key \(Invalid signature\)/)
 })
 
+/** A stand-in for knex over the harness's orders: the few query shapes the importer uses. */
+function fakeKnex(db) {
+  const knex = (table) => {
+    const q = { ids: null, byId: false }
+    q.whereNull = () => q
+    q.whereRaw = () => q
+    q.andWhere = () => q
+    q.whereIn = (column, values) => { q.ids = values.map(String); q.byId = column === "id"; return q }
+    q.select = async () => db.orders
+      .filter((o) => o.metadata?.source === "florayn.com" && (!q.ids || q.ids.includes(q.byId ? o.id : String(o.metadata?.wc_order_id))))
+      .map((o) => ({ ...o, metadata: { ...o.metadata } }))
+    q.where = ({ id }) => ({ update: async (values) => {
+      db.dates.push({ table, id, ...plain(values) })
+      const row = table === "order" ? db.orders.find((o) => o.id === id) : null
+      if (row && values.display_id) row.display_id = values.display_id
+    } })
+    q.update = async () => { for (const o of db.orders.filter((o) => q.ids?.includes(o.id))) o.metadata = { ...o.metadata, wc_missing: true } }
+    return q
+  }
+  knex.raw = (sql) => { db.raw.push(sql); return sql }
+  return knex
+}
+
 function importHarness(pages, seed = {}) {
   const db = {
     imports: [{ id: "oimp_1", site_url: "https://florayn.com", consumer_key: "ck_x", consumer_secret: "cs_y", state: "idle" }],
-    imported: seed.imported ?? [], ops: seed.ops ?? [], orders: seed.orders ?? [], deleted: [],
+    imported: seed.imported ?? [], ops: seed.ops ?? [], orders: seed.orders ?? [], reviews: seed.reviews ?? [], deleted: [],
     customers: [{ id: "cus_account", email: "known@example.com", has_account: true }], dates: [], raw: [],
   }
   let nextOrder = db.orders.length
@@ -235,9 +278,10 @@ function importHarness(pages, seed = {}) {
     listImportedOrders: async ({ source_id }) => db.imported.filter((r) => source_id.includes(r.source_id)),
     createImportedOrders: async (row) => { db.imported.push({ id: `impo_${db.imported.length}`, ...row }) },
     updateImportedOrders: async (patch) => Object.assign(db.imported.find((r) => r.id === patch.id), patch),
-    listOrderOps: async ({ order_id }) => db.ops.filter((o) => o.order_id === order_id),
+    listOrderOps: async ({ order_id }) => db.ops.filter((o) => (Array.isArray(order_id) ? order_id.includes(o.order_id) : o.order_id === order_id)),
     updateOrderOps: async (patch) => Object.assign(db.ops.find((o) => o.id === patch.id), patch),
-    createOrderOps: async (row) => { const op = { id: `oop_${db.ops.length}`, ...row }; db.ops.push(op); return op },
+    createOrderOps: async (row) => { const op = { id: `oop_${db.ops.length}_${Math.random().toString(36).slice(2, 6)}`, ...row }; db.ops.push(op); return op },
+    deleteOrderOps: async (ids) => { db.ops = db.ops.filter((o) => !ids.includes(o.id)) },
   }
   const services = {
     logger: { info() {}, warn() {}, error() {} },
@@ -245,21 +289,21 @@ function importHarness(pages, seed = {}) {
     region: { listRegions: async () => [{ id: "reg_bd" }] },
     store: { listStores: async () => [{ id: "s", default_sales_channel_id: "sc_1" }] },
     query: { graph: async () => ({ data: PRODUCTS }) },
+    content: {
+      listProductReviews: async ({ order_id }) => db.reviews.filter((r) => order_id.includes(r.order_id)),
+      updateProductReviews: async (patches) => { for (const p of patches) Object.assign(db.reviews.find((r) => r.id === p.id), p) },
+    },
     customer: {
       listCustomers: async ({ email }) => db.customers.filter((c) => c.email === email),
       createCustomers: async (row) => { const c = { id: `cus_${db.customers.length}`, ...row }; db.customers.push(c); return c },
     },
     order: {
-      createOrders: async (input) => { const o = { id: `order_new${nextOrder++}`, display_id: 5000 + nextOrder, ...plain(input) }; db.orders.push(o); return o },
+      createOrders: async (input) => { if (seed.failCreate?.()) throw new Error("create failed"); const o = { id: `order_new${nextOrder++}`, display_id: 5000 + nextOrder, ...plain(input) }; db.orders.push(o); return o },
       listOrders: async ({ id }) => db.orders.filter((o) => (Array.isArray(id) ? id.includes(o.id) : o.id === id)),
       updateOrders: async (id, patch) => Object.assign(db.orders.find((o) => o.id === id), plain(patch)),
       deleteOrders: async (ids) => { db.deleted.push(...ids); db.orders = db.orders.filter((o) => !ids.includes(o.id)) },
     },
-    pg: Object.assign((table) => ({ where: ({ id }) => ({ update: async (values) => {
-      db.dates.push({ table, id, ...plain(values) })
-      const row = table === "order" ? db.orders.find((o) => o.id === id) : null
-      if (row && values.display_id) row.display_id = values.display_id
-    } }) }), { raw: async (sql) => { db.raw.push(sql) } }),
+    pg: fakeKnex(db),
   }
   const fetch = async (url) => {
     const u = new URL(String(url))
@@ -288,10 +332,10 @@ test("the import creates each order once on its customer, marks it as florayn.co
   assert.equal(h.db.orders[0].customer_id, h.db.orders[2].customer_id, "one customer per phone number")
   assert.equal(h.db.orders[1].customer_id, "cus_account", "an existing account keeps its history")
   assert.ok(h.db.ops.every((op) => op.source === "florayn.com"))
-  assert.equal(h.db.ops[1].workflow_status, "shipped")
+  assert.equal(h.db.ops.find((op) => op.order_id === h.db.orders[1].id).workflow_status, "shipped")
   assert.ok(h.db.dates.some((d) => d.table === "order" && d.created_at === "2026-09-18T04:50:46.000Z"), "the order keeps its florayn.com date")
   assert.equal(h.db.imports[0].state, "done")
-  assert.equal(h.db.raw.length, 0, "nothing rebuilt, the order number sequence is left alone")
+  assert.ok(!h.db.raw.some((sql) => /setval/.test(sql)), "nothing rebuilt, the order number sequence is left alone")
 
   orders = orders.map((o) => (o.id === 2 ? { ...o, status: "completed", date_modified_gmt: "2026-09-25T10:00:00" } : o))
   const second = await h.run()
@@ -299,17 +343,20 @@ test("the import creates each order once on its customer, marks it as florayn.co
   assert.equal(second.updated, 1)
   assert.equal(second.unchanged, 2)
   assert.equal(h.db.orders.length, 3, "nothing duplicated")
-  assert.equal(h.db.ops[1].workflow_status, "delivered")
+  assert.equal(h.db.ops.find((op) => op.order_id === h.db.orders[1].id).workflow_status, "delivered")
   assert.equal(h.db.orders[1].status, "completed")
   assert.equal(h.db.orders[1].metadata.wc_status, "completed")
 })
 
-test("an order imported by the first version is rebuilt under its own number, keeping its workflow row", async () => {
+const V1 = (id, extra = {}) => ({ id, display_id: 469, customer_id: "cus_old", metadata: { source: "florayn.com", wc_order_id: "7", wc_status: "completed", ...extra } })
+
+test("an order imported by the first version is rebuilt under its own number, keeping its workflow row, reviews and review links", async () => {
   const wc = order([1400, 750], 115, 2000, { _otm_courier_cod_amount: "2000" })
   const h = importHarness(() => [[{ ...wc, id: 7, number: "7" }]], {
-    orders: [{ id: "order_old", display_id: 469, customer_id: "cus_old", metadata: { source: "florayn.com", wc_status: "completed" } }],
+    orders: [V1("order_old")],
     ops: [{ id: "oop_old", order_id: "order_old", workflow_status: "delivered", note: "called the customer", source: "florayn.com" }],
     imported: [{ id: "impo_old", source: "florayn.com", source_id: "7", order_id: "order_old", source_status: "completed" }],
+    reviews: [{ id: "review_1", order_id: "order_old" }],
   })
   const run = await h.run()
   assert.equal(run.rebuilt, 1)
@@ -321,17 +368,53 @@ test("an order imported by the first version is rebuilt under its own number, ke
   assert.equal(fresh.display_id, 469, "same order number")
   assert.equal(fresh.customer_id, "cus_old", "same customer")
   assert.equal(fresh.metadata.import_version, 2)
+  assert.deepEqual(fresh.metadata.replaced_order_ids, ["order_old"], "a review link sent for the old id still finds it")
+  assert.equal(h.db.ops.length, 1)
   assert.equal(h.db.ops[0].order_id, fresh.id, "the workflow row moved across")
   assert.equal(h.db.ops[0].note, "called the customer", "with the admin's note")
   assert.equal(h.db.imported[0].order_id, fresh.id)
-  assert.match(h.db.raw[0], /setval\(pg_get_serial_sequence\('"order"', 'display_id'\)/, "new orders carry on after the highest number")
+  assert.equal(h.db.reviews[0].order_id, fresh.id, "the order's review follows it")
+  assert.ok(h.db.raw.some((sql) => /setval\(pg_get_serial_sequence\('"order"', 'display_id'\)/.test(sql)), "new orders carry on after the highest number")
 
   const again = await h.run()
   assert.equal(again.rebuilt, 0)
   assert.equal(again.unchanged, 1, "a rebuilt order is left alone next time")
 })
 
+test("a rebuild that stopped part-way is finished by the next run, never duplicated", async () => {
+  const wc = { ...order([1400], 60, 1460), id: 7, number: "7" }
+  // The last run wrote the v2 copy, then stopped before moving the workflow row and deleting the old order.
+  const h = importHarness(() => [[wc]], {
+    orders: [V1("order_old"), { id: "order_half", display_id: 469, customer_id: "cus_old", metadata: { source: "florayn.com", wc_order_id: "7", import_version: 2 } }],
+    ops: [{ id: "oop_old", order_id: "order_old", workflow_status: "delivered", note: "keep me", source: "florayn.com" }],
+    imported: [{ id: "impo_old", source: "florayn.com", source_id: "7", order_id: "order_old", source_status: "completed" }],
+  })
+  const run = await h.run()
+  assert.equal(run.failed, 0)
+  assert.deepEqual(h.db.orders.map((o) => o.id), ["order_half"], "the half-built copy is adopted, not written again")
+  assert.deepEqual(h.db.ops.map((op) => [op.order_id, op.note]), [["order_half", "keep me"]])
+  assert.equal(h.db.imported[0].order_id, "order_half")
 
+  // A run that wrote a copy and died before recording it: two copies, no imported row.
+  const dup = importHarness(() => [[wc]], {
+    orders: [{ id: "order_a", display_id: 900, customer_id: "c", metadata: { source: "florayn.com", wc_order_id: "7", import_version: 2 } }, { id: "order_b", display_id: 900, customer_id: "c", metadata: { source: "florayn.com", wc_order_id: "7", import_version: 2 } }],
+    ops: [{ id: "oop_a", order_id: "order_a", workflow_status: "delivered", source: "florayn.com" }, { id: "oop_b", order_id: "order_b", workflow_status: "delivered", source: "florayn.com" }],
+  })
+  const repaired = await dup.run()
+  assert.equal(repaired.created, 1)
+  assert.equal(dup.db.orders.length, 1, "one order left")
+  assert.equal(dup.db.ops.length, 1, "one workflow row left")
+  assert.equal(dup.db.imported.length, 1)
+  assert.equal(dup.db.imported[0].order_id, dup.db.orders[0].id)
+})
+
+test("an old import florayn.com no longer lists is marked, so it stops waiting for a rebuild", async () => {
+  const h = importHarness(() => [[{ ...WC_ORDER, id: 1, number: "1" }]], { orders: [V1("order_gone", { wc_order_id: "99" })] })
+  const run = await h.run()
+  assert.equal(run.missing, 1)
+  assert.equal(h.db.orders.find((o) => o.id === "order_gone").metadata.wc_missing, true)
+  assert.equal((await h.run()).missing, 0, "marked once")
+})
 
 test("an imported order is never asked for a review automatically", () => {
   const load = (relative) => {

@@ -70,8 +70,21 @@ export async function loadInvite(container: any, orderId: string): Promise<Revie
   }
 }
 
-/** The invite behind a review link, or null when the link is forged or its order gone. */
+/**
+ * The invite behind a review link, or null when the link is forged or its
+ * order gone. An order imported from florayn.com that a later import rebuilt
+ * under a new id lists its old ids (metadata.replaced_order_ids), so a link
+ * sent before the rebuild still opens.
+ */
 export async function inviteFromToken(container: any, token: unknown): Promise<ReviewInvite | null> {
   const orderId = readReviewToken(token)
-  return orderId ? loadInvite(container, orderId) : null
+  if (!orderId) return null
+  const invite = await loadInvite(container, orderId)
+  if (invite) return invite
+  const knex: any = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const row = await knex("order")
+    .whereNull("deleted_at")
+    .whereRaw("metadata->'replaced_order_ids' @> ?::jsonb", [JSON.stringify([orderId])])
+    .first("id")
+  return row ? loadInvite(container, row.id) : null
 }
