@@ -23,15 +23,18 @@ Read [WOMEN_MEN.md](WOMEN_MEN.md) for the WOMEN | MEN switch and
   wordmark, search field with a "/" hint, Account, Bag) and a 48px nav row
   whose sections open panels on hover or with their chevron. "/" or
   Ctrl/Cmd+K opens search. Nothing tucks.
-- **Menu drawer (every size, 400px wide at most):** WOMEN / MEN tabs, "Your
-  phone" (the last phone, iPhone or Samsung, the shopper opened or picked),
-  then the menu sections in admin order: the Collections row (its View all
-  opens every collection of the mode inside the drawer, with "Shop all
+- **Menu drawer (every size, 400px wide at most):** WOMEN / MEN tabs, then
+  the menu sections in admin order: the Collections row (its View all opens
+  every collection of the mode inside the drawer, with "Shop all
   collections" for the page), drill rows (Phone Case > iPhone / Samsung
-  Galaxy > models, newest first, with a "Find your model" filter), Styles
-  with prices, and plain links. Bottom links come from Admin > Navigation.
-  Opening the drawer does not load search; its search field loads it on a
-  press or hover, like the header's search links.
+  Galaxy > models, strictly newest first, with a "Find your model" filter),
+  Styles with prices, and plain links. Bottom links come from Admin >
+  Navigation. There is no "Your phone" card (the owner removed it on
+  2026-09-26); the remembered phone only steers the Styles links and search's
+  "Cases for …" shortcut. Opening the drawer does not load search; its
+  search field loads it on a press, like the header's search links.
+- **Desktop panels:** brands, then every model of the brand in columns; no
+  filter (the owner removed it; the site search finds any model).
 - **Desktop nav row:** on pages that exist in both modes (cart, account, pages)
   the row follows the same mode as the WOMEN | MEN pill and every other header
   link (the shell's `useAudience()`): Women in the static HTML, then the
@@ -57,7 +60,7 @@ Storefront (`apps/storefront/src`):
 | `components/header/search-sheet.tsx`, `search-results.tsx` | The always-mounted search sheet and its lazy results. |
 | `components/header/intent-link.tsx` | A link with prefetch off that prefetches once on pointerdown, touch or focus. |
 | `lib/search/*` | `normalize.ts` (shared matcher), `engine.ts`, `load-index.ts`, `types.ts` (index v2). |
-| `lib/remembered-device.ts` | "Your phone": `localStorage` key `fl_device`. Phones only: write through `phoneSlugs()`, read through `phoneOf()`, so an AirPods, watch-band or wallet page never replaces the phone and an old non-phone value reads as none. |
+| `lib/remembered-device.ts` | The remembered phone (Styles links, search shortcut): `localStorage` key `fl_device`. Phones only: write through `phoneSlugs()`, read through `phoneOf()`, so an AirPods, watch-band or wallet page never replaces the phone and an old non-phone value reads as none. |
 | `app/search-index.json/route.ts` | The edge-cached search index. |
 | `app/search/page.tsx`, `app/men/search/page.tsx` | One static results page per mode. |
 | `app/header.css`, `nav-drawer.css`, `search.css` | Dialog, drawer and search styles (imported by `globals.css`). |

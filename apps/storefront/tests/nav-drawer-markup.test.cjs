@@ -150,16 +150,16 @@ test("the first level: the mode tabs, the drawer's sections in order, the bottom
   assert.deepEqual(hrefs(html).slice(-3), ["/account/", "/contact/", "/size-guide/"])
 })
 
-test("Your phone: the link and the Change button are siblings, never nested", () => {
+test("no Your phone card, even when the shopper's phone is remembered", () => {
   const html = render({ data, pathname: "/" }, { remembered: "iphone-15" })
   assertNoNestedControls(html)
-  assert.match(html, /<div class="mx-4 mt-4 flex overflow-hidden rounded-\[14px\] border border-line"><a href="\/shop\/iphone-15\/"[^>]*>(?:(?!<\/a>).)*Your phone(?:(?!<\/a>).)*iPhone 15(?:(?!<\/a>).)*<\/a><button type="button" data-nav-key="your-phone" aria-label="Change phone"[^>]*>Change<\/button><\/div>/)
+  assert.doesNotMatch(html, /Your phone|Change phone|data-nav-key="your-phone"/)
+  assert.match(html, /<h2 tabindex="-1" class="sr-only">Menu<\/h2><nav data-toggle="tabs">WOMEN MEN<\/nav><div class="pt-2">/, "the tabs, then the sections")
 })
 
 test("Men mode: shop and collection links get /men, shared pages do not", () => {
   const html = render({ data, pathname: "/men/", audience: "men" }, { audience: "men", remembered: "iphone-15" })
   const links = hrefs(html)
-  assert.ok(links.includes("/men/shop/iphone-15/"))
   assert.ok(links.includes("/men/shop/apple-watch-band/"))
   assert.ok(links.includes("/men/collection/leopard/"))
   assert.ok(links.includes("/men/collection/cars/"), "Men's collections")
@@ -192,7 +192,7 @@ test("brands filter: a flat list across the brands, grouped by brand", () => {
   assert.match(none, /<a href="\/contact\/"[^>]*>Can(?:&#x27;|')t find your model\? Message us/)
 })
 
-test("models: newest first under series heads, the shopper's phone pinned and tagged, the current page marked", () => {
+test("models: newest first under series heads, the shopper's phone never pulled to the top or tagged, the current page marked", () => {
   const nav = at({ type: "models", family: "iphone", section: "phone", shopAll: false }, "Phone Case", "family:iphone")
   const html = render({ data, pathname: "/shop/iphone-16-pro/signature/" }, { nav, remembered: "iphone-15" })
   assertNoNestedControls(html)
@@ -200,13 +200,13 @@ test("models: newest first under series heads, the shopper's phone pinned and ta
   assert.match(html, />iPhone<span class="ml-2 text-\[13px\] font-normal text-ink-muted">15 models<\/span><\/h2>/)
   assert.match(html, /placeholder="Search iPhone models"/)
   assert.deepEqual(rows(html), [
-    "iPhone 15",
     "iPhone 17 Pro Max", "iPhone 17 Pro", "iPhone 17 Air", "iPhone 17",
     "iPhone 16 Pro Max", "iPhone 16 Pro", "iPhone 16",
-    "iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15 Plus",
+    "iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15 Plus", "iPhone 15",
     "iPhone 14 Plus", "iPhone 14", "iPhone 13 Pro", "iPhone 13",
   ])
-  assert.match(html, /<a href="\/shop\/iphone-15\/signature\/"[^>]*><span>iPhone 15<\/span><span class="[^"]*"><svg[^>]*>.*?<\/svg>Your phone<\/span><\/a>/, "a check and words, not colour alone")
+  assert.match(html, /<a href="\/shop\/iphone-15\/signature\/"[^>]*><span>iPhone 15<\/span><\/a>/, "the remembered phone is a plain row in its place")
+  assert.doesNotMatch(html, /Your phone/)
   const heads = [...html.matchAll(/<h3[^>]*>([^<]*series)<\/h3>/g)].map((m) => m[1])
   assert.deepEqual(heads, ["iPhone 17 series", "iPhone 16 series", "iPhone 15 series", "iPhone 14 series", "iPhone 13 series"])
   assert.match(html, /<a href="\/shop\/iphone-16-pro\/signature\/" class="[^"]*font-semibold[^"]*" aria-current="page">/)
@@ -248,17 +248,15 @@ test("styles: round pictures, from-prices for the section's form and the Alcanta
   assert.match(buds, /Signature Earbuds<\/span><span[^>]*>from ৳750<\/span>/)
 })
 
-test("a stored AirPods, watch band or wallet is never shown as Your phone", () => {
+test("a stored AirPods or watch band never steers the Styles links, and nothing is pinned", () => {
+  const styles = at({ type: "styles", section: "styles" }, "Menu", "section:styles")
   for (const slug of ["airpods-pro-3", "apple-watch-band"]) {
-    const html = render({ data, pathname: "/" }, { remembered: slug })
-    assert.doesNotMatch(html, /Your phone/, slug)
-    assert.doesNotMatch(html, /Change phone/, slug)
+    const html = render({ data, pathname: "/" }, { nav: styles, remembered: slug })
+    assert.ok(hrefs(html).includes("/shop/iphone-17-pro-max/signature/"), `${slug}: the newest phone, not the stored accessory`)
   }
   const nav = at({ type: "models", family: "airpods", section: "earbuds", shopAll: true }, "Menu", "section:earbuds")
   const list = render({ data, pathname: "/" }, { nav, remembered: "airpods-pro-3" })
   assert.deepEqual(rows(list), ["AirPods 4", "AirPods Pro 3", "AirPods Max"], "nothing pinned")
-  assert.doesNotMatch(list, /Your phone/)
-  assert.match(render({ data, pathname: "/" }, { remembered: "iphone-15" }), /Your phone/, "a phone still is")
 })
 
 test("a WOMEN/MEN switch in flight survives the drawer mounting its tabs; only a new page clears it", () => {

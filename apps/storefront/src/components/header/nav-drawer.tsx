@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, MessageCircle, Smartphone, UserRound } from "lucide-react"
+import { ArrowLeft, ArrowRight, ArrowUpRight, ChevronRight, MessageCircle, UserRound } from "lucide-react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react"
@@ -11,7 +11,6 @@ import {
   caseStyleHref,
   collectionsConfig,
   collectionsFor,
-  devicesConfig,
   exampleQueries,
   familiesOf,
   modelCount,
@@ -45,8 +44,7 @@ import { matchesModel } from "@/lib/search/normalize"
 type Level =
   | { type: "menu" }
   | { type: "brands"; section: string }
-  /** section is null when opened from Your phone's Change. */
-  | { type: "models"; family: string; section: string | null; shopAll: boolean }
+  | { type: "models"; family: string; section: string; shopAll: boolean }
   | { type: "styles"; section: string }
   | { type: "links"; section: string }
   | { type: "collections"; section: string }
@@ -274,7 +272,7 @@ function LevelBody({ entry, ctx, sections }: { entry: Entry; ctx: Ctx; sections:
 /* ------------------------------------------------------------------ Menu */
 
 function MenuLevel({ ctx, sections }: { ctx: Ctx; sections: NavSection[] }) {
-  const { data, audience, remembered } = ctx
+  const { data, audience } = ctx
   const resolved = sections.map((section) => ({ section, to: resolveSection(section, data) }))
 
   function open(section: NavSection, to: ResolvedSection) {
@@ -285,42 +283,10 @@ function MenuLevel({ ctx, sections }: { ctx: Ctx; sections: NavSection[] }) {
     else if (to.type === "links") ctx.push({ type: "links", section: section.id }, MENU, opener)
   }
 
-  // Change opens the phone's brand, with the case type the menu's own phone section uses.
-  function change(device: HeaderDevice) {
-    const section = sections.find((s) => devicesConfig(s)?.families.some((f) => f === device[2]))
-    ctx.push({ type: "models", family: device[2], section: section?.id ?? null, shopAll: false }, MENU, "your-phone")
-  }
-
   return (
     <>
       <h2 tabIndex={-1} className="sr-only">Menu</h2>
       <AudienceToggle variant="tabs" />
-
-      {remembered ? (
-        <div className="mx-4 mt-4 flex overflow-hidden rounded-[14px] border border-line">
-          <IntentLink
-            href={shopHref(remembered, null, data, audience)}
-            onClick={ctx.close}
-            className={`flex min-h-[60px] min-w-0 flex-1 items-center gap-3 px-3.5 hover:bg-field ${ROW_FOCUS}`}
-          >
-            <Smartphone size={20} strokeWidth={1.6} className="shrink-0 text-purple" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[11px] font-semibold uppercase tracking-[.08em] text-ink-muted">Your phone</span>
-              <span className="block truncate text-[15px] font-semibold">{remembered[1]}</span>
-            </span>
-            <ChevronRight size={16} className="shrink-0 text-ink-muted" aria-hidden="true" />
-          </IntentLink>
-          <button
-            type="button"
-            data-nav-key="your-phone"
-            aria-label="Change phone"
-            onClick={() => change(remembered)}
-            className={`min-w-[76px] border-l border-line px-3 text-[13px] font-medium text-purple-deep hover:bg-field ${ROW_FOCUS}`}
-          >
-            Change
-          </button>
-        </div>
-      ) : null}
 
       <div className="pt-2">
         {resolved.map(({ section, to }) => {
@@ -529,7 +495,6 @@ function MatchStatus({ query, count }: { query: string; count: number }) {
 function ModelRow({ device, href, ctx }: { device: HeaderDevice; href: string; ctx: Ctx }) {
   const [slug, name, , badge] = device
   const current = slug === ctx.currentSlug
-  const mine = slug === ctx.remembered?.[0]
   return (
     <li>
       <IntentLink
@@ -540,12 +505,6 @@ function ModelRow({ device, href, ctx }: { device: HeaderDevice; href: string; c
       >
         <span>{name}</span>
         {badge ? <Badge>{badge}</Badge> : null}
-        {mine ? (
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-[.06em] text-purple">
-            <Check size={14} strokeWidth={2.25} aria-hidden="true" />
-            Your phone
-          </span>
-        ) : null}
       </IntentLink>
     </li>
   )
@@ -619,19 +578,18 @@ function BrandsLevel({ entry, section, ctx }: { entry: Entry; section: NavSectio
 }
 
 function ModelsLevel({ entry, level, ctx }: { entry: Entry; level: Extract<Level, { type: "models" }>; ctx: Ctx }) {
-  const { data, audience, remembered } = ctx
+  const { data, audience } = ctx
   const section = ctx.section(level.section)
   const label = (data.families as Record<string, string>)[level.family] || level.family
   const all = modelsOf(data, level.family)
   const query = ctx.query(entry.key)
   const fits = (device: HeaderDevice) => matchesModel(device[1], query)
 
-  // The shopper's phone leads the list, tagged; the rest stay newest first under their series.
-  const pinned = remembered && remembered[2] === level.family && fits(remembered) ? remembered : null
+  // Newest first under their series, the shopper's own phone included (never pulled to the top).
   const groups = seriesGroups(all)
-    .map((group) => ({ ...group, devices: group.devices.filter((d) => d[0] !== remembered?.[0] && fits(d)) }))
+    .map((group) => ({ ...group, devices: group.devices.filter(fits) }))
     .filter((group) => group.devices.length)
-  const matches = [...(pinned ? [pinned] : []), ...groups.flatMap((group) => group.devices)]
+  const matches = groups.flatMap((group) => group.devices)
   const href = (device: HeaderDevice) => shopHref(device, section, data, audience)
 
   function enter() {
@@ -651,7 +609,6 @@ function ModelsLevel({ entry, level, ctx }: { entry: Entry; level: Extract<Level
         <NoMatch query={query} devices={all} ctx={ctx} />
       ) : (
         <>
-          {pinned ? <ul><ModelRow device={pinned} href={href(pinned)} ctx={ctx} /></ul> : null}
           {groups.map((group, i) => (
             <div key={group.heading ?? i}>
               {group.heading ? <Subhead>{group.heading}</Subhead> : null}

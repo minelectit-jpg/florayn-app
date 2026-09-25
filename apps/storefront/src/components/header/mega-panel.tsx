@@ -2,18 +2,16 @@
 
 import { ArrowRight } from "lucide-react"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 
 import { canOptimize } from "@/components/art-image"
 import type { Audience } from "@/lib/audience"
 import type { HeaderData, NavSection } from "@/lib/header-data"
 import { phoneOf, readDevice } from "@/lib/remembered-device"
-import { matchesModel } from "@/lib/search/normalize"
 
 import { NavBadge } from "./desktop-nav"
 import IntentLink from "./intent-link"
-import { caseStyleHref, collectionsConfig, collectionsFor, exampleQueries, familiesOf, modelsOf, sectionForm, seriesGroups, shopHref, styleFromPrice, stylesOf } from "./nav-model"
+import { caseStyleHref, collectionsConfig, collectionsFor, familiesOf, modelsOf, sectionForm, seriesGroups, shopHref, styleFromPrice, stylesOf } from "./nav-model"
 
 export type MegaPanelProps = {
   section: NavSection
@@ -67,34 +65,24 @@ export default function MegaPanel(props: MegaPanelProps) {
 
 /**
  * Brands on the left (hidden for a one-brand section), the active brand's
- * models under series headings in the middle, newest first, with a filter
- * that searches every brand of the section; the section's picture on the right.
+ * models under series headings in the middle, newest first; the section's
+ * picture on the right. Every model is on screen at once, so there is no
+ * filter here (the site search finds any model).
  */
 function DevicesPanel({ section, data, audience, onNavigate }: MegaPanelProps) {
-  const router = useRouter()
   const families = useMemo(() => familiesOf(section, data), [section, data])
   const [active, setActive] = useState(families[0]?.family ?? "")
-  const [query, setQuery] = useState("")
-  const typed = query.trim()
-
-  const groups = useMemo(() => {
-    if (!typed) return seriesGroups(modelsOf(data, active))
-    return families
-      .map((family) => ({ heading: families.length > 1 ? family.label : null, devices: modelsOf(data, family.family).filter((device) => matchesModel(device[1], typed)) }))
-      .filter((group) => group.devices.length > 0)
-  }, [typed, active, data, families])
-  const matches = groups.flatMap((group) => group.devices)
+  const groups = useMemo(() => seriesGroups(modelsOf(data, active)), [active, data])
 
   const rail = families.length > 1
   const columns = [rail ? "200px" : null, "minmax(520px,auto)", section.image ? "260px" : null].filter(Boolean).join(" ")
-  const examples = exampleQueries(families.flatMap((family) => modelsOf(data, family.family)))
 
   return (
     <div className="grid gap-x-8 p-6" style={{ gridTemplateColumns: columns }}>
       {rail ? (
         <ul className="space-y-1 border-r border-line pr-6">
           {families.map((family) => {
-            const on = family.family === active && !typed
+            const on = family.family === active
             return (
               <li key={family.family}>
                 <button
@@ -102,10 +90,7 @@ function DevicesPanel({ section, data, audience, onNavigate }: MegaPanelProps) {
                   aria-pressed={on}
                   onPointerEnter={() => setActive(family.family)}
                   onFocus={() => setActive(family.family)}
-                  onClick={() => {
-                    setActive(family.family)
-                    setQuery("")
-                  }}
+                  onClick={() => setActive(family.family)}
                   className={`flex w-full items-center gap-2 rounded-[10px] px-3 py-2.5 text-left text-[15px] font-medium transition-colors ${on ? "bg-purple-tint text-purple" : "text-ink hover:bg-field"}`}
                 >
                   <span className="flex-1">{family.label}</span>
@@ -118,54 +103,23 @@ function DevicesPanel({ section, data, audience, onNavigate }: MegaPanelProps) {
       ) : null}
 
       <div className="min-w-0">
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || matches.length !== 1) return
-            event.preventDefault()
-            onNavigate()
-            router.push(shopHref(matches[0], section, data, audience))
-          }}
-          placeholder="Find your model"
-          aria-label="Find your model"
-          autoComplete="off"
-          enterKeyHint="go"
-          className="h-10 w-full max-w-[320px] rounded-full bg-field px-4 text-[14px] text-ink placeholder:text-ink-muted"
-        />
-        {groups.length ? (
-          <div className="mt-5 gap-x-8 [columns:170px_3]">
-            {groups.map((group, i) => (
-              <div key={group.heading ?? i} className="mb-5 break-inside-avoid">
-                {group.heading ? <p className="mb-2 text-[14px] font-semibold text-ink">{group.heading}</p> : null}
-                <ul className="space-y-1.5">
-                  {group.devices.map((device) => (
-                    <li key={device[0]}>
-                      <IntentLink href={shopHref(device, section, data, audience)} onClick={onNavigate} className="inline-flex items-center gap-1.5 text-[14px] text-ink-muted transition-colors hover:text-purple">
-                        {device[1]}
-                        {device[3] ? <NavBadge>{device[3]}</NavBadge> : null}
-                      </IntentLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-5 max-w-[360px] text-[14px] text-ink-muted">
-            <p>
-              No model matches “{typed}”.
-              {examples.length ? ` Try ${examples.map((example) => `“${example}”`).join(" or ")}.` : null}
-            </p>
-            {/* Admin > Search: both fields blank hides the help link (as in the menu drawer and search). */}
-            {data.search.help.href && data.search.help.label ? (
-              <IntentLink href={data.search.help.href} onClick={onNavigate} className="mt-2 inline-block font-medium text-purple-deep underline underline-offset-4">
-                {data.search.help.label}
-              </IntentLink>
-            ) : null}
-          </div>
-        )}
+        <div className="gap-x-8 [columns:170px_3]">
+          {groups.map((group, i) => (
+            <div key={group.heading ?? i} className="mb-5 break-inside-avoid">
+              {group.heading ? <p className="mb-2 text-[14px] font-semibold text-ink">{group.heading}</p> : null}
+              <ul className="space-y-1.5">
+                {group.devices.map((device) => (
+                  <li key={device[0]}>
+                    <IntentLink href={shopHref(device, section, data, audience)} onClick={onNavigate} className="inline-flex items-center gap-1.5 text-[14px] text-ink-muted transition-colors hover:text-purple">
+                      {device[1]}
+                      {device[3] ? <NavBadge>{device[3]}</NavBadge> : null}
+                    </IntentLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
 
       {section.image ? <Promo section={section} image={section.image} onNavigate={onNavigate} /> : null}

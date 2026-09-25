@@ -310,12 +310,12 @@ const panel = (id, audience = "women") => {
   return renderToStaticMarkup(React.createElement(MegaPanel, { section: DATA.women.find((s) => s.id === id), data: DATA, audience, onNavigate() {} }))
 }
 
-test("devices panel: brands, models newest first under series, the filter and the promo", () => {
+test("devices panel: brands, models newest first under series, and the promo; no filter", () => {
   const html = panel("phone")
   assert.match(html, /^<div id="mega-phone" role="region" aria-label="Phone Case" class="fl-mega /)
   assert.match(html, /<button type="button" aria-pressed="true"[^>]*><span class="flex-1">iPhone<\/span><span[^>]*>5<\/span><\/button>/)
   assert.match(html, /Samsung Galaxy<\/span><span[^>]*>2</)
-  assert.match(html, /<input type="search"[^>]*placeholder="Find your model"/)
+  assert.doesNotMatch(html, /<input|Find your model/, "every model is on screen: no filter in the panel")
   const models = [...html.matchAll(/href="\/shop\/([a-z0-9-]+)\/signature\/"/g)].map((m) => m[1])
   assert.deepEqual(models, ["iphone-17-pro-max", "iphone-17-pro", "iphone-17", "iphone-16-pro-max", "iphone-16"])
   assert.match(html, /iPhone 17 series[\s\S]*iPhone 16 series/)
@@ -345,19 +345,6 @@ test("styles, collections and link panels", () => {
   const links = panel("gifts")
   assert.match(links, /For her[\s\S]*href="\/collection\/charms\/"[\s\S]*Charms<span[^>]*>Hot</)
   for (const html of [styles, women, links]) assert.deepEqual(nested(html), [])
-})
-
-test("the devices panel's no-match state leaves out a help link the owner blanked", () => {
-  // The filter holds "pixel 9", which matches no model (the query is the panel's only "" state).
-  const typed = { ...React, useState: (initial) => (initial === "" ? ["pixel 9", () => {}] : React.useState(initial)) }
-  const Panel = loader({}, { react: typed })(src("components/header/mega-panel.tsx")).default
-  const phone = DATA.women.find((s) => s.id === "phone")
-  const show = (help) => renderToStaticMarkup(React.createElement(Panel, { section: phone, data: { ...DATA, search: { ...DATA.search, help } }, audience: "women", onNavigate() {} }))
-  const blank = show({ label: "", href: "" })
-  assert.match(blank, /No model matches “pixel 9”/)
-  assert.doesNotMatch(blank, /<a href=""|<a [^>]*><\/a>/, "no empty, unnamed link")
-  assert.doesNotMatch(blank, /underline-offset-4/, "no help link at all")
-  assert.match(show({ label: "Ask us", href: "/contact/" }), /<a href="\/contact\/"[^>]*>Ask us<\/a>/, "a set help link still shows")
 })
 
 test("opening the menu never downloads search: the drawer's search field ignores the focus showModal() gives it", () => {

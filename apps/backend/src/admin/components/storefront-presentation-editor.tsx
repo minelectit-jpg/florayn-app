@@ -245,7 +245,7 @@ export function NavigationPresentationEditor() {
         </div>)}
         <div><Button variant="secondary" disabled={value.drawer_links.length >= 6} onClick={() => set({ drawer_links: [...value.drawer_links, { label: "", href: "" }] })}>Add link</Button></div>
       </div>
-      <Toggle id="navigation-remember-device" label="Remember the shopper's phone" checked={value.remember_device} onChange={(remember_device) => set({ remember_device })} hint="Shows Your phone at the top of the menu and search, from the models the shopper opened on this device. Nothing is sent to the server." />
+      <Toggle id="navigation-remember-device" label="Remember the shopper's phone" checked={value.remember_device} onChange={(remember_device) => set({ remember_device })} hint="Remembers the last phone the shopper opened on this device: the menu's Styles open on it and search offers Cases for that phone. Nothing is sent to the server." />
     </>}
   </Frame>
 }
