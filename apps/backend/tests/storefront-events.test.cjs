@@ -49,6 +49,7 @@ function harness({ variants = {}, options = {}, rebuild, delivery = async () => 
   const lookups = []
   const warnings = []
   const waits = []
+  const stale = []
   let timerId = 0
   const list = (kind, values) => async (filter, config) => {
     lookups.push({ kind, filter: plain(filter), config: plain(config) })
@@ -75,12 +76,13 @@ function harness({ variants = {}, options = {}, rebuild, delivery = async () => 
       invalidated.push(plain(input))
       return delivery(input)
     } },
+    "./tracking/catalog-feed": { markCatalogStale: async (scope) => { stale.push(scope) } },
   }, {
     console: { warn: (message) => warnings.push(message) },
     setTimeout: (fn, wait) => { const id = timerId++; timers.set(id, fn); waits.push(wait); return id },
   })
   return {
-    ...api, container, timers, rebuilt, invalidated, lookups, warnings, waits,
+    ...api, container, timers, rebuilt, invalidated, lookups, warnings, waits, stale,
     send: (name, data = { id: "item" }) => api.queueStorefrontEvent(container, name, data),
     async tick() {
       const entry = timers.entries().next().value
@@ -107,6 +109,7 @@ test("workflow and direct module events coalesce affected cards before one inval
   assert.deepEqual(h.rebuilt, [{ productIds: ["p1", "p2"] }])
   assert.deepEqual(h.invalidated, [{ tags: ["products", "catalog", "stock"] }])
   assert.equal(h.lookups.length, 1)
+  assert.deepEqual(h.stale, [h.container], "a processed batch marks the ad catalog stale")
 })
 
 test("soft-deleted variants and options resolve their original parent without rebuilding the catalogue", async () => {

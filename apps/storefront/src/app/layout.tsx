@@ -7,6 +7,7 @@ import CartDrawer from "@/components/cart-drawer"
 import CartProvider from "@/components/cart-provider"
 import SiteHeader from "@/components/header/site-header"
 import SiteFooter from "@/components/site-footer"
+import TrackerStub from "@/components/tracking/tracker-stub"
 import { getBuildId } from "@/lib/build-id"
 import { getDeviceCatalog } from "@/lib/catalog"
 import { getCaseTypes, getSiteContent } from "@/lib/content"
@@ -56,6 +57,7 @@ export default async function RootLayout({
       <body className="min-h-screen bg-paper text-ink">
         <BuildWatcher buildId={getBuildId()} />
         <PerformanceAuditLoader />
+        <TrackerStub />
         <CartProvider>
           <SiteHeader wire={packHeaderData(buildHeaderData(content, caseTypes, devices))} />
 

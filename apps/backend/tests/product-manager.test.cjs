@@ -91,7 +91,7 @@ test("phone price overrides, foreign variants, duplicate IDs and empty published
   await assert.rejects(prepare({ productId: "p1", variants: [{ id: "v1", images: [] }] }), /at least one image/)
 })
 test("regular inventory endpoint uses the selected published product and exact variant inventory", async () => {
-  const { GET } = load("api/store/stock/route.ts", { "@medusajs/framework/utils": { ContainerRegistrationKeys: { QUERY: "query" } } })
+  const { GET } = load("api/store/stock/route.ts", { "@medusajs/framework/utils": { ContainerRegistrationKeys: { QUERY: "query" } }, "../../../lib/stock-availability": load("lib/stock-availability.ts") })
   let read, result
   const scope = { resolve: () => ({ graph: async (q) => { read = plain(q); return { data: [{ variants: [
     { id: "zero", manage_inventory: true, inventory_items: [] },

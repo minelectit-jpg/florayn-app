@@ -14,6 +14,7 @@ import {
 
 import { rebuildCards } from "./rebuild-cards"
 import { queueStorefrontRevalidation } from "./revalidate-storefront"
+import { markCatalogStale } from "./tracking/catalog-feed"
 
 type Kind = "product" | "variant" | "option" | "catalog" | "stock"
 const kinds = new Map<string, Kind>()
@@ -104,6 +105,8 @@ async function flush() {
     }
     if (batch.rebuildAll) await rebuildCards(batch.container)
     else if (batch.products.size) await rebuildCards(batch.container, { productIds: [...batch.products] })
+    // The ad catalog job rebuilds its variant index and feed; never throws.
+    void markCatalogStale(batch.container)
     const delivered = await queueStorefrontRevalidation({ tags: [...batch.tags] })
     if (!delivered) throw new Error("Storefront event refresh could not be delivered")
   } catch {
