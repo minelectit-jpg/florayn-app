@@ -107,5 +107,8 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/order-ops",
     },
+    {
+      resolve: "./src/modules/tracking",
+    },
   ],
 })

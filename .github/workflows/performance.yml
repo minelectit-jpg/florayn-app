@@ -80,6 +80,13 @@ jobs:
         run: |
           npx medusa exec ./src/scripts/migrate-contact-settings.ts
           npx medusa exec ./src/scripts/migrate-contact-settings.ts apply Migration20260921064114
+      - name: Verify the scoped tracking and privacy migrations preflight and idempotence
+        working-directory: apps/backend
+        run: |
+          npx medusa exec ./src/scripts/migrate-tracking.ts
+          npx medusa exec ./src/scripts/migrate-tracking.ts apply Migration20260928090000
+          npx medusa exec ./src/scripts/migrate-privacy-settings.ts
+          npx medusa exec ./src/scripts/migrate-privacy-settings.ts apply Migration20260928091000
 
   regression:
     runs-on: ubuntu-latest
@@ -125,6 +132,60 @@ jobs:
           trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
           curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:9901/__audit/health
           npm --prefix apps/storefront run build
+        env:
+          NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://127.0.0.1:9901
+          NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: pk_local_fixture_only
+          NEXT_FONT_GOOGLE_MOCKED_RESPONSES: ${{ github.workspace }}/apps/storefront/tests/fixtures/google-fonts.cjs
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  # TRACKING.md section 11 (B7): build the merge-base and the head in this one
+  # job with the same fixture environment and compare them. Never a committed
+  # baseline: hashes and the platform move the numbers between machines.
+  client-budget:
+    name: Client JS budget against the merge-base
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/storefront/package-lock.json
+      - name: Check out the merge-base beside the head
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base_sha=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_sha="$(git merge-base "$PR_BASE_SHA" HEAD || true)"
+          else
+            base_sha="$PUSH_BEFORE_SHA"
+          fi
+          # A new branch pushes an all-zero "before"; a force push can name a commit that is gone.
+          if [ -z "$base_sha" ] || [[ "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            base_sha="$(git rev-parse HEAD~1)"
+          fi
+          echo "Comparing against $base_sha"
+          echo "BASE_SHA=$base_sha" >> "$GITHUB_ENV"
+          git worktree add "$RUNNER_TEMP/base" "$base_sha"
+      - run: npm --prefix apps/storefront ci
+      - run: npm --prefix "$RUNNER_TEMP/base/apps/storefront" ci
+      - name: Build the merge-base and the head against the local synthetic catalog and compare
+        run: |
+          node apps/storefront/tests/fixtures/mock-store-api.cjs > "$RUNNER_TEMP/storefront-fixture.log" 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:9901/__audit/health
+          npm --prefix "$RUNNER_TEMP/base/apps/storefront" run build
+          npm --prefix apps/storefront run build
+          node apps/storefront/scripts/check-client-budget.cjs --base "$RUNNER_TEMP/base/apps/storefront/.next" --head apps/storefront/.next
         env:
           NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://127.0.0.1:9901
           NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: pk_local_fixture_only

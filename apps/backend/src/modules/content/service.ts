@@ -9,6 +9,7 @@ import GalleryVideo from "./models/gallery-video"
 import HomeSection from "./models/home-section"
 import MenuItem from "./models/menu-item"
 import MenuSection from "./models/menu-section"
+import PrivacySetting from "./models/privacy-setting"
 import SeoOverride from "./models/seo-override"
 import SeoSetting from "./models/seo-setting"
 import ProductReview from "./models/product-review"
@@ -17,6 +18,7 @@ class ContentModuleService extends MedusaService({
   ProductReview,
   CheckoutSetting,
   ContactSetting,
+  PrivacySetting,
   HomeSection,
   MenuSection,
   MenuItem,
