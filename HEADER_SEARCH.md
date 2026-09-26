@@ -9,20 +9,20 @@ Read [WOMEN_MEN.md](WOMEN_MEN.md) for the WOMEN | MEN switch and
 
 ## What the shopper sees
 
-- **Phone (under 768px):** one sticky header with two rows: a 56px logo row
-  (Menu on the left, the wordmark in the middle, Account and Bag on the right)
-  and a 52px search row (the search field; on home, shop and collection pages
-  also a compact WOMEN | MEN switch). Every page has the search row except
-  `/search` and `/men/search`, which have their own field. Scrolling down
-  tucks the logo row away (a 56px `translateY`, so nothing below moves) and
-  leaves the search field pinned; scrolling up 8px, returning to the top, or
-  keyboard focus in the header brings it back. `site-header.tsx` sets
-  `data-tuck` on the header from a passive scroll listener; no re-render.
-- **Tablet (768-1023px):** the same, with a 64px logo row.
+- **Phone (under 768px):** one sticky 56px row (the owner's choice,
+  2026-09-26): Menu, the wordmark on the left (92px), the search field filling
+  the middle (about 160px at 360px, 120px at 320px) and Bag. My account is in
+  the menu. `/search` and `/men/search` leave the field out (the page has its
+  own). On home, shop and collection pages a 48px row with the compact
+  WOMEN | MEN switch sits under the header, outside it, and scrolls away.
+  The header never changes height: the product page's quick-buy bar measures
+  it once, and the phone anchors keep a fixed 90px scroll-margin.
+- **Tablet (768-1023px):** the same 64px row with a wider field (up to 440px)
+  and Account.
 - **Desktop (1024px and up):** a 72px row (Menu and the WOMEN | MEN pill,
-  wordmark, search field with a "/" hint, Account, Bag) and a 48px nav row
-  whose sections open panels on hover or with their chevron. "/" or
-  Ctrl/Cmd+K opens search. Nothing tucks.
+  wordmark centred, search field with a "/" hint, Account, Bag) and a 48px
+  nav row whose sections open panels on hover or with their chevron. "/" or
+  Ctrl/Cmd+K opens search.
 - **Menu drawer (every size, 400px wide at most):** WOMEN / MEN tabs, then
   the menu sections in admin order: the Collections row (its View all opens
   every collection of the mode inside the drawer, with "Shop all
@@ -52,7 +52,7 @@ Storefront (`apps/storefront/src`):
 | --- | --- |
 | `app/layout.tsx` | Reads content, case types and devices in parallel and renders `<SiteHeader wire={packHeaderData(buildHeaderData(...))} />`. No cookies, headers or search params. |
 | `lib/header-data.ts` | `buildHeaderData` (one compact `HeaderData`), `packHeaderData` / `unpackHeaderData` (the smaller wire form), `sectionsFor`. |
-| `components/header/site-header.tsx` | The client shell: logo row, phone search row and its tuck, skip link, remembered phone, dialogs. |
+| `components/header/site-header.tsx` | The client shell: the header row (one row on phones with the search field), the WOMEN/MEN row, skip link, remembered phone, dialogs. |
 | `components/header/header-dialogs.tsx` | The two native `<dialog>` sheets (menu and search): open, animated close, focus return, `useFocusTrap`, intent preloading. |
 | `components/header/load-on-intent.tsx` | `retryImport`, `loadable`, `LoadBoundary`: lazy parts with one retry and a once-per-build reload. |
 | `components/header/nav-drawer.tsx`, `nav-model.ts` | The drawer's levels (lazy) and their pure helpers. |

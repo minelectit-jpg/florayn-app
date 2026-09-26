@@ -156,8 +156,8 @@
 
  @media(max-width:767px) {
    .fl-acc { margin-top:16px; }
-   .fl-acc__item[id] { scroll-margin-top:128px; }
-   .fl-reviews { margin-top:24px; padding:16px 14px; border-radius:16px; scroll-margin-top:128px; }
+   .fl-acc__item[id] { scroll-margin-top:90px; }
+   .fl-reviews { margin-top:24px; padding:16px 14px; border-radius:16px; scroll-margin-top:90px; }
    .fl-reviews__header { align-items:flex-start; flex-direction:column; gap:10px; margin-bottom:14px; }
    .fl-reviews__header h2 { font-size:24px; }
    .fl-reviews__header > div > p:last-child { font-size:13px; }

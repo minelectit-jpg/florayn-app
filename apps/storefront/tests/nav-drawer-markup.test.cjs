@@ -307,7 +307,7 @@ test("collections: View all lists every collection of the mode inside the menu, 
   assert.match(html, /Shop all collections/)
   assert.deepEqual(links.slice(1), ["/collection/leopard/", "/collection/floral/", ...Array.from({ length: 10 }, (_, i) => `/collection/extra-${i}/`)])
   assert.match(html, /<ul class="grid grid-cols-2 /)
-  assert.match(html, /leopard.jpg" sizes="\(max-width:454px\) calc\(44vw - 22px\), 178px" loading="lazy" class="object-cover"/)
+  assert.match(html, /leopard.jpg" sizes="\(max-width:454px\) 128px, 178px" loading="lazy" class="object-cover"/)
   assert.match(html, /floral.webp" sizes="[^"]*" loading="lazy" class="object-contain p-2"/, "product art contained")
   assert.doesNotMatch(html, /cars/, "a Men-only collection stays out of Women")
 

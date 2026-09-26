@@ -8,11 +8,8 @@ import { Spinner } from "@/components/ui/button"
 /**
  * True once the element has scrolled up under the sticky header, false while
  * it is on screen or still below. One IntersectionObserver, no scroll or
- * resize listeners; it is rebuilt when the phone header tucks its logo row
- * away or brings it back (data-tuck), so "under the header" always means the
- * part of the header covering the page. It starts false on the server and on
- * the first client render, so the markup is identical until after mount (no
- * hydration mismatch).
+ * resize listeners. It starts false on the server and on the first client
+ * render, so the markup is identical until after mount (no hydration mismatch).
  */
 export function useScrolledPast(ref: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [past, setPast] = useState(false)
@@ -22,25 +19,13 @@ export function useScrolledPast(ref: RefObject<HTMLElement | null>, enabled: boo
       setPast(false)
       return
     }
-    const header = document.querySelector<HTMLElement>("[data-store-header]")
-    let observer: IntersectionObserver | null = null
-    const watch = () => {
-      observer?.disconnect()
-      const tucked = header?.dataset.tuck !== undefined ? (header.firstElementChild as HTMLElement | null)?.offsetHeight ?? 0 : 0
-      const cover = Math.max(0, Math.round((header?.getBoundingClientRect().height ?? 0) - tucked))
-      observer = new IntersectionObserver(
-        ([entry]) => setPast(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? cover)),
-        { rootMargin: `-${cover}px 0px 0px 0px` }
-      )
-      observer.observe(el)
-    }
-    watch()
-    const tuck = header && typeof MutationObserver !== "undefined" ? new MutationObserver(watch) : null
-    if (header) tuck?.observe(header, { attributes: true, attributeFilter: ["data-tuck"] })
-    return () => {
-      tuck?.disconnect()
-      observer?.disconnect()
-    }
+    const header = Math.round(document.querySelector("[data-store-header]")?.getBoundingClientRect().height ?? 0)
+    const observer = new IntersectionObserver(
+      ([entry]) => setPast(!entry.isIntersecting && entry.boundingClientRect.top < (entry.rootBounds?.top ?? header)),
+      { rootMargin: `-${header}px 0px 0px 0px` }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [ref, enabled])
   return past
 }

@@ -84,6 +84,9 @@
 
   .fl-sr-row:focus-visible, .fl-sr-design:focus-visible, .fl-sr-chip:focus-visible,
   .fl-sr-remove:focus-visible, .fl-sr-all:focus-visible, .fl-sr-link:focus-visible { outline:2px solid var(--color-purple); outline-offset:0; }
+  /* A press shows at once, before the next page arrives on slow data (Tailwind's reset hides the tap highlight). */
+  .fl-sr-row:active, .fl-sr-design:active { background:var(--color-field); }
+  .fl-sr-chip:active, .fl-sr-pair:has(.fl-sr-chip:active) { background:var(--color-line); }
   @media (hover:hover) {
     .fl-sr-row:hover, .fl-sr-design:hover { background:var(--color-field); }
     .fl-sr-chip:hover, .fl-sr-remove:hover { color:var(--color-purple-deep); }

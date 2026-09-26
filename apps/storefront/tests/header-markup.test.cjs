@@ -145,8 +145,8 @@ test("the wordmark is an inline SVG sized by attributes, hidden inside the Flora
   const html = render("/")
   const [, attrs] = html.match(/<a[^>]*aria-label="Florayn home"[^>]*><svg([^>]*)>/)
   assert.match(attrs, /viewBox="0 0 4000 648"/)
-  assert.match(attrs, /width="111"/)
-  assert.match(attrs, /height="18"/)
+  assert.match(attrs, /width="92"/)
+  assert.match(attrs, /height="15"/)
   assert.match(attrs, /aria-hidden="true"/)
   assert.doesNotMatch(attrs, /role="img"/)
   assert.doesNotMatch(html, /<img[^>]*logo|FLORAYN<\/a>/i, "never an image or text logo")
@@ -158,53 +158,55 @@ test("the wordmark is an inline SVG sized by attributes, hidden inside the Flora
   assert.match(checkout, /Back to bag/)
 })
 
-test("the phone search field is inside the sticky header on every page but search; WOMEN/MEN only on home, shop and collection pages", () => {
-  const row = (html) => headerOnly(html).match(/<div data-header-row2="true" class="lg:hidden">[\s\S]*?<\/a>(?:<nav[\s\S]*?<\/nav>)?<\/div><\/div>/)?.[0] ?? null
-  for (const at of ["/", "/men/", "/shop/iphone-16/signature/", "/collection/leopard/", "/collections/", "/men/collections/"]) {
-    const html = render(at)
-    assert.match(html, /<header data-store-header="true" data-row2=""/, at)
-    const field = row(html)
-    assert.ok(field, `${at}: the search row is inside <header>`)
-    assert.match(field, /<a href="\/(?:men\/)?search\/"[^>]*class="flex h-11 min-w-0 flex-1/, at)
-    assert.match(field, /fl-audience--compact/, at)
-  }
-  for (const at of ["/product/leopard/", "/men/product/leopard/", "/cart/", "/account/", "/contact/"]) {
-    const html = render(at)
-    assert.match(html, /<header data-store-header="true" data-row2=""/, at)
-    const field = row(html)
-    assert.ok(field, `${at}: the search row is inside <header>`)
-    assert.doesNotMatch(field, /fl-audience/, `${at}: no WOMEN/MEN switch beside the field`)
+test("phones: one row with Menu, the wordmark on the left, the search field and Bag; Account from tablets; no field on the search pages", () => {
+  for (const at of ["/", "/men/", "/product/leopard/", "/shop/iphone-16/signature/", "/cart/", "/account/", "/contact/"]) {
+    const header = headerOnly(render(at))
+    const row = header.match(/^<header[^>]*><div class="([^"]*)">/)[1]
+    assert.equal(row, "mx-auto flex h-14 max-w-[1470px] items-center px-1 md:h-16 md:px-[18px] lg:grid lg:h-[72px] lg:grid-cols-[1fr_auto_1fr] lg:px-[30px]", at)
+    // Order: Menu, the wordmark, the phone field, then Account and Bag.
+    const order = [...header.matchAll(/aria-label="(Open menu|Florayn home|My account|Bag, 0 items)"|data-phone-search="true"/g)].map((m) => m[1] ?? "field")
+    assert.deepEqual(order, ["Open menu", "Florayn home", "field", "My account", "Bag, 0 items"], at)
+    const field = header.match(/<a [^>]*data-phone-search="true"[^>]*>/)[0]
+    assert.match(field, /href="\/(?:men\/)?search\/"/, at)
+    const fieldClass = field.match(/class="([^"]*)"/)[1]
+    assert.equal(fieldClass, "ml-2.5 flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-field px-3 text-[14px] text-ink-muted md:ml-5 md:mr-2 md:max-w-[440px] md:px-4 lg:hidden", `${at}: a 44px field filling the middle, phones and tablets only`)
+    const account = header.match(/<a [^>]*aria-label="My account"[^>]*>/)[0].match(/class="([^"]*)"/)[1].split(" ")
+    assert.ok(account.includes("size-11") && account.includes("max-md:hidden"), `${at}: Account is in the menu on phones, a 44px icon from tablets`)
+    assert.ok(!account.some((c) => /^(?:md|lg):hidden$/.test(c)), `${at}: never hidden on tablets or desktop`)
+    const logo = header.match(/<a [^>]*aria-label="Florayn home"[^>]*>/)[0].match(/class="([^"]*)"/)[1]
+    assert.equal(logo, "ml-0.5 flex h-11 shrink-0 items-center rounded-sm text-ink md:ml-1 lg:ml-0 lg:block lg:h-auto", `${at}: the wordmark link is a 44px target`)
   }
   for (const at of ["/search/", "/men/search/"]) {
-    const html = render(at)
-    assert.doesNotMatch(html, /data-header-row2|data-row2/, `${at} has its own field`)
+    const header = headerOnly(render(at))
+    assert.doesNotMatch(header, /data-phone-search/, `${at} has its own field`)
+    assert.match(header, /aria-label="Bag, 0 items"/)
   }
-  assert.doesNotMatch(render("/"), /fl-audience--tabs/, "the full-width tab bar left the page (it lives in the drawer)")
+  assert.doesNotMatch(render("/"), /fl-audience--tabs/, "the full-width tab bar stays in the drawer")
 })
 
-test("the logo row tucks away only on phones and tablets, by its own height, and never under keyboard focus", () => {
+test("WOMEN/MEN: a small row under the header on home, shop and collection pages only, and it scrolls away", () => {
+  for (const at of ["/", "/men/", "/shop/iphone-16/signature/", "/collection/leopard/", "/collections/", "/men/collections/"]) {
+    const html = render(at)
+    assert.match(html, /<\/header><div data-mode-row="true" class="border-b border-line bg-paper lg:hidden"><div class="mx-auto flex h-12 max-w-\[1470px\] items-center justify-center px-\[15px\]"><nav[^>]*class="fl-audience fl-audience--compact/, `${at}: right after the sticky header, not inside it`)
+    assert.doesNotMatch(headerOnly(html), /fl-audience--compact/, at)
+  }
+  for (const at of ["/product/leopard/", "/men/product/leopard/", "/cart/", "/search/", "/account/", "/contact/"]) {
+    assert.doesNotMatch(render(at), /data-mode-row|fl-audience--compact/, at)
+  }
+})
+
+test("the header keeps one height (nothing tucks), so the quick-buy bar and anchors measure it once; review guards stay", () => {
   const css = fs.readFileSync(src("app/header.css"), "utf8")
-  assert.match(css, /@media \(max-width:1023px\) \{[\s\S]*?\[data-store-header\]\[data-row2\]\[data-tuck\]:not\(:has\(:focus-visible\)\) \{ transform:translateY\(-56px\); \}/)
-  assert.match(css, /@media \(min-width:768px\) and \(max-width:1023px\) \{\s*\[data-store-header\]\[data-row2\]\[data-tuck\]:not\(:has\(:focus-visible\)\) \{ transform:translateY\(-64px\); \}/)
-  assert.doesNotMatch(css, /fl-hdr-search/, "the row-1 search icon is gone")
+  assert.doesNotMatch(css, /data-tuck|data-row2|fl-hdr-search/)
   const shell = fs.readFileSync(src("components/header/site-header.tsx"), "utf8")
-  assert.match(shell, /matchMedia\("\(max-width:1023px\)"\)/, "desktop never tucks")
-  assert.match(shell, /addEventListener\("scroll", onScroll, \{ passive: true \}\)/)
-  assert.doesNotMatch(shell, /useState\([^)]*tuck|setTuck/i, "a DOM attribute, not state")
-  // Checkout swaps in its own <header>: searchRow is false there, so the listener re-attaches to the new header on the way back.
-  assert.match(shell, /const searchRow = !minimal && !SEARCH_PAGE\.test\(plainPath\)/)
-  assert.match(shell, /\}, \[searchRow\]\)/)
-  assert.match(shell, /Math\.min\(Math\.max\(window\.scrollY, 0\), document\.documentElement\.scrollHeight - window\.innerHeight\)/, "an iOS bounce never reads as scrolling up")
-})
-
-test("what the taller phone header changes elsewhere: the quick-buy bar, anchors, and the drawer on desktop", () => {
+  assert.doesNotMatch(shell, /tuck|addEventListener\("scroll"/i, "no scroll listener in the header")
   const bar = fs.readFileSync(src("components/product-buy-bar.tsx"), "utf8")
-  assert.match(bar, /attributeFilter: \["data-tuck"\]/, "the quick-buy bar re-measures when the logo row tucks or comes back")
-  assert.match(bar, /header\?\.getBoundingClientRect\(\)\.height \?\? 0\) - tucked/)
+  assert.match(bar, /const header = Math\.round\(document\.querySelector\("\[data-store-header\]"\)\?\.getBoundingClientRect\(\)\.height \?\? 0\)/)
   const content = fs.readFileSync(src("app/product-content.css"), "utf8")
   const phone = content.slice(content.indexOf("@media(max-width:767px)"))
-  assert.match(phone, /\.fl-acc__item\[id\] \{ scroll-margin-top:128px; \}/, "a #reviews link clears the 109px header")
-  assert.match(phone, /\.fl-reviews \{[^}]*scroll-margin-top:128px; \}/)
+  assert.match(phone, /\.fl-acc__item\[id\] \{ scroll-margin-top:90px; \}/, "sized for the 56px phone header")
+  const home = fs.readFileSync(src("components/home-sections.tsx"), "utf8")
+  assert.ok(home.includes('sizes="(max-width: 430px) 213px, (max-width: 639px) 91vw, (max-width: 767px) 53vw, (max-width: 1023px) 40vw, 300px"'), "the rail caps phones at 640w and follows the drawn card size above 430px")
   const dialogs = fs.readFileSync(src("components/header/header-dialogs.tsx"), "utf8")
   const press = dialogs.match(/export const searchPressIntent = \{[\s\S]*?\}/)[0]
   assert.doesNotMatch(press, /onMouseEnter|onFocus/, "opening the drawer under a resting mouse never loads search")
@@ -218,7 +220,6 @@ test("a solid bar: no backdrop blur, sticky, and the pieces the product page mea
   const header = headerOnly(html)
   assert.doesNotMatch(html, /backdrop-blur|bg-paper\/95/)
   assert.match(header, /^<header data-store-header="true"[^>]*class="sticky top-0 z-40 border-b border-line bg-paper"/)
-  assert.match(header, /grid h-14 max-w-\[1470px\] grid-cols-\[1fr_auto_1fr\][^"]* md:h-16[^"]* lg:h-\[72px\]/)
   assert.match(header, /aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="site-drawer"/)
   const menuButton = header.match(/<button[^>]*aria-label="Open menu"[^>]*>/)[0]
   assert.doesNotMatch(menuButton, /lg:hidden/, "the menu drawer opens on desktop too")

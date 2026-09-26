@@ -57,7 +57,7 @@ const HEADING = "@heading"
 /** The sub-levels' sticky Back bar (h-14): the filter sticks under it. */
 const STICKY_TOP = 56
 const ROW_FOCUS = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-purple"
-const DRILL_ROW = `flex min-h-[72px] w-full items-center gap-3.5 px-4 text-left hover:bg-field ${ROW_FOCUS}`
+const DRILL_ROW = `flex min-h-[72px] w-full items-center gap-3.5 px-4 text-left hover:bg-field active:bg-field ${ROW_FOCUS}`
 /** Only what next.config.ts lets the optimizer fetch; anything else loads as is. */
 const OPTIMISED = /^https:\/\/(?:[^/]+\.r2\.dev|img\.florayn\.com)\//
 const PRICE = new Intl.NumberFormat("en-US")
@@ -321,7 +321,7 @@ function MenuLevel({ ctx, sections }: { ctx: Ctx; sections: NavSection[] }) {
                 key={`${link.label}|${link.href}`}
                 href={withAudience(link.href, audience)}
                 onClick={ctx.close}
-                className={`flex h-12 items-center gap-3 px-4 text-[15px] hover:bg-field ${ROW_FOCUS}`}
+                className={`flex h-12 items-center gap-3 px-4 text-[15px] hover:bg-field active:bg-field ${ROW_FOCUS}`}
               >
                 <Icon size={18} strokeWidth={1.6} className="shrink-0" aria-hidden="true" />
                 {link.label}
@@ -456,7 +456,7 @@ function ShopAll({ section, ctx }: { section: NavSection; ctx: Ctx }) {
     <IntentLink
       href={withAudience(section.href, ctx.audience)}
       onClick={ctx.close}
-      className={`flex h-[52px] items-center justify-between gap-2 px-4 text-[15px] font-medium hover:bg-field ${ROW_FOCUS}`}
+      className={`flex h-[52px] items-center justify-between gap-2 px-4 text-[15px] font-medium hover:bg-field active:bg-field ${ROW_FOCUS}`}
     >
       Shop all {section.label}
       <ArrowRight size={16} className="shrink-0" aria-hidden="true" />
@@ -501,7 +501,7 @@ function ModelRow({ device, href, ctx }: { device: HeaderDevice; href: string; c
         href={href}
         aria-current={current ? "page" : undefined}
         onClick={(event: MouseEvent) => ctx.chooseModel(slug, event)}
-        className={`flex min-h-12 items-center gap-2 px-4 text-[15px] hover:bg-field ${current ? "font-semibold" : ""} ${ROW_FOCUS}`}
+        className={`flex min-h-12 items-center gap-2 px-4 text-[15px] hover:bg-field active:bg-field ${current ? "font-semibold" : ""} ${ROW_FOCUS}`}
       >
         <span>{name}</span>
         {badge ? <Badge>{badge}</Badge> : null}
@@ -559,7 +559,7 @@ function BrandsLevel({ entry, section, ctx }: { entry: Entry; section: NavSectio
               type="button"
               data-nav-key={`family:${f.family}`}
               onClick={() => ctx.push({ type: "models", family: f.family, section: section.id, shopAll: false }, section.label, `family:${f.family}`)}
-              className={`flex min-h-16 w-full items-center gap-3 px-4 text-left hover:bg-field ${ROW_FOCUS}`}
+              className={`flex min-h-16 w-full items-center gap-3 px-4 text-left hover:bg-field active:bg-field ${ROW_FOCUS}`}
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
@@ -642,7 +642,7 @@ function StylesLevel({ entry, section, ctx }: { entry: Entry; section: NavSectio
                 <IntentLink
                   href={caseStyleHref(caseType, section, ctx.data, ctx.audience, ctx.remembered?.[0] ?? null)}
                   onClick={ctx.close}
-                  className={`flex min-h-16 items-center gap-3 px-4 hover:bg-field ${ROW_FOCUS}`}
+                  className={`flex min-h-16 items-center gap-3 px-4 hover:bg-field active:bg-field ${ROW_FOCUS}`}
                 >
                   <RoundImage src={image} label={name} className="size-[44px]" sizes="44px" cover />
                   <span className="min-w-0">
@@ -671,7 +671,7 @@ function CollectionsLevel({ entry, section, ctx }: { entry: Entry; section: NavS
         <IntentLink
           href={withAudience(config.view_all_href, ctx.audience)}
           onClick={ctx.close}
-          className={`flex h-[52px] items-center justify-between gap-2 px-4 text-[15px] font-medium hover:bg-field ${ROW_FOCUS}`}
+          className={`flex h-[52px] items-center justify-between gap-2 px-4 text-[15px] font-medium hover:bg-field active:bg-field ${ROW_FOCUS}`}
         >
           Shop all {config.title.toLowerCase()}
           <ArrowRight size={16} className="shrink-0" aria-hidden="true" />
@@ -681,7 +681,7 @@ function CollectionsLevel({ entry, section, ctx }: { entry: Entry; section: NavS
             <li key={slug}>
               <IntentLink href={withAudience(`/collection/${slug}/`, ctx.audience)} onClick={ctx.close} className={`block rounded-[12px] ${ROW_FOCUS}`}>
                 <span className="relative block aspect-square overflow-hidden rounded-[12px] bg-field">
-                  <CollectionImage image={image} contain={contain} sizes="(max-width:454px) calc(44vw - 22px), 178px" />
+                  <CollectionImage image={image} contain={contain} sizes="(max-width:454px) 128px, 178px" />
                 </span>
                 <span className="mt-2 line-clamp-2 block text-center text-[14px] leading-[1.25]">{title}</span>
               </IntentLink>
@@ -709,7 +709,7 @@ function LinksLevel({ entry, section, ctx }: { entry: Entry; section: NavSection
                   <IntentLink
                     href={withAudience(link.href, ctx.audience)}
                     onClick={ctx.close}
-                    className={`flex min-h-12 items-center gap-2 px-4 text-[15px] hover:bg-field ${ROW_FOCUS}`}
+                    className={`flex min-h-12 items-center gap-2 px-4 text-[15px] hover:bg-field active:bg-field ${ROW_FOCUS}`}
                   >
                     {link.label}
                     {link.badge ? <Badge>{link.badge}</Badge> : null}

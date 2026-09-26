@@ -139,7 +139,7 @@ function RecommendedCard({ item, sizes }: { item: RecommendedItem; sizes: string
       <Link
         href={href}
         aria-label={`${item.name}, ${item.formLabel}${selected ? `, ${selected.label}` : ""}`}
-        className="absolute inset-0 z-[1]"
+        className="absolute inset-0 z-[1] rounded-[inherit] active:bg-ink/5"
         prefetch={false}
       />
 

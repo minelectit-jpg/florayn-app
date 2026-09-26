@@ -24,17 +24,18 @@ the owner's choice.
   mismatch.
 - `components/audience-toggle.tsx` is the switch, in three variants:
   - `pill`: a sliding pill in the desktop header
-  - `compact`: a small WOMEN | MEN switch beside the search field in the
-    phone and tablet browse row, on home, shop and collection pages only (not
-    on product, cart or search pages). The row scrolls away with the page.
+  - `compact`: a small WOMEN | MEN switch centred in its own 48px row under
+    the phone and tablet header (outside the sticky header), on home, shop and
+    collection pages only (not on product, cart or search pages). The row
+    scrolls away with the page.
   - `tabs`: full-width tabs at the top of the phone menu drawer. Switching
     there opens the other mode and keeps the drawer open, back on its first
     level, with the other mode's menu. The drawer closes only when the page
     itself changes.
 
   It opens the same page in the other mode and has `prefetch={false}`, so
-  product pages are not rendered twice. There is no longer a full-width tab
-  bar under the phone header. See [HEADER_SEARCH.md](HEADER_SEARCH.md).
+  product pages are not rendered twice. The phone header itself is one row
+  (Menu, wordmark, search field, Bag). See [HEADER_SEARCH.md](HEADER_SEARCH.md).
 - The page bodies live in `components/pages/*` and take an `audience`. The files
   in `app/…` and `app/men/…` only fix the mode and their cache settings, and
   both must keep them identical.

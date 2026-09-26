@@ -18,26 +18,23 @@ import DesktopNav from "./desktop-nav"
 import { MenuDrawer, SearchDialog, onSearchLinkClick, openSheet, preloadNavDrawer, searchIntent } from "./header-dialogs"
 import { DRAWER_ID } from "./types"
 
-/** Home, shop and collection pages put the WOMEN/MEN switch beside the phone header's search field. */
+/** Home, shop and collection pages get the WOMEN/MEN switch in a small row under the phone header. */
 const MODE_SWITCH = /^\/(?:$|shop(?:\/|$)|collections?(?:\/|$))/
-/** The search pages have their own field at the top: no second one in the header there. */
+/** The search pages have their own field at the top: no second one in the phone header there. */
 const SEARCH_PAGE = /^\/search(?:\/|$)/
-/** Scrolled this far (px) in one direction before the logo row tucks away or comes back. */
-const TUCK_STEP = 8
 
-/** Every row-1 icon: a 44px target, purple on a fine pointer's hover, a round focus ring. */
-const ICON = "grid size-11 place-items-center rounded-full text-ink transition-colors pointer-fine:hover:text-purple focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple"
+/** Every header icon: a 44px target, purple on a fine pointer's hover, a round focus ring. */
+const ICON = "grid size-11 shrink-0 place-items-center rounded-full text-ink transition-colors active:bg-field pointer-fine:hover:text-purple focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple"
 
 const bagLabel = (count: number) => `Bag, ${count} item${count === 1 ? "" : "s"}`
 
 /**
- * The site header. Phones and tablets: a solid 56px (64px) logo row with Menu
- * on the left, the wordmark centred and Account and Bag on the right, and
- * under it, in the same sticky header, the search field (with a compact
- * WOMEN/MEN switch on home, shop and collection pages). Scrolling down tucks
- * the logo row away and keeps the search field pinned; scrolling up brings
- * it back. Desktop: Menu and the WOMEN/MEN pill, the wordmark, a search
- * field, Account and Bag, and the nav row with its panels.
+ * The site header. Phones: one solid 56px row, Menu, the wordmark on the
+ * left, the search field filling the middle and Bag (My account is in the
+ * menu); tablets (64px) add Account. On home, shop and collection pages a
+ * small WOMEN/MEN row sits under the header and scrolls away. Desktop: Menu
+ * and the WOMEN/MEN pill, the wordmark centred, a search field, Account and
+ * Bag, and the nav row with its panels.
  *
  * Everything comes from one compact prop built by the layout (lib/header-data.ts,
  * packed for the wire and unpacked once here) and nothing depends on cookies,
@@ -53,13 +50,10 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
   const itemCount = summary?.itemCount ?? 0
   const plainPath = stripAudience(pathname)
   const orderConfirmation = /^\/order\/[^/]+\/?$/.test(pathname)
-  /** Checkout and the order page get a minimal header of their own (no menu, search or tuck). */
-  const minimal = pathname === "/checkout" || pathname === "/checkout/" || orderConfirmation
-  const searchRow = !minimal && !SEARCH_PAGE.test(plainPath)
+  const phoneSearch = !SEARCH_PAGE.test(plainPath)
   const modeSwitch = MODE_SWITCH.test(plainPath)
   const searchHref = withAudience("/search/", audience)
 
-  const headerRef = useRef<HTMLElement>(null)
   const drawerRef = useRef<HTMLDialogElement>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [openCount, setOpenCount] = useState(0)
@@ -82,46 +76,6 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
     if (slug) rememberDevice(slug)
   }, [pathname, slugs, data.rememberDevice])
 
-  // Phones and tablets: scrolling down tucks the logo row away (header.css
-  // slides the header up by its height) and leaves the search field pinned;
-  // scrolling up, or back to the top, brings it back. A DOM attribute, not
-  // state, so scrolling never re-renders the header. The minimal checkout
-  // header replaces this <header> element, so searchRow (false there) makes
-  // the listener re-attach to the new one on the way back.
-  useEffect(() => {
-    const header = headerRef.current
-    if (!header || !searchRow) return
-    const small = window.matchMedia("(max-width:1023px)")
-    let last = window.scrollY
-    let frame = 0
-    const update = () => {
-      frame = 0
-      // iOS reports positions past either end while it bounces: clamp, so the bounce never reads as scrolling up.
-      const y = Math.min(Math.max(window.scrollY, 0), document.documentElement.scrollHeight - window.innerHeight)
-      const logoRow = (header.firstElementChild as HTMLElement | null)?.offsetHeight ?? 56
-      if (!small.matches || y <= logoRow) {
-        delete header.dataset.tuck
-        last = y
-        return
-      }
-      if (Math.abs(y - last) < TUCK_STEP) return
-      if (y > last) header.dataset.tuck = ""
-      else delete header.dataset.tuck
-      last = y
-    }
-    const onScroll = () => {
-      if (!frame) frame = window.requestAnimationFrame(update)
-    }
-    window.addEventListener("scroll", onScroll, { passive: true })
-    small.addEventListener("change", update)
-    return () => {
-      window.removeEventListener("scroll", onScroll)
-      small.removeEventListener("change", update)
-      window.cancelAnimationFrame(frame)
-      delete header.dataset.tuck
-    }
-  }, [searchRow])
-
   function openMenu(trigger: HTMLElement) {
     preloadNavDrawer().catch(() => {})
     if (!openSheet(drawerRef.current, trigger)) return
@@ -129,7 +83,7 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
     setOpenCount((count) => count + 1)
   }
 
-  if (minimal) {
+  if (pathname === "/checkout" || pathname === "/checkout/" || orderConfirmation) {
     return (
       <header className="border-b border-line bg-paper">
         <div className="mx-auto grid max-w-[1240px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-[15px] py-5 md:px-[30px] md:py-6">
@@ -150,13 +104,14 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
       </a>
 
       {/*
-       * A solid bar with no backdrop-filter: a filter (or the tuck's transform)
-       * makes the header the containing block of anything position:fixed
-       * inside it, so nothing inside is fixed. The sheets are its siblings.
+       * A solid bar with no backdrop-filter: a filter would make the header the
+       * containing block of anything position:fixed inside it. The sheets and
+       * the WOMEN/MEN row are its siblings.
        */}
-      <header ref={headerRef} data-store-header data-row2={searchRow ? "" : undefined} className="sticky top-0 z-40 border-b border-line bg-paper">
-        <div className="mx-auto grid h-14 max-w-[1470px] grid-cols-[1fr_auto_1fr] items-center px-1 md:h-16 md:px-[18px] lg:h-[72px] lg:px-[30px]">
-          <div className="flex items-center justify-self-start lg:gap-2">
+      <header data-store-header className="sticky top-0 z-40 border-b border-line bg-paper">
+        {/* Below 1024px a flex row (the search field takes the free space); from 1024px three columns, the wordmark centred. */}
+        <div className="mx-auto flex h-14 max-w-[1470px] items-center px-1 md:h-16 md:px-[18px] lg:grid lg:h-[72px] lg:grid-cols-[1fr_auto_1fr] lg:px-[30px]">
+          <div className="flex shrink-0 items-center justify-self-start lg:gap-2">
             <button
               type="button"
               aria-label="Open menu"
@@ -174,11 +129,24 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
             <AudienceToggle variant="pill" className="hidden lg:grid" />
           </div>
 
-          <Link href="/" aria-label="Florayn home" className="block rounded-sm text-ink">
-            <FloraynLogo title={null} width={111} height={18} className="h-[18px] w-[111px] md:h-5 md:w-[124px] lg:h-6 lg:w-[148px]" />
+          <Link href="/" aria-label="Florayn home" className="ml-0.5 flex h-11 shrink-0 items-center rounded-sm text-ink md:ml-1 lg:ml-0 lg:block lg:h-auto">
+            <FloraynLogo title={null} width={92} height={15} className="h-[15px] w-[92px] md:h-5 md:w-[124px] lg:h-6 lg:w-[148px]" />
           </Link>
 
-          <div className="flex items-center justify-self-end lg:gap-2">
+          {phoneSearch ? (
+            <a
+              href={searchHref}
+              onClick={onSearchLinkClick}
+              {...searchIntent}
+              data-phone-search
+              className="ml-2.5 flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-field px-3 text-[14px] text-ink-muted md:ml-5 md:mr-2 md:max-w-[440px] md:px-4 lg:hidden"
+            >
+              <Search size={17} className="shrink-0 text-ink" aria-hidden="true" />
+              <span className="truncate">{data.search.placeholder}</span>
+            </a>
+          ) : null}
+
+          <div className="ml-auto flex shrink-0 items-center justify-self-end lg:gap-2">
             <a
               href={searchHref}
               onClick={onSearchLinkClick}
@@ -189,7 +157,7 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
               <span className="truncate">{data.search.placeholder}</span>
               <kbd aria-hidden="true" className="ml-auto hidden size-6 shrink-0 place-items-center rounded-md border border-line bg-paper font-sans text-[12px] [@media(hover:hover)]:grid">/</kbd>
             </a>
-            <Link href="/account/" aria-label="My account" className={ICON}>
+            <Link href="/account/" aria-label="My account" className={`${ICON} max-md:hidden`}>
               <UserRound size={20} strokeWidth={1.6} aria-hidden="true" />
             </Link>
             <button type="button" onClick={openBag} aria-label={bagLabel(itemCount)} className={`relative ${ICON}`}>
@@ -204,25 +172,16 @@ export default function SiteHeader({ wire }: { wire: HeaderWire }) {
           </div>
         </div>
 
-        {searchRow ? (
-          <div data-header-row2 className="lg:hidden">
-            <div className="mx-auto flex max-w-[1470px] items-center gap-2 px-[15px] pb-2 md:px-[30px]">
-              <a
-                href={searchHref}
-                onClick={onSearchLinkClick}
-                {...searchIntent}
-                className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-full bg-field px-4 text-[14px] text-ink-muted md:max-w-[560px]"
-              >
-                <Search size={18} className="shrink-0 text-ink" aria-hidden="true" />
-                <span className="truncate">{data.search.placeholder}</span>
-              </a>
-              {modeSwitch ? <AudienceToggle variant="compact" className="shrink-0 md:ml-auto" /> : null}
-            </div>
-          </div>
-        ) : null}
-
         <DesktopNav data={data} audience={audience} pathname={pathname} />
       </header>
+
+      {modeSwitch ? (
+        <div data-mode-row className="border-b border-line bg-paper lg:hidden">
+          <div className="mx-auto flex h-12 max-w-[1470px] items-center justify-center px-[15px]">
+            <AudienceToggle variant="compact" />
+          </div>
+        </div>
+      ) : null}
 
       <MenuDrawer dialogRef={drawerRef} data={data} audience={audience} pathname={pathname} openCount={openCount} onClosed={() => setDrawerOpen(false)} />
       <SearchDialog data={data} audience={audience} pathname={pathname} />

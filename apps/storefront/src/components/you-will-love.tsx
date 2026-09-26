@@ -130,7 +130,7 @@ export default function YouWillLove({
                 <Link
                   href={href}
                   aria-label={item.name}
-                  className="absolute inset-0 z-[1]"
+                  className="absolute inset-0 z-[1] rounded-[inherit] active:bg-ink/5"
                   prefetch={false}
                 />
               </article>

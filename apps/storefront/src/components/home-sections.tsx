@@ -258,11 +258,17 @@ function CollectionGrid({
               }
               draggable={false}
             >
+              {/*
+                * The square art fills a 3:4 card (object-cover), so it is drawn at the
+                * card's height: 91% of the screen below 640px, 53% up to 767px. Phones up
+                * to 430px are capped at 213px so a 3x phone gets 640w (111 KB), not 828w
+                * (158 KB), still about 2 device pixels per drawn pixel.
+                */}
               {card.image || card.artwork ? (
                 <ArtImage
                   src={(card.image ?? card.artwork)!}
                   alt=""
-                  sizes="(max-width: 767px) 70vw, (max-width: 1023px) 40vw, 300px"
+                  sizes="(max-width: 430px) 213px, (max-width: 639px) 91vw, (max-width: 767px) 53vw, (max-width: 1023px) 40vw, 300px"
                   className={card.image ? "fl-collection-card__img object-cover" : "fl-collection-card__img fl-collection-card__img--art object-contain"}
                 />
               ) : null}
