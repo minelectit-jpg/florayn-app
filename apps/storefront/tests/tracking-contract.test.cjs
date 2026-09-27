@@ -71,9 +71,11 @@ test("landing params keep only the allowlisted click ids and utm tags", () => {
   assert.equal(contract.pathnameOf("/product/x/?case=signature#a"), "/product/x/")
 })
 
-test("contract re-exports paths", () => {
-  for (const name of ["isPrivatePath", "safePath", "landingParams", "pathnameOf", "PRIVATE_SEGMENTS", "PATH_PARAMS", "LANDING_PARAMS", "CLICK_KEYS"]) {
-    assert.equal(contract[name], paths[name], name)
+test("contract re-exports paths, and paths.ts (the layout chunk's copy) holds only the private-path check", () => {
+  assert.deepEqual(Object.keys(paths).sort(), ["PRIVATE_SEGMENTS", "isPrivatePath", "pathnameOf"])
+  for (const name of Object.keys(paths)) assert.equal(contract[name], paths[name], name)
+  for (const name of ["safePath", "landingParams", "PATH_PARAMS", "LANDING_PARAMS", "CLICK_KEYS"]) {
+    assert.ok(contract[name], `${name} is contract's own, for the lazy chunks and the server`)
   }
 })
 

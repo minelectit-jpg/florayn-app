@@ -9,10 +9,12 @@ const React = require("react")
 const jsxRuntime = require("react/jsx-runtime")
 const { renderToStaticMarkup } = require("react-dom/server")
 
-// components/tracking/tracker-stub.tsx (TRACKING.md 5.1): the layout's tracker.
-// It is driven here without React through its exported effect bodies, in a
-// fake browser (a vm realm whose global is the window), with the real queue
-// and paths modules and a stand-in for the lazy runtime.
+// components/tracking/tracker-stub.tsx (TRACKING.md 5.1): the layout's tracker,
+// and lib/tracking/boot.ts, the lazy half it loads at the first idle moment
+// (the id call, the beacon and the runtime's schedule). They are driven here
+// without React through their exported effect bodies, in a fake browser (a vm
+// realm whose global is the window), with the real queue, paths, batch and
+// contract modules and a stand-in for the lazy runtime.
 const root = path.join(__dirname, "..")
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n")
 const compile = (file) => ts.transpileModule(read(file), {
@@ -20,24 +22,30 @@ const compile = (file) => ts.transpileModule(read(file), {
   fileName: file,
 }).outputText
 const STUB = "src/components/tracking/tracker-stub.tsx"
+const BOOT = "src/lib/tracking/boot.ts"
+const LIB = ["paths", "contract", "queue", "batch", "boot"]
 const code = {
-  paths: compile("src/lib/tracking/paths.ts"),
-  queue: compile("src/lib/tracking/queue.ts"),
   stub: compile(STUB),
+  ...Object.fromEntries(LIB.map((name) => [name, compile(`src/lib/tracking/${name}.ts`)])),
 }
 const plain = (value) => JSON.parse(JSON.stringify(value))
 const flush = async () => {
   for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve))
 }
 
-/** The stub, the queue and paths in `context` (made a vm realm here); `runtime` stands in for the lazy chunk. */
+/**
+ * The stub and the lib/tracking modules it reaches in `context` (made a vm
+ * realm here), one instance each whether imported as "@/lib/tracking/x" or
+ * "./x"; `runtime` stands in for the lazy runtime chunk.
+ */
 function loadStub(context, { runtime, retry = [] } = {}) {
   vm.createContext(context)
   const cache = {}
-  const run = (name, source) => {
-    const module = { exports: {} }
-    vm.runInContext(`(function (exports, require, module) {${source}\n})`, context, { filename: name })(module.exports, require, module)
-    return (cache[name] = module.exports)
+  const run = (name) => {
+    if (cache[name]) return cache[name].exports
+    const module = (cache[name] = { exports: {} })
+    vm.runInContext(`(function (exports, require, module) {${code[name]}\n})`, context, { filename: name })(module.exports, require, module)
+    return module.exports
   }
   function require(name) {
     if (name === "react") return React
@@ -47,12 +55,12 @@ function loadStub(context, { runtime, retry = [] } = {}) {
       return { retryImport: (load, reload) => { retry.push(reload); return load() } }
     }
     if (name === "@/lib/tracking/runtime") return runtime ?? { start: () => Promise.resolve() }
-    if (name === "@/lib/tracking/paths" || name === "./paths") return cache.paths ?? run("paths", code.paths)
-    if (name === "@/lib/tracking/queue") return cache.queue ?? run("queue", code.queue)
+    const lib = new RegExp(`^(?:@/lib/tracking|\\.)/(${LIB.join("|")})$`).exec(name)
+    if (lib) return run(lib[1])
     throw new Error(`Unexpected import ${name}`)
   }
-  const stub = run("stub", code.stub)
-  return { stub, queue: cache.queue, paths: cache.paths }
+  const stub = run("stub")
+  return { stub, queue: cache.queue.exports, paths: cache.paths.exports, boot: () => run("boot"), loaded: (name) => cache[name]?.exports }
 }
 
 /** Timers, idle callbacks and listeners that the test runs by hand. */
@@ -139,11 +147,13 @@ test("the stub renders null and loads without touching a browser global", () => 
   for (const name of ["window", "document", "location", "navigator", "fetch", "sessionStorage", "localStorage", "history", "requestIdleCallback", "addEventListener"]) {
     Object.defineProperty(context, name, { enumerable: true, get() { touched.push(name); return undefined } })
   }
-  const { stub } = loadStub(context)
+  const { stub, boot } = loadStub(context)
   assert.deepEqual(touched, [], "nothing at module load")
   assert.equal(renderToStaticMarkup(React.createElement(stub.default)), "")
   assert.equal(renderToStaticMarkup(React.createElement(React.StrictMode, null, React.createElement(stub.default))), "")
   assert.deepEqual(touched, [], "nothing while rendering on the server either")
+  boot()
+  assert.deepEqual(touched, [], "boot.ts and what it imports touch nothing at load either")
 })
 
 test("one PageView per public pathname: the document's first has first true, StrictMode's second run adds nothing", () => {
@@ -151,15 +161,18 @@ test("one PageView per public pathname: the document's first has first true, Str
   page.stub.onPath("/product/zebra/")
   page.stub.onPath("/product/zebra/")
   assert.deepEqual(plain(page.state().q.map(({ n, p, d }) => ({ n, p, d }))), [
-    { n: "PageView", p: "/product/zebra/?case=signature", d: { first: true } },
-  ])
+    { n: "PageView", p: "/product/zebra/?case=signature&fbclid=abc&review=tok", d: { first: true } },
+  ], "the address as it was: the stub only records")
   page.go("/product/zebra/?case=signature&device=iPhone+17")
   page.stub.onPath("/product/zebra/")
   assert.equal(page.state().q.length, 1, "a query-only change is not a new page")
   page.visit("/shop/")
   page.visit("/shop/")
   page.visit("/product/zebra/")
-  assert.deepEqual(plain(page.state().q.map(({ n, p, d }) => ({ n, p, d }))), [
+  // What leaves the tab (the beacon, the runtime's batches) goes through batch.ts.
+  page.boot()
+  const batch = page.loaded("batch")
+  assert.deepEqual(plain(batch.takeUnsent().map(({ n, p, d }) => ({ n, p, d }))), [
     { n: "PageView", p: "/product/zebra/?case=signature", d: { first: true } },
     { n: "PageView", p: "/shop/", d: { first: false } },
     { n: "PageView", p: "/product/zebra/", d: { first: false } },
@@ -289,6 +302,23 @@ test("pagehide and hidden beacon unsent events as text/plain JSON to /api/t/e/, 
   assert.equal(page.listeners.document.get("visibilitychange").size, 1)
 })
 
+test("the beacon sends event ids and safe paths only, never the raw address the stub recorded", async () => {
+  const page = browser("https://new.florayn.com/product/zebra/?case=signature&fbclid=abc&review=tok&r=5&utm_source=fb")
+  page.answer.current = ON()
+  page.stub.onPath("/product/zebra/")
+  await page.runIdle()
+  page.queue.track("InitiateCheckout", { value: 1400 }, "ic-0123456789abcdef01234567")
+  page.fire("window", "pagehide")
+  const { events } = JSON.parse(page.log.beacons[0].body.parts.join(""))
+  assert.deepEqual(events.map(({ n, p }) => ({ n, p })), [
+    { n: "PageView", p: "/product/zebra/?case=signature" },
+    { n: "InitiateCheckout", p: "/product/zebra/?case=signature" },
+  ])
+  assert.match(events[0].id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  assert.equal(events[1].id, "ic-0123456789abcdef01234567")
+  assert.doesNotMatch(JSON.stringify(page.state().q), /fbclid|review|utm_|r=5/, "the queue itself no longer holds it")
+})
+
 test("a refused beacon keeps the events for the next send; an inert browser sends nothing", async () => {
   const refused = browser("https://new.florayn.com/", { beaconOk: false })
   refused.answer.current = ON()
@@ -319,7 +349,7 @@ test("a visitor from an ad click gets the runtime at load, with no wait and no i
   page.fire("window", "load")
   await flush()
   assert.equal(page.log.started, 1)
-  assert.deepEqual(page.log.retry, [false], "through retryImport, never reloading the page")
+  assert.deepEqual(page.log.retry, [false, false], "boot.ts and then the runtime, each through retryImport, never reloading the page")
 })
 
 test("/checkout/ gets the runtime at load + idle, with no 3 s wait", async () => {
@@ -360,7 +390,7 @@ test("no runtime when tracking is off, the browser opted out, or Save-Data is on
   ]
   for (const [options, extra] of cases) {
     const page = browser("https://new.florayn.com/?fbclid=abc", options)
-    page.stub.scheduleRuntime(ON({ landing: { url: null, click: "fbclid", src: "meta" }, ...extra }))
+    page.boot().scheduleRuntime(ON({ landing: { url: null, click: "fbclid", src: "meta" }, ...extra }))
     page.fire("window", "load")
     await page.runTimers()
     await page.runIdle()
@@ -382,10 +412,10 @@ test("every pathname change wakes the runtime, private ones too, and a failing w
   assert.equal(page.state().q.at(-1).p, "/shop/")
 })
 
-test("the stub keeps the layout rules: import() through retryImport, no next/dynamic, <Script> or useSearchParams", () => {
+test("the stub keeps the layout rules: it only records, and loads boot.ts through retryImport; no next/dynamic, <Script> or useSearchParams", () => {
   const source = read(STUB)
   assert.match(source, /^"use client"\n/)
-  assert.ok(source.includes(`retryImport(() => import("@/lib/tracking/runtime"), false)`))
+  assert.ok(source.includes(`retryImport(() => import("@/lib/tracking/boot"), false)`))
   assert.doesNotMatch(source, /next\/dynamic|next\/script|<Script\b|useSearchParams|next\/headers|cookies\(|searchParams\b/)
   assert.doesNotMatch(source, /fl-runtime-v1/, "the runtime marker lives only in the lazy chunk")
   const imports = [...source.matchAll(/^import\b[^\n]*$/gm)].map((match) => match[0])
@@ -393,11 +423,15 @@ test("the stub keeps the layout rules: import() through retryImport, no next/dyn
     `import { usePathname } from "next/navigation"`,
     `import { useEffect } from "react"`,
     `import { retryImport } from "@/components/header/load-on-intent"`,
-    `import type { IdResponse } from "@/lib/tracking/contract"`,
-    `import { isPrivatePath, landingParams } from "@/lib/tracking/paths"`,
-    `import { fl, restoreUnsent, takeUnsent, track } from "@/lib/tracking/queue"`,
-  ], "only types from contract.ts; the lazy runtime only through import()")
-  assert.deepEqual([...source.matchAll(/\bimport\(\s*"([^"]+)"/g)].map((match) => match[1]), ["@/lib/tracking/runtime"])
+    `import { isPrivatePath } from "@/lib/tracking/paths"`,
+    `import { fl, track } from "@/lib/tracking/queue"`,
+  ], "nothing from contract.ts or batch.ts: ids, allowlists and sending live in the lazy chunks")
+  assert.deepEqual([...source.matchAll(/\bimport\(\s*"([^"]+)"/g)].map((match) => match[1]), ["@/lib/tracking/boot"])
+
+  const boot = read(BOOT)
+  assert.ok(boot.includes(`retryImport(() => import("@/lib/tracking/runtime"), false)`))
+  assert.doesNotMatch(boot, /next\/dynamic|next\/script|useSearchParams|fl-runtime-v1/)
+  assert.deepEqual([...boot.matchAll(/\bimport\(\s*"([^"]+)"/g)].map((match) => match[1]), ["@/lib/tracking/runtime"])
 })
 
 test("the layout mounts the stub right after PerformanceAuditLoader and still reads no cookies, headers or searchParams", () => {

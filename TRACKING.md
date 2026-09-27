@@ -5,6 +5,12 @@ every blocking issue from the skeptic review is resolved (section 0.4), the
 owner decisions of 2026-09-27 are recorded (section 0.1) and the work is cut
 into dependency waves with single file ownership (section 13).
 
+As built, 2026-09-27: all fifteen packages are done. Where the final code
+differs from this spec, the code wins. Section 19 records every difference and
+why, the verification results and the steps left for the operator and the
+owner; statements below that the code contradicts carry a short "As built"
+note pointing there. No owner decision (0.1) changed.
+
 Scope: `apps/storefront` (Next.js 15.5.25, React 19, its own lockfile) and
 `apps/backend` (Medusa 2.19, npm workspace of the root). Hosts: `new.florayn.com`
 (storefront, behind Cloudflare) and `api.new.florayn.com` (backend, not proxied)
@@ -98,7 +104,7 @@ Answers to the first draft's open questions, so nobody asks again:
 
 | Package | Where | Status and handling |
 |---|---|---|
-| `sharp` | `apps/backend` (root lockfile) | NOT installed. Needed only to make JPEG copies of catalog images. WP08 loads it lazily (`await import(moduleName)` with a non-literal name and a local type) and reports "sharp is not installed" in Admin > Tracking > Catalog instead of failing. An operator runs `cd apps/backend && npm install sharp` with the owner's OK, commits the lockfile change and rebuilds the image. Until then catalog images can use `image_mode: "cf_transform"` (needs Cloudflare Image Transformations enabled on the florayn.com zone, owner OK) or the feed publishes no items (items without an image are left out). |
+| `sharp` | `apps/backend` (root lockfile) | As built: INSTALLED with the owner's approval, `sharp@0.34.5` in `apps/backend/package.json` and the root lockfile (commit f65dd96); the backend image installs it, so the rest of this row is history (19.4). Originally: NOT installed. Needed only to make JPEG copies of catalog images. WP08 loads it lazily (`await import(moduleName)` with a non-literal name and a local type) and reports "sharp is not installed" in Admin > Tracking > Catalog instead of failing. An operator runs `cd apps/backend && npm install sharp` with the owner's OK, commits the lockfile change and rebuilds the image. Until then catalog images can use `image_mode: "cf_transform"` (needs Cloudflare Image Transformations enabled on the florayn.com zone, owner OK) or the feed publishes no items (items without an image are left out). |
 | `server-only` | `apps/storefront` | NOT installed. Server modules use the runtime guard in section 4.8 instead, and a test asserts no client component imports them. |
 
 ### 0.3 Corrections to the approved plan
@@ -144,7 +150,9 @@ Adopted (numbers follow the review's list):
 - I1 Phone clock skew: batches carry `sent_at`; the storefront computes each
   event time as `server_now - (sent_at - t)` (section 4.2).
 - I2 OrderConfirmed on any move INTO confirmed/shipped/delivered, once per order
-  by the outbox key (section 7).
+  by the outbox key (section 7). As built: only from a status before
+  confirmation, because the outbox key lasts only as long as its row (19.3,
+  WP06).
 - I3 Missing token: Purchase and COD rows are enqueued as `blocked`
   (`no token`) so the token-fingerprint requeue recovers them; funnel events are
   not enqueued (counted). A platform that is off gets `skipped` Purchase rows, so
@@ -214,7 +222,7 @@ Browser (every page)                       Storefront (Next, behind CF)         
 layout: <TrackerStub/> (renders null)      POST /api/t/id/   edge check, host allowlist,    GET  /store/tracking-config (public ids/modes)
   window.__fl = { q, landing, cfg, wake }    cookies (_fl_vid,_fl_sid,_fl_src,_fbp,_fbc,     POST /tracking/ingest (x-florayn-ingest-key)
   PageView per pathname                      ttclid,_fl_gclid,_gcl_aw), public cfg + share    -> tracking_hit + tracking_event (one tx)
-  first idle: POST /api/t/id/ (landing)    POST /api/t/e/    edge check, validate, clock      -> scheduleFlush -> Meta CAPI / TikTok API
+  first idle: import(boot) -> /api/t/id/   POST /api/t/e/    edge check, validate, clock      -> scheduleFlush -> Meta CAPI / TikTok API
   pagehide: sendBeacon unsent -> /api/t/e/   fix, rate limit -> 204, after(): forward ---->  POST /store/checkout (+ tracking headers)
   load(+3s)+idle: import(runtime)          GET  /api/t/staff/, /api/t/optout/                  checkoutWithTrackingWorkflow:
 runtime chunk (lazy, <= 6 kB gz)           Server Action submitOrder: headers()/cookies()     stash ctx -> prepare-checkout -> record
@@ -295,7 +303,7 @@ out-of-band BEFORE the backend deploy with the scoped script
 | column | type | notes |
 |---|---|---|
 | id | text pk | fixed `trackset_default`; created on first save with the concurrent-create retry of `update-checkout-settings.ts` |
-| config | json not null default '{}' | non-secret settings, parsed with defaults by `parseTrackingConfig()` (3.1) |
+| config | jsonb not null default '{}' (as built: the DML `model.json()` type) | non-secret settings, parsed with defaults by `parseTrackingConfig()` (3.1) |
 | meta_test_token | text null | write-only secret |
 | meta_live_token | text null | write-only secret |
 | tiktok_test_token | text null | write-only secret |
@@ -404,8 +412,12 @@ create table if not exists tracking_counter (
 `tracking_state` keys:
 - `job:outbox`, `job:rollup`, `job:reconcile`, `job:catalog` hold
   `{ last_run_at, last_ok_at, last_error }` (written by `runTrackingJob`, 6.4).
-- `rollup:watermark` holds `{ done_through }`.
-- `alert:<kind>` holds `{ last_sent_at, open }`.
+- `rollup:watermark` holds `{ done_through }` (an ISO string).
+- `alert:<kind>` holds `{ last_sent_at, open }`. As built: `{ open, title,
+  since, last_sent_at, last_try_at }`, keyed per platform where the kind is
+  (`alert:token:<platform>:<env>`, `alert:payload:<platform>`,
+  `alert:send_failures:<platform>`); the other state keys added by the build
+  are listed in 19.5.
 - `token_fp:<platform>:<env>` holds the first 8 hex of sha256(token).
 - `catalog:stale` holds `{ at }`; `catalog:alert` holds
   `{ kind: "feed_guard" | "feed_error", at, detail }` (written by WP08, read by
@@ -416,7 +428,8 @@ create table if not exists tracking_counter (
 `sf.unknown_host`, `sf.rate_dropped`, `sf.cap_dropped`, `sf.invalid`,
 `sf.forward_failed`, `sf.bot`, `ingest.unknown_variant`,
 `ingest.no_token_dropped`, `ingest.no_destination`, `checkout.header_rejected`,
-`checkout.untrusted`.
+`checkout.untrusted`. As built also `ingest.invalid`, `ingest.unknown_host` and
+`outbox.<status>.<platform>.<env>` (19.5).
 
 Retention: hits 7 d; minutes 35 d; sessions 90 d; counters 35 d; day_dim kept
 (about 2k rows/day). Backups: `pg_dump --exclude-table-data=tracking_hit
@@ -516,7 +529,9 @@ token to replace it". No library logs a token.
   non-empty AND the Privacy page is published. The route reads
   `select published from privacy_setting where id = 'privacyset_default' and
   deleted_at is null` with knex; a missing table or row counts as unpublished.
-  (C7, I20.)
+  (C7, I20.) As built: the gate applies when share goes from OFF to ON; a save
+  that leaves share ON is not refused if the page was unpublished later, so
+  an emergency edit (disarming, a token) still saves (19.3, WP01).
 - Tokens: strings up to 512 chars, no whitespace; blank keeps; `"__remove__"`
   clears.
 
@@ -524,7 +539,11 @@ token to replace it". No library logs a token.
 
 `POST /admin/tracking/settings` writes the four token columns and
 `catalog_feed_token` straight through the module service
-(`updateTrackingSettings`), as `api/admin/courier/settings/route.ts` does. Only
+(`updateTrackingSettings`), as `api/admin/courier/settings/route.ts` does.
+As built: the POST never accepts `catalog_feed_token`; only
+`ensureFeedToken()` and `rotateFeedToken()` write it, and the tokens go through
+the `saveTrackingTokens()` helper, which calls the service directly (medusa
+lint flags a service mutation inside a route). Only
 the non-secret `config` goes through `updateTrackingSettingsWorkflow`, which
 queues `content:tracking` revalidation like `update-checkout-settings.ts` and
 calls `invalidateTrackingSettings()`. Reason: workflow-engine-redis can
@@ -546,6 +565,7 @@ Implemented identically in the backend (`hostRole`, `destinationFor` in
     `{ env: role, id }`.
   - Google: only `enabled && role === "live"` gives
     `{ env: "live", id: conversion_id, label: purchase_label }`; else null.
+    As built: also null when `conversion_id` or `purchase_label` is empty.
 - The storefront's browser load decision additionally requires (section 4.2):
   not staff, not optout, `browser !== "off"`, Meta `aam_off_confirmed[env]`, TikTok
   `spa_off_confirmed`, and for `ads_only` the platform's click cookie.
@@ -636,6 +656,11 @@ Storefront modules (owned by WP14):
   (keeps PATH_PARAMS in that order, values at most 80 chars, serialised with
   `URLSearchParams`; result at most 300 chars, else `pathname.slice(0, 300)`),
   `landingParams(search)` (LANDING_PARAMS only, values at most 1000 chars).
+  As built (budget trim, 19.3): `paths.ts` holds only `PRIVATE_SEGMENTS`,
+  `pathnameOf` and `isPrivatePath`, the part the layout needs.
+  `PATH_PARAMS`, `CLICK_KEYS`, `LANDING_PARAMS`, `safePath` and `landingParams`
+  live in `contract.ts`, which still re-exports `paths.ts`. Over-cap values
+  are dropped, never cut.
 - `apps/storefront/src/lib/tracking/contract.ts`: all shared types (below), the
   constants `BROWSER_EVENTS`, `EVENT_LIMITS`, and the pure validators
   `validateEvent(raw)` (shape only; time windows are checked by the endpoints), `isBrowserEventId(name, id)`,
@@ -810,6 +835,17 @@ turning it on also expires `_fl_vid`, `_fl_sid`, `_fl_src`, `_fbp`, `_fbc`,
 `ttclid`, `_fl_gclid`, `_gcl_aw` (host-only and Domain variants). Both return a
 tiny no-store HTML page with a link home.
 
+As built (19.3, WP11): a missing or empty User-Agent counts as a bot.
+`/api/t/e/` checks the edge header before reading the settings (a flood
+straight to the origin costs nothing); both endpoints answer 415 for other
+content types and 400 for malformed JSON. Events past the first 25 and
+events dropped by the clock fix count as `sf.invalid`. Staff browsers get no
+vendor cookies (`on: true`, every `load` false). `_fl_vid` is never refreshed
+(400 days from the first visit). `_fbp` is set only when the browser has no
+usable one. Opt-out also expires `_fbp`/`_fbc` under the parent domain, which
+at cutover clears the WordPress pixel's cookies in that browser. The staff
+and opt-out pages send `Referrer-Policy: no-referrer` and `noindex`.
+
 ### 4.3 Storefront to backend ingest (WP11 sends, WP04 receives)
 
 `POST ${NEXT_PUBLIC_MEDUSA_BACKEND_URL}/tracking/ingest` with header
@@ -893,7 +929,9 @@ test_id, live_id, browser, aam_off_confirmed: { test, live } }`; `tiktok { enabl
 live_id, browser, spa_off_confirmed }`; `google { enabled, conversion_id,
 purchase_label, browser }`; `privacy { share, consent_version, consent_text
 (only while share is ON, else "") }`. Never tokens, alert email, catalog settings
-or the feed token. A test greps the JSON for `token` and `email`.
+or the feed token. A test greps the JSON for `token` and `email`. As built: a
+database error answers 503 with `Cache-Control: no-store`, so nothing wrong is
+cached and the storefront falls back to all-off.
 
 ### 4.6 Backend admin routes (all `/admin/*` are authenticated by Medusa)
 
@@ -948,6 +986,52 @@ any imports `lib/tracking/server/`.
 ## 5. Events and the browser runtime
 
 ### 5.1 The stub (layout chunk, WP10) and the client queue (WP14)
+
+**As built (the budget trim, 19.3).** The layout set came out at +1,724 B
+against its +1,200 B budget, so the eager code was cut to recording only and
+the rest moved into a second lazy chunk. The spec text after this box is the
+original; where it differs, this box is what the code does.
+
+```ts
+// lib/tracking/queue.ts (layout chunk; imports only ./paths and types from ./contract)
+export type QueueItem = { n: BrowserEventName | "Purchase"; id?: string; t: number; p: string;
+                          d?: Record<string, unknown>; s?: 1 }  // id and p are raw until batch.ts prepare()
+export type RawLanding = { search: string; ref: string; path: string }  // unparsed; boot.ts cuts it
+export type FlState = { q: QueueItem[]; landing: RawLanding | null; cfg: IdResponse | null;
+                        cfgPromise?: Promise<IdResponse>; wake?: () => void }
+export function fl(): FlState      // a throwaway state without a window
+export function track(name: BrowserEventName, data?: Record<string, unknown>, id?: string): void
+                                   // records p = pathname + search as they are, t = Date.now()
+export function trackPurchase(block: PurchaseBlock): void  // s: 1 from birth, then wake() in a try
+
+// lib/tracking/batch.ts (lazy chunks only)
+export function newEventId(): string
+export function prepare(item: QueueItem): ReadyItem  // in place, idempotent: uuid v4 id, p cut to safePath
+export function takeUnsent(max?: number): ReadyItem[] // prepared, marked s = 1, never a Purchase
+export function restoreUnsent(items: QueueItem[]): void
+```
+
+- `tracker-stub.tsx` only records: one PageView per public pathname (with
+  `first`), and on the first one the raw landing `{ search, ref, path }` from
+  the address bar. On each public pathname until the id call has gone it
+  schedules, at `requestIdleCallback` (2 s timeout, `setTimeout` fallback),
+  `retryImport(() => import("@/lib/tracking/boot"), false)`, then
+  `identify()`.
+- `lib/tracking/boot.ts` (lazy, about 1.6 KB gzip) makes the id call once per
+  document (skipped while the page is private, then retried on the next public
+  pathname), with the landing cut to `landingParams` and the referrer's origin;
+  it stores the inert answer on any failure, registers the `pagehide` /
+  hidden beacon (sent only when something is unsent) and schedules the
+  runtime with the timing below, again through `retryImport(..., false)`.
+- The runtime prepares every queued item at `start()`, before the scrub and
+  before any vendor script, and each new item as it is pushed, so no raw
+  address outlives the start of the runtime. Until then the raw address
+  exists only in the tab's memory.
+- On the first visit after a deploy the id call waits for one extra
+  (edge-cached) chunk fetch. No event is lost to that: the beacon always
+  waited for the id answer anyway.
+
+Original spec:
 
 `apps/storefront/src/lib/tracking/queue.ts` (WP14) is the only tracking API
 client components import. It must stay tiny: no imports except `./paths` and
@@ -1047,6 +1131,16 @@ Then the cursor advances.
 Nothing tracking-related is stored in localStorage or sessionStorage except the
 Purchase guard key, and never PII.
 
+As built (19.3, WP10): TikTok is ready only after `onload` AND `ttq.ready()`
+(events.js is a loader; before `ready()` ttq is still the stub that would
+replay later). New queue items are noticed by wrapping `push` on the queue
+array (drain and batch check in a microtask; the 2 s timer starts with the
+first unsent item, no always-on interval). Script injection waits one
+`setTimeout(0)` after the wake, then re-checks the path and scrubs again. A
+failed batch is restored only on a network error or a 5xx. The guard value
+lists the vendors that already fired (`"meta,tiktok"`), so each vendor fires
+once per tab. With no match data the Purchase re-init/identify is skipped.
+
 ### 5.3 Event catalogue
 
 Item ids are Medusa variant ids, `content_type: "product"`, currency `"BDT"`
@@ -1107,6 +1201,16 @@ Item ids are Medusa variant ids, `content_type: "product"`, currency `"BDT"`
   `{consent ? <p className="checkout-terms">{consent.text} <Link
   href="/privacy/">Privacy policy</Link></p> : null}` right after the existing
   `checkout-terms` paragraph, which stays.
+- As built (19.3, WP12): InitiateCheckout is skipped when the currency is not
+  BDT or `icEventId` returns null (secret unset); its value is
+  `max(0, subtotal - bundleDiscount)`, `num_items` counts every initial line
+  and `items` lists only lines with a variant id. `addMany` sends only lines
+  with a variant id, nothing when none is left. `trackAdd` wraps `track()` in
+  a try. `submitOrder` reads the headers with the customer token in one
+  `Promise.all`, `.catch(() => null)`; `placeOrder` spreads the tracking
+  headers first and checks the block inside a try. Simple products send
+  `d.device` as `''` (the backend takes device and case type from the
+  variant index).
 
 Server copy fields:
 - Meta `custom_data`: VC/ATC `{ content_type, content_ids, contents: [{ id,
@@ -1189,6 +1293,16 @@ Purchase and COD rows (WP05, WP06), per platform, via `buildOrderEventRows()`:
 
 A `skipped` row means "deliberately not sent". Only the admin "Send skipped"
 action (Retry with `skipped`) sends them (I3).
+
+As built (19.3, WP04/WP05): a variant is known when it is in the index with a
+finite price above 0 (`sellable` is not required, so Alcantara events still
+go to Meta); the value is clamped to the index prices of the known items, and
+the hit takes handle, device and case type from the index. `ingest.no_destination`
+counts only an ENABLED platform without an id. Order rows take their
+destination from the context's STORED env, so COD events go to the same
+dataset as their Purchase. A Meta Purchase whose context has no user agent is
+`skipped` ("skipped: no user agent"). Skipped rows carry a short reason
+("skipped: Meta is off"); blocked rows use exactly "no token".
 
 ### 6.2 Payload builders and hashes (pure, WP02)
 
@@ -1292,6 +1406,12 @@ a thrown error or a returned message.
   Health route and the Live page (one implementation).
 - `last_error` is at most 500 chars: class, vendor code, message, trace id.
   Never a token, payload or PII.
+- As built (19.3, WP03): at SEND time rows whose platform is now off, or whose
+  env is live while `live_armed` is off, become `skipped` (payload kept). All
+  eight backoff delays are used, so a row is `failed` after its 9th failed
+  send. `dry_run` rows keep their payload until retention. Rows not at fault
+  in a split batch (TikTok 40002 with an index, Meta 7-day) are resent in the
+  same run.
 
 ### 6.4 Jobs and the jobs registry
 
@@ -1368,6 +1488,13 @@ export const checkoutWithTrackingWorkflow = createWorkflow("checkout-with-tracki
 5. Return `buildPurchaseBlock(order, storedContext, settings)` (same `event_id`
    on every retry).
 
+As built (19.3, WP05): the stash waits at most 1 s and the record at most 3 s
+(then the work finishes in the background and returns null to the response);
+the record transaction sets `statement_timeout` 5 s. `buildPurchaseBlock`
+returns null for an unusable display id. For an opted-out shopper the stored
+contexts keep no ip, ua, ids or click ids. The Purchase hit also sets flag 16
+for a new visitor. `scheduleFlush` runs only when rows were inserted.
+
 `apps/backend/src/lib/tracking/order-events.ts` (WP05; WP06 reuses it and must
 not re-implement any of it):
 ```ts
@@ -1399,6 +1526,9 @@ export async function insertOrderEvents(trx, rows: OutboxInsert[]): Promise<numb
   insert that platform's row with `buildOrderEventRows` (an off platform gets its
   `skipped` row, so this never becomes a silent backfill).
 - Skips imported orders (`order_op.source`) and drafts.
+- As built: (a) skips cart contexts touched in the last minute (an in-flight
+  checkout) and (a) and (c) take at most 500 rows per run; (c) also needs
+  `purchase_time` within 6 days.
 
 ### 6.7 Session source classification (WP11, `server/source.ts`, pure)
 
@@ -1459,7 +1589,12 @@ Writers to replace:
 `statusEventsFor(from, to)` (pure; nothing when `from === to`), I2:
 - `to` in {confirmed, shipped, delivered} gives OrderConfirmed (once per order
   by the outbox key, so moves like processing -> cancelled -> confirmed still
-  count, and courier-send straight from processing counts).
+  count, and courier-send straight from processing counts). As built: only
+  when `from` is NOT already confirmed, shipped, delivered or returned. The
+  outbox key holds only while its row exists (sent rows are pruned after 8
+  days), so a delivery more than 8 days after confirmation would otherwise
+  send `oc-fl-N` again. Every example above still holds; confirmed ->
+  shipped now gives nothing (19.3, WP06).
 - `to === "delivered"` also gives Delivered.
 - `to === "returned"` gives Returned.
 - refunded, cancelled and processing give nothing.
@@ -1475,6 +1610,16 @@ A static test scans `apps/backend/src` and fails if `workflow_status` is written
 by `updateOrderOps`/`createOrderOps` anywhere except `lib/order-status.ts`,
 `lib/order-ops.ts` (initial rows in ensureOps/backfillOps) and
 `lib/florayn-import.ts`.
+
+As built (19.3, WP06): the caller waits at most 2 s (`ENQUEUE_BUDGET_MS`) for
+the enqueue; past that it finishes in the background with one log line. Log
+lines carry only the order count, the transition source and the error
+name/code, never order ids or messages. A change with nothing to write is
+left out, and duplicate order ids are merged. `extra` can never carry `id`,
+`workflow_status` or `status_changed_at`. Courier send no longer resets
+`status_changed_at` for an order staff had already moved to shipped (only the
+review-request timer notices). The event time is when the backend learns of
+the move, not Steadfast's own timestamp.
 
 ---
 
@@ -1539,8 +1684,8 @@ replaced, not migrated.
 Meta needs JPEG/PNG; renders are WebP on the rate-limited r2.dev host.
 - `image_mode: "jpeg_copies"` (default): `lib/tracking/catalog-images.ts`
   `convertPending(container, { limit, concurrency: 2 })` loads `sharp` lazily
-  (section 0.2: not installed; then it records "sharp is not installed" in the
-  job state and returns). Each needed source becomes a 1200 px JPEG
+  (section 0.2; as built sharp is installed, and if it ever fails to load the
+  job records "sharp is not installed" in `catalog:images` and returns). Each needed source becomes a 1200 px JPEG
   (`resize(1200, 1200, { fit: "inside" }).jpeg({ quality: 82, mozjpeg: true })`),
   uploaded with `r2Client()`/`r2Bucket()` (`lib/r2.ts`) to
   `feed-jpg/<sha1(source_url)>.jpg` with `Cache-Control: public,
@@ -1563,6 +1708,10 @@ logged (I24). Serves the stored published bytes (in-memory copy by etag) with
 charset=utf-8`; `.gz` serves the gzip bytes raw; `.tsv` serves gzip with
 `Content-Encoding: gzip` when `Accept-Encoding` allows, else the inflated body.
 Each valid fetch is logged to `catalog_feed_fetch`. Never builds on request.
+As built: `.gz` files are sent as `Content-Type: application/gzip` (the raw
+stored bytes, no Content-Encoding); `.tsv` adds `Cache-Control: private,
+no-cache` and `Vary: Accept-Encoding`. A valid-token fetch before anything is
+published answers 404 and is logged with status 404.
 
 ### 8.5 Build and publish
 
@@ -1600,6 +1749,14 @@ transaction:
    (handle), device, case_type, source, audience, device_class, landing;
 5. advance the watermark; commit.
 
+As built (19.3, WP07): primary ViewContent hits also give a derived
+`ProductView` row in `tracking_minute` and `tracking_day_dim`; staff hits
+(flag 8) are left out of both; hits without a source count under `unknown`;
+the landing dim is the pathname of the session's first PageView; Purchase
+rows for the product, device and case type dims come from the order's items
+(so the catalog's top-sellers label works); a run covers at most 6 hours with
+`statement_timeout` 120 s.
+
 `GET /admin/tracking/live` ("today" = Asia/Dhaka midnight to now; the `host`
 filter defaults to all hosts before cutover and to the live hosts once armed):
 ```json
@@ -1616,6 +1773,12 @@ filter defaults to all hosts before cutover and to the live hosts once armed):
   "recent": [{ "event": "AddToCart", "label": "Zebra Stark - iPhone 13 - Signature", "source": "meta_paid", "ago_s": 120 }],
   "health": { "outbox": {}, "jobs": {}, "rollup_lag_s": 30, "feed": {}, "variant_index": {}, "unknown_content_ids_today": 0 } }
 ```
+As built (19.3, WP07): `health.outbox` is `outboxHealth()`'s array (one row per
+platform/env/destination) and `health` adds `watermark`. The payload adds
+`generated_at`, `day`, `filter`, `poll_seconds`, `errors[]` and labels.
+`?host=` takes `''`, `all`, `test`, `live` or a listed host (else 400); orders
+are store-wide. `aov` = revenue / non-cancelled orders.
+
 Definitions:
 - Live visitors: distinct `visitor_id` over non-internal browser hits in the
   last 5 / 30 min, from raw `tracking_hit`. No heartbeats.
@@ -1649,7 +1812,8 @@ Sent with `sendEmail()` (`lib/send-email.ts`; needs `EMAILIT_API_KEY` and
 `EMAIL_FROM` with a verified domain) to `alerts.email` (default
 floraynweb@gmail.com), only when `alerts.enabled`. Each kind is throttled by
 `alerts.repeat_hours` through `tracking_state alert:<kind> { last_sent_at, open
-}`, and sends one recovery email when it clears. Subjects are short and factual
+}`, and sends one recovery email when it clears. (As built: per-platform keys
+and a richer state shape, 2.4 and 19.5.) Subjects are short and factual
 ("Florayn tracking: Meta token rejected (live)"); bodies carry counts and the
 admin URL (`<MEDUSA_BACKEND_URL>/app/tracking/health`), never tokens or
 customer data. `emailConfigured() === false` is a health warning, never a crash.
@@ -1716,6 +1880,12 @@ Server: `/api/t/e/` p95 under 20 ms (204 before forwarding); backend
 `/tracking/ingest` p95 under 50 ms; outbox + rollup + feed CPU under 3% of one
 vCPU on average.
 
+As built (19.1): the first local measurement put the layout set at +1,724 B,
+so the eager code was trimmed (5.1); the final local build is within every
+limit. The id call and the beacon moved into a second lazy chunk (`boot.ts`,
+1,609 B gzip), which adds a second chunk-map entry to the webpack runtime
+(+38 B in total).
+
 Must stay true: no hydration mismatch (the stub renders null; no module-top-level
 `window`); `npm run perf:check -- --enforce` passes after deploy; Lighthouse
 mobile product page LCP and TBT within noise (+-10%) of the pre-change run;
@@ -1761,7 +1931,7 @@ Rules:
   `/order/` never appears in `event_source_url`, `dl`, `page.url` or
   `page_location`.
 
-Doc changes (WP13):
+Doc changes (WP13, done 2026-09-27):
 - CHECKOUT.md gains a "Tracking" section (header contract, the Purchase step
   never fails an order, `fl-<display_id>`, no `/order/` to vendors, consent line
   source). Its lines about agreement statements and "no customer details to
@@ -2133,7 +2303,9 @@ Code is safe with none of these done: tracking stays inert (invariant 8).
    first (or an allowlist for the storefront's own egress and admin users).
    Until then the edge header alone protects ad sends.
 4. `sharp`: operator runs `cd apps/backend && npm install sharp`, commits the
-   root lockfile change (only needed for `image_mode: "jpeg_copies"`).
+   root lockfile change (only needed for `image_mode: "jpeg_copies"`). As
+   built: DONE (`sharp@0.34.5`, commit f65dd96); the image mode is the
+   owner's choice in Admin > Tracking > Catalog.
 5. Migrations over the SSH tunnel, BEFORE the backend deploy:
    `npx medusa exec ./src/scripts/migrate-tracking.ts` (preflight) then
    `... apply Migration20260928090000`; `migrate-privacy-settings.ts` then
@@ -2189,6 +2361,8 @@ ON. Google stays off on new.florayn.com by design.
 1. Approve either installing `sharp` (JPEG copies on img.florayn.com) or turning
    on Cloudflare Image Transformations, then set the image mode in Admin >
    Tracking > Catalog, enable the catalog and wait for images to be ready.
+   (As built: `sharp` is installed, so JPEG copies, the default, need no
+   further approval; Image Transformations remain the alternative.)
 2. Commerce Manager > Add catalog > E-commerce > name `Florayn Shop` > Data
    sources > Data feed > "Use a URL": paste the Meta feed URL; currency BDT;
    Replace daily at 04:00 Dhaka plus an hourly Update.
@@ -2261,9 +2435,513 @@ Purchases become `skipped`, and sending them later is an explicit Retry).
 
 ## 19. As-built notes
 
-Filled in by WP13: per-package deviations and their reasons, final file list,
-test results, and the measured numbers (budget table from CI, ingest and live
-latencies) with dates.
+Recorded by WP13 on 2026-09-27, branch `product-shop-ui-merge`. Waves 1-3 are
+commits f65dd96, c4a7d21 and da59005. WP06, the budget trim and WP13 were in
+the working tree, not yet committed, when this was written. Nothing ran
+against production: no deploy, no migration, no QA order.
+
+### 19.1 Verification (2026-09-27)
+
+| Check | Result |
+|---|---|
+| `cd apps/backend && npm test` | 503 tests, 503 pass, 0 fail (9.5 s); 500 before WP13, plus the 3 in `tracking-vectors-sync.test.cjs` |
+| `cd apps/storefront && npm test` | 487 tests, 487 pass, 0 fail (7.9 s) |
+| `npx tsc --noEmit -p apps/backend` | exit 0, no errors |
+| `npx tsc --noEmit -p apps/storefront` | exit 0, no errors |
+| `npx eslint apps/backend/src` (repo root) | exit 0: 0 errors, 188 warnings; no `@medusajs` error |
+| `cd apps/backend && npx medusa build` | exit 0, run twice (the second after the last admin edit, 42 s): types generated, `medusa lint` 0 errors and 188 warnings, backend and admin compiled (all five tracking admin pages) |
+| Storefront production build | exit 0, fixture API on `http://127.0.0.1:9931` (the budget trim's build at 14:36; no storefront source changed after it) |
+| `node apps/storefront/scripts/check-client-budget.cjs --base <build of df87006> --head apps/storefront/.next` | exit 0, "Within budget." (table below) |
+| `cd apps/backend && node --test tests/tracking-vectors-sync.test.cjs` | 3 of 3 pass: both fixture copies byte-identical and equal to the last json block of this file |
+
+The 188 lint warnings are the same count as the last build before tracking
+(2026-09-25). None is in a file tracking created; the only one in a file it
+touched is the older `throw new Error` at `lib/storefront-events.ts:111`.
+
+Client JS budget, local (gzip level 9, `.js` only; base = a build of df87006,
+the commit before tracking; head = the final working tree):
+
+| measure | base | head | delta | limit |
+|---|---|---|---|---|
+| framework (rootMainFiles) | 100,883 | 100,883 | 0 | = 0 |
+| webpack runtime | 1,918 | 1,956 | +38 | <= 64 |
+| `/layout` set | 31,404 | 32,114 | +710 | <= 1,200 |
+| `/page` | 139,421 | 140,169 | +748 | <= 780 |
+| `/shop/page` | 186,465 | 187,213 | +748 | <= 780 |
+| `/collection/[slug]/page` | 136,198 | 136,946 | +748 | <= 780 |
+| `/product/[slug]/page` | 202,805 | 203,776 | +971 | <= 1,048 |
+| `/checkout/page` | 144,988 | 146,376 | +1,388 | <= 1,548 |
+| lazy runtime chunk (`fl-runtime-v1`, chunk 706) | - | 2,679 | - | <= 6,000 |
+
+The lazy `boot.ts` chunk is 1,609 B gzip and is in no first-load set. Before
+the trim the same build measured `/layout` +1,724 (over) and `/checkout/page`
++2,857 (over its 2,543 limit).
+
+Static audits (2026-09-27), all pass:
+- No `"use client"` module, or anything it imports, reaches
+  `lib/tracking/server/` (storefront test "no "use client" module, or anything
+  it imports, reaches lib/tracking/server/", plus a direct grep). `lib/cart.ts`
+  is a `"use server"` module: the client gets only action references from it,
+  so the scanner does not follow its imports.
+- The eager path (the stub, `cart-provider`, `checkout-form`, `product-view`)
+  reaches only `lib/tracking/queue.ts` and `paths.ts`; `fl-runtime-v1` exists
+  only in `runtime.ts`.
+- No `NEXT_PUBLIC_` variable holds a tracking value: the secrets are read only
+  in `lib/tracking/server/keys.ts` (storefront) and `lib/tracking/secret.ts`
+  (backend), and both `.env.template` files name them as server-only.
+- `apps/storefront/src/app/layout.tsx` has no `next/headers`, `cookies(` or
+  `searchParams`.
+- No tracking file logs a request body, a header value or a token. The only
+  log lines are the ingest route (`[tracking] ingest failed: <pg code or error
+  name>`), `purchase.ts` and `order-status.ts` (a short reason made of the
+  error name and code only). Adapter messages pass through `redact()`.
+- Every sidebar admin page imports an icon that exists in `@medusajs/icons`:
+  Tracking `Target`, Live `ChartActivity`, Privacy `ShieldCheck`; Health and
+  Catalog export no config.
+- Every path listed in section 13 exists (161 paths). The files section 13
+  says nobody edits (`next.config.ts`, `lib/revalidation.ts`,
+  `lib/storefront-write-domains.ts`, `lib/florayn-import.ts`,
+  `workflows/checkout-service.ts`, `api/store/checkout/quote/route.ts`) have no
+  diff against df87006, and there is no `middleware.ts`.
+- No `package.json` or lockfile differs from HEAD. Across the tracking commits
+  the only manifest changes are the two approved dependencies (19.4).
+- `workflow_status` is written only by `lib/order-status.ts`, the initial
+  rows in `lib/order-ops.ts` and the florayn.com import (backend test "no file
+  writes workflow_status except ...").
+
+### 19.2 Final file list against section 13
+
+- New, not in section 13 (budget trim): `apps/storefront/src/lib/tracking/batch.ts`
+  and `apps/storefront/src/lib/tracking/boot.ts`.
+- Dependency step before wave 1 (approved): `apps/backend/package.json` and
+  the root `package-lock.json` (`sharp`), `apps/storefront/package.json` and its
+  lockfile (`capi-param-builder-nodejs`).
+- `apps/backend/src/admin/routes/tracking/health/page.tsx` (WP03's file): WP13
+  added labels for the two counters WP04 introduced.
+- Test stub maps only, as section 13 allows: `tests/checkout.test.cjs`,
+  `storefront-events.test.cjs`, `product-manager.test.cjs` (backend);
+  `product-data.test.cjs`, `product-view-case-param.test.cjs` (storefront).
+- Everything else matches section 13, file for file.
+- Not tracking code: the untracked Node compile-cache folder under
+  `apps/backend/` (from 2026-09-14) and `.claude/`. Keep both out of commits.
+
+### 19.3 Deviations by package, with reasons
+
+Each item is what the code does where the spec was silent or said otherwise.
+
+**WP00 (budget gate, CI).**
+- For a push the base build is the previous branch tip (`github.event.before`,
+  else `HEAD~1`); only a pull request uses a true merge-base. Why: a push has
+  no base branch to merge against.
+- The framework rule is exactly 0 in both directions (a shrink fails). A
+  Next.js or React upgrade needs a deliberate override.
+- Event values reach the CI shell through env vars, not inline `${{ }}`, to
+  keep them out of the script text. `--help`, exit 2 for bad arguments or
+  manifests; rows carry `rule`, `skipped` and `note` display fields.
+- The checkout-integration job keeps `timeout-minutes: 20` (existing lines
+  must not change) although the scoped-migration steps add one to two
+  minutes.
+
+**WP01 (backend foundation).**
+- `tracking_settings.config` is `jsonb` (the DML json type).
+- The share gate applies only when share goes OFF to ON, so an emergency
+  save while share is ON (disarming, a token) is never refused because the
+  Privacy page was unpublished later.
+- The POST never accepts `catalog_feed_token`; `ensureFeedToken()` creates it
+  and `rotateFeedToken()` replaces it. Tokens go through `saveTrackingTokens()`
+  (the service, never a workflow, I16) because medusa lint flags a service
+  mutation in a route.
+- POST body: config sections and the four token columns at the top level;
+  unknown keys at any level give 400; `privacy.consent_version` is read-only.
+  The Tracking page never sends catalog settings; the Catalog page posts
+  `{ catalog }` only.
+- `destinationFor(..., "google")` is also null with an empty conversion id or
+  label. `GET /store/tracking-config` answers 503 `no-store` on a database
+  error.
+- Over-cap values are dropped, never cut (paths, landing params, every 4.4
+  context string); an IP with any character outside hex, `:` and `.` is
+  nulled, so a suffixed IP never reaches Meta.
+- `job:<name>` adds `last_error_at` (`last_error` survives a later success).
+  More exports than 3.6 (all additive).
+
+**WP02 (hashes, match keys, adapters).**
+- `purchaseEventId`/`statusEventId` and `buildMetaEvent`/`buildTikTokEvent`
+  return null instead of throwing, so the steps that must never throw stay
+  safe.
+- Meta Purchase `event_source_url` is always forced to `<origin>/checkout/`;
+  any private or `/order/` URL is dropped. COD events carry no IP or user
+  agent.
+- TikTok also gets `num_items` on InitiateCheckout, and no `test_event_code`
+  (v1.3 has none; the TEST pixel is the TEST destination).
+- `classifyMeta` checks codes before the error type (Graph labels code 100 as
+  OAuthException); unknown errors are transient; "expired" is recognised from
+  the message text. The TikTok 40002 index parser and Meta's expiry wording
+  are not verified against real responses.
+- A batch over 500 throws `TrackingAdapterError` (not a generic Error, for the
+  lint rule). Every returned message passes through `redact()`.
+
+**WP09 (Privacy page).**
+- `readPrivacySettings` takes a container; the model writes its defaults as
+  literals to avoid an import cycle (a test compares them).
+- The Contact plain-text rule applies to the body; a published page cannot be
+  emptied. POST answers `{ settings, suggested }`.
+- The storefront page now has `revalidate = 60` (it was fully static); its
+  `<title>` stays "Privacy policy" even if the admin title changes.
+- The content module's `.snapshot-content.json` was not updated (like the
+  other hand-written content migrations), so `medusa db:generate content`
+  would try to create `privacy_setting` again: review its output first.
+
+**WP14 (storefront contract, queue).**
+- `validateEvent` is stricter than 4.1 on both sides: it also rejects a path
+  starting with `//` or holding `#`, a backslash or non-printable characters,
+  drops optional `d` keys sent as null, and rejects the event for a known key
+  of the wrong type. No vector changes.
+- `isPurchaseBlock` requires finite, non-negative `value` and `num_items`.
+- `fl()` without a window returns a throwaway state; no `globalThis` (Safari
+  12.0). The budget trim later reshaped this package's files (below).
+
+**WP03 (outbox, alerts, health).**
+- Send-time lever: rows whose platform was switched off, or whose env is live
+  while disarmed, become `skipped` at send time (payload kept), so the
+  rollback lever also covers rows already queued.
+- All eight backoff delays are used; `failed` after the 9th failed send.
+  `dry_run` rows keep their payload until retention.
+- Innocent rows of a split batch are resent in the same run, not backed off.
+- Alert state is per platform where the kind is, with the shape
+  `{ open, title, since, last_sent_at, last_try_at }`; extra counters and state
+  keys (19.5) because `tracking_event` has no status-change time.
+- Counter windows read the current and the previous hourly bucket. An alert
+  never emailed closes silently; a failed email is retried after 15 min;
+  `no_purchase` gives no verdict outside active hours; the test alert is sent
+  even while alerts are off. Feed alerts also clear on a later catalog build
+  that was not held.
+- `outboxHealth()` returns an array and is shared for 10 s per process
+  (`?fresh=1` on the Health route bypasses it).
+
+**WP08 (variant index, catalog feed).**
+- `.gz` is served as `application/gzip` (raw bytes); `.tsv` adds
+  `private, no-cache` and `Vary: Accept-Encoding`. A valid-token fetch before
+  anything is published is a logged 404; bad tokens are never logged.
+- Include/exclude case types narrow case products only; regular products are
+  always in scope. Sellable also needs a price above 0.
+- `custom_label_4`: top-sellers-30d = the 20 handles with most Purchases in
+  30 Dhaka days (at least 2), trending-7d = the next 20 by AddToCart in 7 days
+  (at least 3), new-30d once the table has more than 30 days. Blank while the
+  table is empty.
+- The job also rebuilds on a settings-fingerprint change or after converting
+  images. An empty first build is held without an alert.
+- Source images are read from R2 by key (not the rate-limited r2.dev host);
+  uploads use `PutObject` directly for the `immutable` cache header.
+- State keys `catalog:images` (conversion progress, `sharp_missing`) and
+  `catalog:build`.
+
+**WP10 (stub, runtime, pixels).**
+- TikTok is ready only after `onload` and `ttq.ready()`: events.js is a
+  loader, and the stub it leaves would replay calls later, possibly on
+  `/order/`. No documented load option turns TikTok SPA page views off, so the
+  owner's pixel setting and `spa_off_confirmed` stay required.
+- New queue items are noticed by wrapping `push` on the queue array; the 2 s
+  timer starts with the first unsent item.
+- The Purchase guard value lists the vendors that fired it. Injection waits
+  one `setTimeout(0)`, then re-checks the path and scrubs again. A failed batch
+  is restored only on a network error or a 5xx.
+- `addScript()` lives in `pixels/meta.ts` (no helper file was allowed).
+
+**WP11 (storefront endpoints).**
+- A missing or empty User-Agent is a bot. `/api/t/e/` checks the edge header
+  before reading settings; 415 for other content types, 400 for bad JSON;
+  events past 25 and clock-dropped events count as `sf.invalid`.
+- Staff browsers get no vendor cookies. `_fbp` only when none is usable;
+  `_fl_vid` is never refreshed. Opt-out also expires the parent-domain
+  `_fbp`/`_fbc` (fbevents writes them on `.florayn.com`), which clears the
+  WordPress pixel's copies in that browser at cutover.
+- `checkoutTrackingHeaders()` also returns null when `headers()`/`cookies()`
+  throw, so checkout can never fail on it (the `checkout_without_tracking`
+  alert reports it).
+- The per-IP bucket has a burst of 1,200. The forwarder retries once only on a
+  network error, timeout, 5xx, 408 or 429.
+- Response helpers live in `server/request-context.ts`; the staff and opt-out
+  pages send `no-referrer` and `noindex`.
+
+**WP04 (ingest).**
+- Extra counters `ingest.invalid` and `ingest.unknown_host`.
+  `ingest.no_destination` counts only an enabled platform without an id.
+  Envelope stats are accepted only for `sf.*` keys, so the storefront cannot
+  write the counters that drive the checkout and outbox alerts.
+- Known variant = in the index with a price above 0 (`sellable` not needed).
+  The value is clamped to the known items' index prices; the hit takes handle,
+  device and case type from the index.
+- Duplicate events inside one batch are recorded once. A failure answers 503
+  and logs only the error code (knex messages quote bound values).
+  `scheduleFlush` only when rows were inserted.
+
+**WP05 (Purchase at checkout, reconcile).**
+- Time budgets not in the spec: stash 1 s, record 3 s, statement timeout 5 s;
+  reconcile covers what a budget cuts off.
+- A Meta Purchase without a user agent is `skipped` (Meta refuses website
+  events without one). Skipped rows carry a short reason; blocked rows say
+  exactly "no token".
+- Order rows use the context's stored env, even for a disabled platform, so
+  "Send skipped" works and COD events follow their Purchase's dataset.
+- An opted-out shopper's stored contexts keep no ip, ua, ids or click ids; the
+  context and hit still exist for the `checkout_without_tracking` alert.
+- `buildPurchaseBlock` can return null; reconcile (a) waits a minute after a
+  cart context changes; (a) and (c) take 500 rows per run.
+- The isolated CI check accepts `pending` or `dry_run` before its explicit
+  flush, because the checkout's own debounced flush can win the race.
+
+**WP07 (Live dashboard, rollup).**
+- `health.outbox` is the `outboxHealth()` array, plus `watermark`.
+- Derived `ProductView` rows (primary ViewContent) in the minute and day
+  tables; staff hits are left out of both, so `no_purchase` history also
+  ignores staff purchases.
+- Fixed a cross-package gap: a Purchase hit has no handle, so Purchase rows
+  for the product, device and case type dims come from the order's items
+  (through the order context), in a savepoint. This is what fills the
+  catalog's top-sellers label.
+- `unknown` source key; landing = the session's first PageView pathname; 6 h
+  window cap; `aov` over non-cancelled orders; `?host` values; the staff-link
+  answer adds `list` and `off_url`; the page polls only while visible and on
+  Today.
+
+**WP12 (commerce events).**
+- InitiateCheckout also skips a non-BDT currency; `items` only lines with a
+  variant id; value `max(0, subtotal - bundleDiscount)`.
+- `trackAdd` wraps `track()` in a try (the add's catch would otherwise undo a
+  successful add). `addMany` sends only lines with a variant id.
+- `submitOrder` reads headers and the customer token in one `Promise.all`;
+  `placeOrder` spreads tracking headers first; the block check sits in a try.
+- The client-import scanner in `tracking-server.test.cjs` skips the imports of
+  `"use server"` modules: the checkout's Server Action must import
+  `checkoutTrackingHeaders`, and the browser only ever gets action references
+  from such a module.
+
+**WP06 (status transitions, COD events).**
+- OrderConfirmed only from a status before confirmation (section 7), because
+  the outbox key lasts only while its row exists (sent rows are pruned after
+  8 days). Cost: an OrderConfirmed whose enqueue failed at confirmation is not
+  retried when the order ships.
+- A 2 s wait budget around the enqueue, so the Steadfast webhook still answers
+  fast; log lines hold only the count, the source and the error name/code.
+- A change with nothing to write is left out (no more no-op
+  `workflow_status` writes), duplicate ids merged, and `extra` can never set
+  the status fields. Courier send keeps `status_changed_at` for an order
+  already moved to shipped by hand.
+- `status-events.ts` skips the order lookup when no moved order has a sendable
+  context; `buildOrderEventRows` still decides.
+
+**Budget trim (after wave 3).**
+- Why: the first local build put the layout set at +1,724 B (limit 1,200) and
+  checkout at +2,857 B (limit 2,543).
+- The stub now only records (5.1). `boot.ts`, a new lazy chunk, makes the id
+  call, the beacon and the runtime schedule; `batch.ts` holds `newEventId`,
+  `prepare`, `takeUnsent` and `restoreUnsent`; `queue.ts` exports only `fl`,
+  `track` and `trackPurchase`; `paths.ts` holds only the private-path check and
+  the URL allowlists moved to `contract.ts`.
+- `FlState.landing` is the raw `{ search, ref, path }`. Queue items keep the
+  raw address and no id until `prepare()`; the runtime prepares everything at
+  `start()`, before any vendor script.
+- The webpack runtime grows +38 B (two lazy chunk-map entries) instead of
+  +19 B; the limit is 64.
+
+**WP13 (this section).** Docs updated (AGENTS.md pointer, CHECKOUT.md
+Tracking, PERFORMANCE.md gate and loading rules, DEPLOY.md Redis note and
+tracking runbook), `tests/tracking-vectors-sync.test.cjs` added, and two
+Health counter labels added (19.2).
+
+### 19.4 Dependencies
+
+- `sharp@0.34.5` (backend, root lockfile, commit f65dd96): installed with the
+  owner's approval. It is still loaded lazily through a non-literal
+  specifier, and the backend image installs it with the server's production
+  dependencies. JPEG catalog copies need nothing more.
+- `capi-param-builder-nodejs@1.3.2` (storefront, owner decision 12): used only
+  in `server/cookies.ts`. `lib/cart.ts` (every cart Server Action) and the
+  checkout page now import it indirectly, so a bundling failure would break
+  add-to-cart as well as checkout; the local production build bundled it.
+- `server-only` is still not installed; the runtime guard of 4.8 stands in.
+
+### 19.5 Counters, alert kinds and state keys (as built)
+
+`tracking_counter` keys (hourly buckets):
+
+| key | written by | means |
+|---|---|---|
+| `sf.untrusted` | storefront (`/api/t/id/`, `/api/t/e/`) | request without a valid edge header |
+| `sf.unknown_host` | storefront | host not in test or live hosts |
+| `sf.rate_dropped` | storefront | events over the per-visitor or per-IP limit |
+| `sf.cap_dropped` | storefront forwarder | events over the global 3,000 per 10 s cap |
+| `sf.invalid` | storefront | invalid events, events past 25, clock-dropped events |
+| `sf.forward_failed` | storefront forwarder | batches the backend did not accept (sent with the next envelope) |
+| `sf.bot` | storefront | bot or missing user agent |
+| `ingest.unknown_variant` | backend ingest | product event with a variant not in the index |
+| `ingest.no_token_dropped` | backend ingest | funnel event dropped, no token for that platform/env |
+| `ingest.no_destination` | backend ingest | platform enabled but no id for the host's env |
+| `ingest.invalid` | backend ingest | event refused on re-validation or the time window |
+| `ingest.unknown_host` | backend ingest | batch host not listed (storefront config cache out of step) |
+| `checkout.header_rejected` | `/store/checkout` | tracking header present, key wrong |
+| `checkout.untrusted` | `/store/checkout` | context present without the edge flag |
+| `outbox.<status>.<platform>.<env>` | outbox sender | rows reaching each status per hour |
+
+The backend accepts envelope stats only for `sf.*` keys. The Health page
+labels every key above.
+
+Alert kinds (`checkAlerts`, section 10): `token` (per platform and env),
+`payload` and `send_failures` (per platform), `checkout_without_tracking`,
+`purchase_not_enqueued`, `edge_missing`, `no_purchase`, `sweep_stale`,
+`rollup_lag`, `live_disarmed`, `unknown_variants`, `feed_guard`, `feed_error`,
+`feed_not_fetched`: 14 kinds. `sweep_stale` uses fixed thresholds in
+`alerts.ts` (outbox and rollup 180,000 ms, reconcile 900,000, catalog
+2,700,000), which the job files register with the same values.
+
+`tracking_state` keys: `job:<name>` `{ last_run_at, last_ok_at, last_error,
+last_error_at }`; `rollup:watermark` `{ done_through }`; `alert:<kind>` or the
+per-platform keys of 2.4; `alerts:last`; `prune:last`;
+`outbox:last_error:<platform>:<env>` `{ at, status, cls, code, trace_id,
+message, destination }`; `token_fp:<platform>:<env>`; `catalog:stale`;
+`catalog:alert`; `catalog:build` `{ at, status, items, content_hash,
+config_fp }` (status `published`, `held`, `unchanged` or
+`published_anyway`); `catalog:images`; `variant_index`.
+
+### 19.6 Deploy order and operator steps
+
+Each step needs the owner's OK. DEPLOY.md "Ad tracking runbook" has the
+Cloudflare clicks and more detail. Never paste a secret or a token in chat or
+git.
+
+0. Commit the rest of the work (WP06, the budget trim, WP13) and push the
+   branch Coolify builds. Leave `.claude/` and the compile-cache folder under
+   `apps/backend/` out:
+
+   ```bash
+   git add TRACKING.md AGENTS.md CHECKOUT.md PERFORMANCE.md DEPLOY.md \
+     apps/backend/src apps/backend/tests apps/storefront/src apps/storefront/tests
+   git status --short    # nothing staged under .claude/ or the compile cache
+   ```
+
+1. CI on the pushed commit ("Storefront performance and freshness") must be
+   green: `checkout-integration` (with the scoped tracking and privacy
+   migration steps and `CHECKOUT_TRACKING_PASS`), the regression suites, the
+   backend build with medusa lint, and `client-budget`.
+
+   ```bash
+   gh run list --workflow performance.yml --limit 3
+   gh run view <run id> --log | grep -E "CHECKOUT_TRACKING_PASS|CHECKOUT_INTEGRATION_PASS|Within budget|exceeds"
+   ```
+
+2. Migrations, BEFORE the backend deploy, over the SSH tunnel (DEPLOY.md
+   step 5 shows how to open it and where the credentials come from):
+
+   ```bash
+   cd apps/backend
+   export DATABASE_URL="postgres://<user>:<password>@127.0.0.1:5433/florayn_v3"
+   npx medusa exec ./src/scripts/migrate-tracking.ts
+   npx medusa exec ./src/scripts/migrate-tracking.ts apply Migration20260928090000
+   npx medusa exec ./src/scripts/migrate-privacy-settings.ts
+   npx medusa exec ./src/scripts/migrate-privacy-settings.ts apply Migration20260928091000
+   unset DATABASE_URL
+   ```
+
+3. Env secrets in Coolify (runtime variables, then redeploy): backend
+   `TRACKING_INGEST_SECRET`; storefront `TRACKING_INGEST_SECRET` (the same
+   value) and `TRACKING_EDGE_SECRET`. Make each with
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+4. Cloudflare, host `new.florayn.com` only: the `/api/t/` cache bypass rule
+   (last), the Transform Rule that sets `x-florayn-edge` to
+   `TRACKING_EDGE_SECRET`, no bot challenge on `/api/t/`, optionally the
+   rate-limit rule; check the click-id cache-key rule leaves the address bar
+   intact. Origin firewall: not until `api.new.florayn.com` is proxied or
+   moved (16.3).
+5. Deploy the backend, wait for healthy, then the storefront. Purge the HTML
+   by prefix and warm (DEPLOY.md step 6). Never judge speed cold.
+6. Verify with a browser user agent (DEPLOY.md step 7): `/api/t/id/` through
+   Cloudflare gives 200, `private, no-store`, `on: true` and the three `_fl_`
+   cookies; straight to the origin it gives `on: false` and no cookie;
+   `/store/tracking-config` has no token or email; the five admin pages load
+   and Health shows fresh job runs.
+7. Owner, Meta TEST (17.A): paste the TEST token, the test event code, turn
+   Automatic Advanced Matching OFF in Events Manager, tick it in Admin >
+   Tracking, turn Meta on. Staff exclude their browsers (17.H).
+8. QA on the TEST dataset, section 15 (19.7).
+9. Later, each on its own OK: catalog image mode and enabling the catalog
+   (17.E), Privacy page and share (17.F, then TEST ORDER 5), TikTok (17.C),
+   backups with the table exclusions (16.8), cutover (18).
+
+### 19.7 QA on the TEST dataset
+
+Run section 15 on `new.florayn.com` with Meta's Test Events open. Up to five
+real orders are approved (decision 4): name them "TEST ORDER", they go only to
+the TEST dataset, and every one is set to cancelled in Admin > Orders when QA
+ends (cancelling sends no event). Steps 6, 7, 8 and 11 use TEST ORDERs 1 to 4;
+TEST ORDER 5 waits for the owner's Privacy and consent approval (step 16).
+Step 12 moves TEST ORDER 1 through processing, confirmed, shipped and
+delivered: expect one OrderConfirmed and one Delivered, and nothing more when
+it moves back and forth.
+
+Added by the build, check during QA:
+- On a public page the boot chunk loads at first idle, followed by exactly one
+  `/api/t/id/`; nothing loads and nothing is called on `/order/`, `/review/`
+  or `/account/`; a bounce after the id answer sends one `sendBeacon` to
+  `/api/t/e/`.
+- The proxy keeps the `Host` header (the stored context's host decides the
+  environment and trust): the TEST ORDER's `tracking_order_context` shows
+  `new.florayn.com`, env `test`, trusted.
+- Add to cart and checkout work on the deployed build (they now import the
+  tracking header code).
+- Slow 3G (step 7): no `facebook.com/tr` request carries `/order/` in `dl`.
+- With a TikTok test pixel later: `ttq.ready()` fires after events.js loads.
+- In `next dev`, StrictMode sends one PageView per pathname.
+
+### 19.8 Numbers only CI or a deploy can measure (TODO)
+
+- TODO(CI): the `client-budget` table from the first CI run on the pushed
+  branch, with the run id. The local table is in 19.1.
+- TODO(CI): the `checkout-integration` job's duration with the added
+  migration steps (its timeout is 20 min).
+- TODO(deploy): `/api/t/e/` p95 (target under 20 ms) and backend
+  `/tracking/ingest` p95 (under 50 ms), from the logs or a short load check.
+- TODO(deploy): `GET /admin/tracking/live` response time with a Live tab open,
+  and outbox + rollup + feed CPU (target under 3% of one vCPU).
+- TODO(deploy): `npm run perf:check -- --enforce` after purge and warm.
+- TODO(deploy): Lighthouse mobile, product page, LCP and TBT before and after
+  (within about 10%).
+- TODO(deploy): checkout INP before and after.
+- TODO(QA): Meta Test Events deduplication per event and Purchase EMQ with
+  share OFF (expected below the 8.6 baseline until share is ON).
+
+### 19.9 Open issues and risks (not fixed here)
+
+- No tracking SQL has run against a real Postgres or Medusa: only in-memory
+  fakes. First real runs: CI `checkout-integration`, then the migrations and
+  QA. Unproven: `SET LOCAL`, the ON CONFLICT read-back under concurrent
+  submits, knex savepoints in the rollup, `LATERAL (VALUES ...)`,
+  `count(distinct) FILTER`, the `query.graph` order fields, the 413 from
+  Medusa's body parser.
+- COD events have no reconcile: a failed status enqueue (logged) loses that
+  event. "Once per order" holds only while the outbox row exists (8 days for
+  sent rows); a fully durable guard needs a marker column, a schema change.
+- The share gate checks only OFF to ON: if the owner unpublishes the Privacy
+  page while share is ON, share stays ON until switched off by hand.
+- `checkoutTrackingHeaders()` has no time budget; on a cold data-cache miss
+  its `getTrackingConfig()` fetch adds that fetch's time to the Server Action
+  (tens of ms when healthy). A small budget would bound it.
+- `outboxHealth()` aggregates all of `tracking_event` (about 1M rows at
+  target) at most every 10 s per process, and Live's unknown-ids count scans
+  today's hits every 10 s while open. Watch both; counters could replace them.
+- `kickStaleJobs` from an admin route restarts a job only in a process that
+  loaded that job file.
+- Before the first variant-index build every product event counts as unknown,
+  so `unknown_variants` can fire once after a fresh deploy.
+- Catalog: check `google_product_category` text paths and the `internal_label`
+  form on the first Commerce Manager fetch.
+- The event time of a COD event is when the backend learns of the move, not
+  Steadfast's own time.
+- `queue.ts` and `paths.ts` are still copied into the checkout and cart page
+  chunks (about 280 B gzip), because of Next's split-chunk minimum.
+- At cutover the florayn.com cache rules must exclude `/api/` too, and the
+  Cloudflare rules of 16.2 must be widened to `florayn.com` and `www`.
+- Postgres has no backups yet (pre-cutover audit); when they are set up, use
+  the exclusions in 16.8.
 
 ---
 

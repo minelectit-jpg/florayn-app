@@ -166,6 +166,70 @@ canceled/closed states, saved monetary breakdown, optional support details and
 noindex/no-referrer metadata. The isolated integration also verifies stored
 totals, masked contact details and image persistence after a catalog image update.
 
+## Tracking
+
+Ad tracking is specified in `TRACKING.md`; read sections 4.4, 6.5 and 12 before
+changing anything below. The rule that outranks the rest: **an order never
+fails, waits long or changes because of tracking.**
+
+- **Header contract.** The `submitOrder` Server Action in `lib/cart.ts` reads
+  `checkoutTrackingHeaders()` (only `headers()` and `cookies()`, never the
+  action's arguments) alongside the customer token, with `.catch(() => null)`.
+  When it has a context, `placeOrder` sends `x-florayn-ingest-key` (a key
+  derived from `TRACKING_INGEST_SECRET`, never the secret) and
+  `x-florayn-tracking` (base64url JSON, at most 4 KB) on `POST /store/checkout`
+  only. The tracking headers are spread first, so they can never replace
+  content-type, the publishable key or authorization. Without the secret there
+  are no headers and zero extra work.
+- **Workflow.** Only `/store/checkout` runs `checkoutWithTrackingWorkflow`
+  (`workflows/checkout.ts`). It reuses `prepare-checkout` and adds two steps:
+  `stash-checkout-tracking` before it (at most 1 s) and
+  `record-purchase-tracking` after a 200 with an order (at most 3 s, statement
+  timeout 5 s). Both return a `StepResponse`, catch everything and log one
+  short line without a body. Past a budget the work finishes in the
+  background and the 5-minute reconcile job covers a failure.
+  `checkoutWorkflow`, its input type and `/store/checkout/quote` stay
+  byte-identical; a test checks them.
+- **Response.** The existing body, plus `tracking` (a `PurchaseBlock`) only
+  when the order was placed and a context was stored for it. Retries and
+  concurrent submits answer the same block. The storefront accepts it only
+  through `isPurchaseBlock`, inside a try, and calls
+  `trackPurchase(result.tracking)` as the first statement of `if (result.ok)`,
+  before `applySummary` and `router.push`. A malformed block is ignored.
+- **Event id.** Purchase `event_id`, `order_id` and Google `transaction_id` are
+  `fl-<display_id>` (for example `fl-1234`). The raw `order_...` id is the
+  guest access capability of `/order/<id>/` (see Order confirmation), so it
+  never leaves the backend. `fl-` cannot collide with the WooCommerce numbers
+  already sent to the same Google conversion.
+- **No `/order/` URL reaches a vendor.** Server copies use
+  `https://<host>/checkout/` as the event URL. The browser copies fire before
+  the URL changes, and every vendor call checks at that moment that the page
+  is public and is the page the event was recorded on. `/order/`, `/review/`
+  and `/account/` record no event and load no pixel.
+- **InitiateCheckout** fires once per mount, only when the page passed an id
+  (`icEventId(cart.id)`, a keyed hash, never the raw cart id) and the currency
+  is BDT. The form is empty at mount, so it carries no customer details.
+- **Consent line.** `app/checkout/page.tsx` passes
+  `checkoutConsent(getTrackingConfig())`. It is non-null only while
+  Admin > Tracking > Privacy has "Share hashed contact details" ON with a
+  non-empty sentence; the line then renders under Place order, after the
+  existing `checkout-terms` paragraph, with a link to `/privacy/`. Its text is
+  edited only in Admin > Tracking.
+- **Contact data stays off for now.** `share_contact_hashes` is OFF and stays
+  OFF until the owner approves the Privacy page and the consent sentence
+  (`TRACKING.md` Appendix A and B), publishes the page and switches it on. The
+  server refuses to switch it on before that. While it is off, no contact
+  data, plain or hashed, goes to any ad platform or to the browser, so the
+  lines above about agreement statements and "no customer details to
+  analytics" still hold as written. They are reworded only when the owner
+  approves that text and turns share ON.
+- **Isolated CI.** `verify-checkout-isolated.ts` also sets a fake Meta TEST
+  token with `TRACKING_DRY_RUN=1`, places two simultaneous tracked submits and
+  a retry, and asserts one order, one `tracking_order_context`, one Purchase
+  hit, one Meta Purchase row (flushed as `dry_run`), one skipped TikTok row and
+  the same `fl-N` in every 200. It logs `CHECKOUT_TRACKING_PASS`; the existing
+  assertions and `CHECKOUT_INTEGRATION_PASS` are unchanged.
+
 ## Admin settings and freshness
 
 The Medusa sidebar **Checkout** page uses `GET`/`POST

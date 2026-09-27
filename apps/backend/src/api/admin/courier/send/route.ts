@@ -4,9 +4,9 @@ import {
   ensureOps,
   hydrateOrders,
   opsByOrderId,
-  opsService,
   projectManagedOrder,
 } from "../../../../lib/order-ops"
+import { applyStatusChanges, type StatusChange } from "../../../../lib/order-status"
 import {
   createBulkConsignments,
   normalizeBdPhone,
@@ -25,7 +25,8 @@ type SendResult = {
 /**
  * POST /admin/courier/send { order_ids: string[] }
  * Book one or many orders with Steadfast in a single bulk call, then stamp the
- * consignment id + tracking code on each op row and move it to `shipped`.
+ * consignment id + tracking code on each op row and move it to `shipped`
+ * (through lib/order-status.ts, which also queues the COD ad events).
  * Orders already sent, or with an unusable phone, are skipped with a reason.
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -91,28 +92,29 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     if (!bulk.ok) {
       return res.status(400).json({ message: bulk.error || "Courier is not ready." })
     }
-    const svc = opsService(req.scope)
-    const updates: any[] = []
+    const changes: StatusChange[] = []
     for (const r of bulk.results) {
       const orderId = invoiceToOrder.get(r.invoice)
       if (!orderId) continue
       const op = ops.get(orderId)
       if (r.ok && op) {
-        updates.push({
-          id: op.id,
-          steadfast_consignment_id: r.consignment_id ?? null,
-          steadfast_tracking_code: r.tracking_code ?? null,
-          steadfast_status: r.status ?? "in_review",
-          steadfast_synced_at: new Date(),
-          workflow_status: "shipped",
-          status_changed_at: new Date(),
+        changes.push({
+          op,
+          to: "shipped",
+          extra: {
+            steadfast_consignment_id: r.consignment_id ?? null,
+            steadfast_tracking_code: r.tracking_code ?? null,
+            steadfast_status: r.status ?? "in_review",
+            steadfast_synced_at: new Date(),
+          },
+          via: "courier-send",
         })
         results.push({ order_id: orderId, ok: true, tracking_code: r.tracking_code, consignment_id: r.consignment_id })
       } else {
         results.push({ order_id: orderId, ok: false, error: r.error || "Steadfast rejected this order." })
       }
     }
-    if (updates.length) await svc.updateOrderOps(updates)
+    if (changes.length) await applyStatusChanges(req.scope, changes)
   }
 
   const sent = results.filter((r) => r.ok && !r.error).length

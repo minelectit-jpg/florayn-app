@@ -128,6 +128,11 @@ Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
 layout; verify real commerce changes using the isolated Medusa integration CI.
 
+Read `TRACKING.md` before changing ad tracking, `/api/t/*`, the tracking
+module, the Live dashboard, the Privacy page or the catalog feed. Nothing
+reaches an ad platform without the Cloudflare edge header, and no contact data
+leaves while share is off.
+
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
 ```bash

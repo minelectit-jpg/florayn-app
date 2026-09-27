@@ -16,8 +16,8 @@
  * page views and automatic events off in both pixels, and the id answer loads
  * TikTok only once `spa_off_confirmed` is ticked (3.4).
  */
+import type { ReadyItem } from "../batch"
 import type { IdResponse, PurchaseBlock } from "../contract"
-import type { QueueItem } from "../queue"
 import { addScript } from "./meta"
 
 type Queue = unknown[] & Record<string, unknown>
@@ -74,7 +74,7 @@ export function load(cfg: IdResponse): Promise<void> {
 
 type Content = { content_id: string; quantity: number; price: number }
 
-export function fire(item: QueueItem, cfg: IdResponse): void {
+export function fire(item: ReadyItem, cfg: IdResponse): void {
   const ttq = (window as TikTokWindow).ttq
   if (!ttq) return
   const d = item.d ?? {}

@@ -73,11 +73,84 @@ data and code are held small:
   (`mega-panel.tsx`) and the search results and engine (`search-results.tsx`)
   load on intent through `React.lazy`, never `next/dynamic` with `ssr:false`.
   The engine stays at 3 KB gzip or less and `normalize.ts` at 1.2 KB or less.
-  "First Load JS shared by all" in `next build` must not grow against the build
-  before the header rebuild.
+  Shared first-load JS must not grow: the framework chunks stay at +0 B and
+  the webpack runtime grows at most +64 B (a lazy chunk's map entry), checked
+  by the `client-budget` CI job (see Client JS budget gate below).
 - **No prefetch storms.** Menu, panel and search links use `IntentLink`
   (`prefetch={false}`, then one `router.prefetch` on pointerdown, touchstart or
   focus), so opening the drawer prefetches nothing.
+
+## Client JS budget gate
+
+`apps/storefront/scripts/check-client-budget.cjs --base <base .next> --head
+<head .next>` compares two fixture builds made with the same environment. The
+`client-budget` job in `.github/workflows/performance.yml` ("Client JS budget
+against the merge-base") builds the merge-base (a pull request) or the previous
+branch tip (a push; `HEAD~1` when that is unknown) beside the head, against the
+synthetic catalog on `127.0.0.1:9901`, and fails the run on any row over its
+limit. A committed baseline is never used: hashes and platforms move the
+numbers between machines.
+
+It reads `build-manifest.json` (`rootMainFiles`) and `app-build-manifest.json`,
+counts `.js` files only, gzips each at level 9 and unions the layout set into
+every page's first load (TRACKING.md section 11):
+
+| Measure | Limit against the base build |
+|---|---|
+| framework `rootMainFiles` (all but `webpack-*.js`) | exactly +0 B (a shrink fails too) |
+| webpack runtime (`webpack-*.js`) | at most +64 B |
+| `/layout` set (layout entry files not in `rootMainFiles`) | at most +1,200 B |
+| `/page`, `/shop/page`, `/collection/[slug]/page` | webpack + layout deltas + 32 B |
+| `/product/[slug]/page` | webpack + layout deltas + 300 B |
+| `/checkout/page` | webpack + layout deltas + 800 B |
+| lazy runtime chunk (the one chunk holding `fl-runtime-v1`) | at most 6,000 B gzip, absolute |
+
+The 32 B covers content-hash churn. Missing manifest keys are warnings. The
+string `fl-runtime-v1` (`RUNTIME_VERSION` in `lib/tracking/runtime.ts`) must
+appear in exactly one chunk, or the job fails. A Next.js or React upgrade fails
+the framework row on purpose and needs a deliberate override.
+
+Local run, with the fixture API on a free port and both builds made with the
+same `NEXT_PUBLIC_*` values:
+
+```sh
+node apps/storefront/scripts/check-client-budget.cjs --base <saved base>/.next --head apps/storefront/.next
+```
+
+On 2026-09-27 (tracking, against the pre-tracking build): framework +0,
+webpack +38, `/layout` +710, home/shop/collection +748 (limit 780), product +971
+(limit 1,048), checkout +1,388 (limit 1,548), runtime chunk 2,679 B.
+
+## Ad tracking scripts
+
+Ad tracking (TRACKING.md sections 5 and 11) must never slow a page:
+
+- The layout carries only `TrackerStub` (renders `null`, no module-level
+  `window`), `queue.ts` and `paths.ts`: it records a PageView per public
+  pathname and the raw landing address, nothing else. Components import only
+  `track`/`trackPurchase` from `lib/tracking/queue.ts`, never `contract.ts`
+  validators or anything under `lib/tracking/server/`.
+- At the first idle moment the stub loads `lib/tracking/boot.ts` (a lazy
+  chunk, about 1.6 KB gzip) with `retryImport`, which makes the one
+  `/api/t/id/` call per document and registers the `pagehide`/hidden
+  `sendBeacon`. Never `next/dynamic`, `<Script>` or `useSearchParams`.
+- The runtime chunk (`lib/tracking/runtime.ts` and `pixels/*`) loads only when
+  `/api/t/id/` says the browser is tracked, and never with Save-Data: at `load`
+  for a landing with a click id, `load` + idle on `/checkout/`, else `load` +
+  3 s + idle.
+- Events go to `/api/t/e/` in batches (2 s or 10 events) plus one beacon when
+  the page hides. The endpoint answers 204 before forwarding.
+- **Third-party scripts.** Nothing from `connect.facebook.net`,
+  `analytics.tiktok.com` or `googletagmanager.com` is requested before
+  `window.load`, preloaded or bundled. fbevents (about 111 KB gzip plus its
+  config) and gtag (about 162 KB gzip) load only from the runtime, and only for
+  the vendors that browser needs (TikTok and Google only for visitors from
+  their ads). Adding any other third-party script needs the same treatment and
+  a recorded before/after measurement.
+- After a deploy that touches tracking: `npm run perf:check -- --enforce`,
+  Lighthouse mobile on a product page (LCP and TBT within about 10% of the
+  previous run), checkout INP before and after, and DevTools showing no
+  third-party request before `load`. Purge and warm first; never judge cold.
 
 ## Browser measurements
 

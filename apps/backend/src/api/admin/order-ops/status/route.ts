@@ -1,6 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
-import { isWorkflowStatus, setWorkflowStatus } from "../../../../lib/order-ops"
+import { isWorkflowStatus } from "../../../../lib/order-ops"
+import { moveOrdersToStatus } from "../../../../lib/order-status"
 
 /**
  * POST /admin/order-ops/status { order_ids: string[], status }
@@ -16,6 +17,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   if (!isWorkflowStatus(body.status)) {
     return res.status(400).json({ message: "Unknown status." })
   }
-  await setWorkflowStatus(req.scope, orderIds, body.status)
+  await moveOrdersToStatus(req.scope, orderIds, body.status)
   return res.json({ success: true, updated: orderIds.length })
 }

@@ -384,13 +384,19 @@ that.
 
 ## Things worth knowing
 
-**Redis.** Medusa uses an in-memory event bus without it and says so in the
-logs — `redisUrl not found. A fake redis instance will be used.` On one server
-that works; events are lost on restart.
+**Redis.** `medusa-config.ts` wires Redis when `REDIS_URL` is set: the Redis
+cache, event bus, workflow engine and locking modules replace Medusa's
+in-memory defaults. Without it Medusa logs `redisUrl not found. A fake redis
+instance will be used.`, which is fine for local development, and events are
+lost on restart.
 
-Setting `REDIS_URL` on the app **will not** stop that message. Nothing reads
-it: `medusa-config.ts` configures no Redis at all. Wiring it up is a code
-change to that file, not an environment variable, and it is still outstanding.
+On the new-site server Redis runs with `maxmemory-policy allkeys-lru`, so under
+memory pressure it may evict any key, including BullMQ job and repeat keys; it
+was OOM-killed three times on 2026-09-19. The Redis event bus runs with
+Medusa's default `attempts: 1`, so a failing subscriber is not retried. Nothing
+that must survive (orders, ad tracking) may depend on a Redis key or on one
+event delivery: durable state lives in Postgres, and the tracking jobs restart
+themselves when their runs go stale (TRACKING.md invariant 2 and 6.4).
 
 **Environment variables reach the backend two ways.** `start-backend.js`
 prefers real environment variables and falls back to a `.env` at the
@@ -405,3 +411,200 @@ publishable key and deletes the admin user, so Step 3 has to be redone whole.
 
 **Both apps redeploy on a push to `main`.** Usually what you want; just expect
 two builds.
+
+---
+
+## Ad tracking runbook (new.florayn.com on Coolify)
+
+The new site runs on the DigitalOcean + Coolify server, not Cloudways, so this
+section is written for Coolify and Cloudflare. It is the operator's copy of
+TRACKING.md sections 16 and 19; the design and the reasons are there.
+
+**The code is safe with none of this done.** Without `TRACKING_EDGE_SECRET`
+and the Cloudflare header, tracking is inert: no tracking cookies, no events,
+no pixels, no ad sends, and checkout works exactly as before. Every step
+below needs the owner's OK. Never paste a secret or token in chat, in git or
+in a ticket; secrets go only into Coolify, tokens only into Admin > Tracking.
+
+Hard ordering rules:
+
+- The two database migrations run **before** the backend deploy that reads
+  them. If the backend lands first, orders and status changes still work, but
+  each tracked checkout and each status change logs one warn line, the jobs
+  record errors and `/store/tracking-config` answers 503 (the storefront
+  falls back to all-off).
+- `TRACKING_INGEST_SECRET` has the **same value** in both apps. A mismatch makes
+  the backend refuse every ingest and checkout header (the
+  `checkout_without_tracking` alert fires once a platform is on).
+- Backend before storefront.
+
+### 1. Secrets (Coolify, both apps)
+
+Make two values, each at least 32 characters, on your own computer:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+- Backend app: `TRACKING_INGEST_SECRET` = the first value.
+  `TRACKING_INGEST_SECRET_PREVIOUS` only while rotating (the old value, removed
+  after both apps run the new one). Never set `TRACKING_DRY_RUN` here.
+- Storefront app: `TRACKING_INGEST_SECRET` = the same first value, and
+  `TRACKING_EDGE_SECRET` = the second value.
+- Both are runtime variables (leave "Build variable" unticked) and never
+  `NEXT_PUBLIC_`. A variable reaches the container only on the next deploy.
+- Rotating `TRACKING_INGEST_SECRET` invalidates the staff links and cookies:
+  staff open the new links from Admin > Live afterwards.
+
+### 2. Cloudflare rules for `new.florayn.com`
+
+Every rule is scoped to the host, so live `florayn.com` is untouched.
+
+1. **Cache bypass** (Caching > Cache Rules): when
+   `(http.host eq "new.florayn.com" and starts_with(http.request.uri.path, "/api/t/"))`,
+   Bypass cache. Put it last so it wins over the host-wide rules. (The
+   endpoints already answer `private, no-store`, and the HTML rule excludes
+   `/api/`; this rule keeps it that way if those rules change.)
+2. **Edge header** (Rules > Transform Rules > Modify Request Header): when
+   `(http.host eq "new.florayn.com")`, Set static `x-florayn-edge` to the
+   storefront's `TRACKING_EDGE_SECRET`. "Set" replaces any value a visitor
+   sends, so it cannot be forged through Cloudflare. Tracking switches on for
+   that host as soon as this rule and the storefront secret match.
+3. **No bot challenge on `/api/t/`.** The calls are `fetch` and `sendBeacon`,
+   which cannot solve a challenge. Bot Fight Mode on the free plan cannot be
+   skipped per path; if it is on, check in QA that a normal browser's
+   `/api/t/` calls return 200/204, not a challenge.
+4. **Optional rate limit** (Security > WAF > Rate limiting rules): the same
+   `/api/t/` expression, above 60 requests per 10 seconds per IP, Block for
+   10 seconds. The endpoints have their own limits; this only sheds floods at
+   the edge.
+5. Check that the existing click-id cache-key Transform Rule (it rewrites the
+   origin query of document requests to keep only `case`) leaves the browser
+   address intact: after opening
+   `https://new.florayn.com/product/<handle>/?case=signature&fbclid=TEST`, the
+   address bar still shows `fbclid`. The tracker reads the landing from there.
+
+### 3. Origin firewall: not yet
+
+Firewalling the origin's port 443 to Cloudflare's ranges is the planned last
+layer, but `api.new.florayn.com` is DNS-only (grey cloud) and shares the same
+origin port 443. A firewall today would cut off the API for browsers, the
+storefront server and admin users. It needs `api.new.florayn.com` proxied
+first (a two-level name the free Universal certificate does not cover), or
+the backend moved to `api.florayn.com` at cutover, or an allowlist for the
+server's own egress and admin users. Until then the edge header alone
+protects ad sends: a request straight to the origin carries no valid
+`x-florayn-edge`, so `/api/t/id/` sets no cookies and `/api/t/e/` forwards
+nothing.
+
+### 4. sharp and catalog images
+
+`sharp@0.34.5` is already a backend dependency (committed with the root
+lockfile) and the backend image installs it, so JPEG copies of catalog images
+(`image_mode: "jpeg_copies"`, the default) need no further install. What is
+left is the owner's choice in Admin > Tracking > Catalog: keep JPEG copies on
+`img.florayn.com`, or switch to `cf_transform` after enabling Cloudflare Image
+Transformations on the zone. The catalog stays off until the owner enables
+it.
+
+### 5. Migrations over the SSH tunnel, before the backend deploy
+
+The in-container `medusa db:migrate` hangs on this host, so the scoped scripts
+run from a local checkout of the same commit through a tunnel to the Postgres
+container. Both scripts refuse any database except `florayn_v3` (and
+disposable `florayn_*_test_*` ones), run only their one migration, and verify
+on a second run.
+
+```bash
+# 1. Find the Postgres container's address on the Coolify network
+ssh -i ~/.ssh/florayn_do root@<origin-ip> "docker ps --format '{{.Names}} {{.Image}}' | grep -i postgres"
+ssh -i ~/.ssh/florayn_do root@<origin-ip> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <postgres-container>"
+
+# 2. Open the tunnel (leave it running in its own terminal)
+ssh -i ~/.ssh/florayn_do -N -L 5433:<postgres-ip>:5432 root@<origin-ip>
+
+# 3. In another terminal, from the repo root. Read the user and password from
+#    the backend container (docker exec <backend-container> printenv DATABASE_URL);
+#    never paste them anywhere else. Comment out REDIS_URL in apps/backend/.env
+#    for this run if it is set: the scripts need only the database.
+cd apps/backend
+export DATABASE_URL="postgres://<user>:<password>@127.0.0.1:5433/florayn_v3"
+npx medusa exec ./src/scripts/migrate-tracking.ts
+npx medusa exec ./src/scripts/migrate-tracking.ts apply Migration20260928090000
+npx medusa exec ./src/scripts/migrate-privacy-settings.ts
+npx medusa exec ./src/scripts/migrate-privacy-settings.ts apply Migration20260928091000
+unset DATABASE_URL
+```
+
+The first command of each pair is a read-only preflight; read its output
+before applying. Run the apply again to see it verify without changes. In
+PowerShell use `$env:DATABASE_URL = "..."` and `Remove-Item Env:DATABASE_URL`.
+
+### 6. Deploy
+
+1. Commit and push the branch Coolify builds (check the app's Git settings).
+   Coolify builds the pushed commit, never local files.
+2. Deploy the backend in Coolify and wait until it is healthy.
+3. Deploy the storefront.
+4. Purge and warm (the storefront speed rules): in Cloudflare, Caching >
+   Configuration > Purge Cache > Custom purge by prefix `new.florayn.com/`
+   paths for HTML (`/product/`, `/collection/`, `/collections/`, `/shop/`,
+   `/contact/`, `/men`, plus the home URL), leaving `/_next/` alone; then
+   request the main pages once with a browser user agent:
+
+```bash
+UA="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36"
+for p in / /shop/ /men/ /checkout/; do
+  curl -s -o /dev/null -A "$UA" -H "sec-fetch-dest: document" -w "%{http_code} %{time_total}s $p\n" "https://new.florayn.com$p"
+done
+```
+
+Judge speed only after that, never cold.
+
+### 7. Verify, with a browser user agent
+
+`curl` without a browser user agent is treated as a bot (204, no cookies), so
+always pass `-A "$UA"` from above.
+
+```bash
+# Through Cloudflare: 200, "Cache-Control: private, no-store", "on":true and Set-Cookie _fl_vid, _fl_sid, _fl_src
+curl -sS -D - -A "$UA" -H "origin: https://new.florayn.com" -H "content-type: application/json" \
+  -d '{"v":1,"landing":null}' https://new.florayn.com/api/t/id/
+
+# Straight to the origin with a forged client IP: "on":false and no Set-Cookie
+curl -sS -D - --resolve new.florayn.com:443:<origin-ip> -A "$UA" -H "origin: https://new.florayn.com" \
+  -H "content-type: application/json" -H "cf-connecting-ip: 203.0.113.9" \
+  -d '{"v":1,"landing":null}' https://new.florayn.com/api/t/id/
+
+# Public tracking config: ids and modes only, never a token or an email
+curl -sS -H "x-publishable-api-key: <pk_...>" https://api.new.florayn.com/store/tracking-config
+
+# Once a feed is published (Admin > Tracking > Catalog shows the URL): 200 with an ETag, then 304
+curl -sS -o /dev/null -D - -A "$UA" "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
+curl -sS -o /dev/null -D - -A "$UA" -H 'If-None-Match: "<etag from above>"' "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
+```
+
+Then in the admin: Tracking, Tracking > Health, Tracking > Catalog, Live and
+Privacy all load, and Health shows fresh runs for the outbox, rollup,
+reconcile and catalog jobs (the catalog job builds the variant index within
+15 minutes even while the catalog is off). Until that first index build,
+product events count as "unknown variant" and send nothing, so the
+`unknown_variants` alert can fire once after a fresh deploy.
+
+### 8. Backups
+
+Ad-event tables are large and short-lived. Leave their data out of database
+dumps:
+
+```bash
+pg_dump --exclude-table-data=tracking_hit --exclude-table-data=tracking_event -Fc -f florayn_v3.dump "$DATABASE_URL"
+```
+
+### 9. After deploy
+
+The owner's admin steps (Meta TEST token, test event code, Automatic Advanced
+Matching off and ticked, Meta on) and the QA plan on the TEST dataset are
+TRACKING.md sections 15 and 17. Rollback lever: switch a platform off in
+Admin > Tracking (it takes effect within 10 seconds; later events are kept as
+`skipped`, and sending them later is an explicit Retry). Removing
+`TRACKING_EDGE_SECRET` from the storefront makes tracking inert again.

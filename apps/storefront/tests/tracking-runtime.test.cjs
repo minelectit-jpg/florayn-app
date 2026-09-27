@@ -288,6 +288,9 @@ test("start waits for the id answer and stops unless tracking is on and not opte
 test("review and r leave the address bar, keeping Next's history state, before any vendor script", async () => {
   const tab = await started("https://new.florayn.com/product/zebra/?review=tok123&case=signature&r=5#customer-reviews")
   assert.deepEqual(tab.log, [["replace", "/product/zebra/?case=signature#customer-reviews", true]], "at start, before anything else")
+  const [pageView] = tab.fl().q
+  assert.equal(pageView.p, "/product/zebra/?case=signature", "the stub's raw address is cut at start, before any vendor script")
+  assert.match(pageView.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   await tab.advance(0)
   assert.deepEqual(tab.log.slice(0, 2), [
     ["replace", "/product/zebra/?case=signature#customer-reviews", true],
@@ -608,8 +611,8 @@ function sourceGraph() {
   })
 }
 
-test("runtime.ts and pixels/* are reachable only through the stub's import(), never a static import", () => {
-  const lazy = (file) => file === "lib/tracking/runtime.ts" || file.startsWith("lib/tracking/pixels/")
+test("boot.ts is reachable only through the stub's import(), and runtime.ts and pixels/* only through boot's", () => {
+  const lazy = (file) => file === "lib/tracking/boot.ts" || file === "lib/tracking/runtime.ts" || file.startsWith("lib/tracking/pixels/")
   const edges = []
   for (const { file, imports } of sourceGraph()) {
     for (const { target, dynamic, typeOnly } of imports) {
@@ -617,8 +620,28 @@ test("runtime.ts and pixels/* are reachable only through the stub's import(), ne
     }
   }
   assert.deepEqual(edges.filter((edge) => !/^lib\/tracking\/(runtime\.ts|pixels\/[a-z]+\.ts) import lib\/tracking\/pixels\//.test(edge)), [
-    "components/tracking/tracker-stub.tsx import() lib/tracking/runtime.ts",
+    "components/tracking/tracker-stub.tsx import() lib/tracking/boot.ts",
+    "lib/tracking/boot.ts import() lib/tracking/runtime.ts",
   ])
+})
+
+test("the eager path (the layout's stub and every component that tracks) reaches only queue.ts and paths.ts", () => {
+  const graph = new Map(sourceGraph().map(({ file, imports }) => [file, imports]))
+  // A "use server" module (lib/cart.ts) reaches the browser only as action references.
+  const serverActions = (file) => /^\s*["']use server["']/.test(fs.readFileSync(path.join(src, file), "utf8"))
+  for (const start of ["components/tracking/tracker-stub.tsx", "components/cart-provider.tsx", "components/checkout-form.tsx", "components/product-view.tsx"]) {
+    const seen = new Set()
+    const walk = (file) => {
+      for (const { target, dynamic, typeOnly } of graph.get(file) ?? []) {
+        if (dynamic || typeOnly || seen.has(target) || serverActions(target)) continue
+        seen.add(target)
+        walk(target)
+      }
+    }
+    walk(start)
+    const tracking = [...seen].filter((file) => file.startsWith("lib/tracking/")).sort()
+    assert.deepEqual(tracking, ["lib/tracking/paths.ts", "lib/tracking/queue.ts"], start)
+  }
 })
 
 test("no tracking client file touches a browser global when it loads", () => {
@@ -628,7 +651,7 @@ test("no tracking client file touches a browser global when it loads", () => {
     Object.defineProperty(context, name, { enumerable: true, get() { touched.push(name); return undefined } })
   }
   const load = loader(context)
-  for (const file of ["paths.ts", "queue.ts", "runtime.ts", "pixels/meta.ts", "pixels/tiktok.ts", "pixels/google.ts"]) {
+  for (const file of ["paths.ts", "queue.ts", "batch.ts", "contract.ts", "runtime.ts", "pixels/meta.ts", "pixels/tiktok.ts", "pixels/google.ts"]) {
     load(`${TRACKING}/${file}`)
   }
   assert.deepEqual(touched, [])

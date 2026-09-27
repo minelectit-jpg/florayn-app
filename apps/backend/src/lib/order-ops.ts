@@ -125,21 +125,6 @@ export async function countsByStatus(
   return Object.fromEntries(entries) as Record<WorkflowStatus, number>
 }
 
-/** Set the workflow status for a set of orders, creating op rows as needed. */
-export async function setWorkflowStatus(
-  container: any,
-  orderIds: string[],
-  status: WorkflowStatus
-): Promise<void> {
-  await ensureOps(container, orderIds)
-  const existing = await opsByOrderId(container, orderIds)
-  const updates = orderIds
-    .map((id) => existing.get(id))
-    .filter((op): op is OrderOpRow => Boolean(op))
-    .map((op) => ({ id: op.id, workflow_status: status, ...(op.workflow_status !== status ? { status_changed_at: new Date() } : {}) }))
-  if (updates.length) await opsService(container).updateOrderOps(updates)
-}
-
 /** The rich order fields the manager list and courier need. */
 export const ORDER_MANAGE_FIELDS = [
   "id",

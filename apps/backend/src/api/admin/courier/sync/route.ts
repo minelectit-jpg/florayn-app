@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { setTimeout as delay } from "node:timers/promises"
 
 import { opsByOrderId, opsService, type OrderOpRow } from "../../../../lib/order-ops"
+import { applyStatusChanges, type StatusChange } from "../../../../lib/order-status"
 import { mapSteadfastStatus, statusByConsignment } from "../../../../lib/steadfast"
 
 const MAX_PER_SYNC = 60
@@ -10,7 +11,8 @@ const MAX_PER_SYNC = 60
  * POST /admin/courier/sync { order_ids?: string[] }
  * Refresh Steadfast delivery status for the given orders, or (with no ids) for
  * all `shipped` orders that have a consignment. Advances the workflow status
- * when Steadfast reports delivered / returned. Bounded and paced to respect the
+ * when Steadfast reports delivered / returned (through lib/order-status.ts,
+ * which also queues the COD ad events). Bounded and paced to respect the
  * courier's rate limit.
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -32,28 +34,26 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   let checked = 0
   let changed = 0
-  const updates: any[] = []
+  const changes: StatusChange[] = []
   for (const op of targets) {
     const r = await statusByConsignment(req.scope, op.steadfast_consignment_id as string)
     checked++
     if (r.ok && r.deliveryStatus) {
       const workflow = mapSteadfastStatus(r.deliveryStatus)
-      const update: any = {
-        id: op.id,
-        steadfast_status: r.deliveryStatus,
-        steadfast_synced_at: new Date(),
-      }
       // Only advance forward off `shipped`; never override a manual refund.
-      if (workflow !== op.workflow_status && op.workflow_status === "shipped") {
-        update.workflow_status = workflow
-        update.status_changed_at = new Date()
-        changed++
-      }
-      updates.push(update)
+      // A row that stays put still records the Steadfast status.
+      const advance = workflow !== op.workflow_status && op.workflow_status === "shipped"
+      if (advance) changed++
+      changes.push({
+        op,
+        to: advance ? workflow : op.workflow_status,
+        extra: { steadfast_status: r.deliveryStatus, steadfast_synced_at: new Date() },
+        via: "courier-sync",
+      })
     }
     await delay(120)
   }
-  if (updates.length) await svc.updateOrderOps(updates)
+  if (changes.length) await applyStatusChanges(req.scope, changes)
 
   return res.json({ success: true, checked, changed })
 }

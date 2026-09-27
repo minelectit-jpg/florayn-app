@@ -60,6 +60,8 @@ const COUNTER_LABELS: Record<string, string> = {
   "ingest.unknown_variant": "Product events with an unknown variant",
   "ingest.no_token_dropped": "Events dropped for a missing token",
   "ingest.no_destination": "Events with no destination",
+  "ingest.invalid": "Events the backend refused as invalid",
+  "ingest.unknown_host": "Events from a host the backend does not list",
   "checkout.header_rejected": "Checkout tracking header rejected",
   "checkout.untrusted": "Checkouts without the edge header",
 }

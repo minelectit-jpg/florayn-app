@@ -1,15 +1,42 @@
 /**
  * The storefront's one tracking contract (TRACKING.md 4.1): the types the stub,
- * the lazy runtime, the /api/t/* routes and checkout share, and the pure
- * validators the server routes, the runtime and checkout run. Client code in
- * the layout chunk (queue, stub) imports only TYPES from here; the validators
- * never reach the layout. The backend keeps its own copy of the validators in
- * apps/backend/src/lib/tracking/contract.ts; both are tested against the same
- * Appendix C vectors.
+ * the lazy chunks, the /api/t/* routes and checkout share, the URL parts
+ * tracking keeps (safePath, landingParams and their allowlists), and the pure
+ * validators the server routes and checkout run. Client code in the layout
+ * chunk (queue, stub) imports only TYPES from here; only the lazy chunks
+ * (boot.ts, batch.ts) import values, the URL helpers, and the production
+ * build drops the validators from them. The backend keeps its own copy of
+ * the validators in apps/backend/src/lib/tracking/contract.ts; both are
+ * tested against the same Appendix C vectors.
  */
-import { isPrivatePath, safePath } from "./paths"
+import { isPrivatePath } from "./paths"
 
 export * from "./paths"
+
+export const PATH_PARAMS = ["case", "device", "variant"] as const
+export const CLICK_KEYS = ["fbclid", "ttclid", "gclid", "gbraid", "wbraid"] as const
+export const LANDING_PARAMS = [...CLICK_KEYS, "utm_source", "utm_medium", "utm_campaign"] as const
+
+function pick(search: string, keys: readonly string[], max: number): URLSearchParams {
+  const from = new URLSearchParams(search)
+  const kept = new URLSearchParams()
+  for (const key of keys) {
+    const value = from.get(key)
+    if (value !== null && value.length <= max) kept.set(key, value)
+  }
+  return kept
+}
+
+/** The pathname plus only case/device/variant, <= 300 chars. */
+export function safePath(pathname: string, search = ""): string {
+  const query = pick(search, PATH_PARAMS, 80).toString()
+  const path = query ? `${pathname}?${query}` : pathname
+  return path.length <= 300 ? path : pathname.slice(0, 300)
+}
+
+export function landingParams(search: string): Record<string, string> {
+  return Object.fromEntries(pick(search, LANDING_PARAMS, 1000))
+}
 
 export type BrowserEventName = "PageView" | "ViewContent" | "AddToCart" | "InitiateCheckout"
 export type EventItem = { id: string; q: number; price: number }

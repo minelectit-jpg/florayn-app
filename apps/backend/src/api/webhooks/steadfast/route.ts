@@ -3,7 +3,8 @@ import crypto from "node:crypto"
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
-import { opsService } from "../../../lib/order-ops"
+import { opsService, type OrderOpRow } from "../../../lib/order-ops"
+import { applyStatusChanges } from "../../../lib/order-status"
 import { getCourierSettings, mapSteadfastStatus } from "../../../lib/steadfast"
 
 /**
@@ -17,7 +18,10 @@ import { getCourierSettings, mapSteadfastStatus } from "../../../lib/steadfast"
  * consignment_id, invoice, status, cod_amount, updated_at }`. We parse
  * defensively (flat or nested, several field spellings), only act on
  * delivery_status events, and always answer 200 fast (Steadfast retries 3x on a
- * 5xx and gives up; a 4xx is not retried). Idempotent by design.
+ * 5xx and gives up; a 4xx is not retried). Idempotent by design: a retried
+ * push finds the order already moved, so it changes nothing and queues no
+ * second ad event (lib/order-status.ts; the outbox key also keeps each event
+ * to one per order).
  */
 function tokenOk(header: unknown, expected: string | null): boolean {
   if (!expected) return false
@@ -69,7 +73,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   // Find the op row by consignment id, falling back to the invoice (= order
   // display id) so a push works even if only the invoice is present.
-  let op: any = null
+  let op: OrderOpRow | null = null
   if (consignmentId) {
     ;[op] = await svc.listOrderOps({ steadfast_consignment_id: consignmentId }, { take: 1 })
   }
@@ -93,8 +97,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const codAmount = pick(data, ["cod_amount"]) ?? pick(body, ["cod_amount"])
     const trackingMessage = pick(data, ["tracking_message"]) ?? pick(body, ["tracking_message"])
     const updatedAt = pick(data, ["updated_at"]) ?? pick(body, ["updated_at"])
-    const update: any = {
-      id: op.id,
+    const extra = {
       steadfast_status: rawStatus,
       steadfast_synced_at: new Date(),
       courier_meta: {
@@ -107,11 +110,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       },
     }
     // Advance only off `shipped`, so a manual refund/cancel is never overridden.
-    if (op.workflow_status === "shipped" && workflow !== "shipped") {
-      update.workflow_status = workflow
-      update.status_changed_at = new Date()
-    }
-    await svc.updateOrderOps(update)
+    const to = op.workflow_status === "shipped" && workflow !== "shipped" ? workflow : op.workflow_status
+    await applyStatusChanges(req.scope, [{ op, to, extra, via: "steadfast-webhook" }])
   }
 
   return res.status(200).json({ received: true })

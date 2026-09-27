@@ -7,8 +7,8 @@
  * public pathname. The runtime loads Meta only when the id answer says so,
  * which requires Automatic Advanced Matching to be confirmed off (C7).
  */
+import type { ReadyItem } from "../batch"
 import type { IdResponse, PurchaseBlock } from "../contract"
-import type { QueueItem } from "../queue"
 
 type Fbq = {
   (...args: unknown[]): void
@@ -71,7 +71,7 @@ function products(contents: Line[]) {
   return { content_type: "product", content_ids: [...new Set(contents.map((line) => line.id))], contents }
 }
 
-export function fire(item: QueueItem, cfg: IdResponse): void {
+export function fire(item: ReadyItem, cfg: IdResponse): void {
   const fbq = (window as MetaWindow).fbq
   if (!fbq || !cfg.meta) return
   const d = item.d ?? {}

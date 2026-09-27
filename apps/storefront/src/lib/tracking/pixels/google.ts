@@ -5,8 +5,8 @@
  * (no page view) and resolves on gtag.js's onload. The conversion's
  * page_location is always /checkout/, never the order page (invariant 4).
  */
+import type { ReadyItem } from "../batch"
 import type { ClickKey, IdResponse, PurchaseBlock } from "../contract"
-import type { QueueItem } from "../queue"
 import { addScript } from "./meta"
 
 type GoogleWindow = Window & { dataLayer?: unknown[]; gtag?: (...args: unknown[]) => void }
@@ -35,7 +35,7 @@ export function load(cfg: IdResponse): Promise<void> {
   return addScript(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`)
 }
 
-export function fire(item: QueueItem, cfg: IdResponse): void {
+export function fire(item: ReadyItem, cfg: IdResponse): void {
   const gtag = (window as GoogleWindow).gtag
   if (item.n !== "Purchase" || !gtag || !cfg.google) return
   const block = item.d as unknown as PurchaseBlock

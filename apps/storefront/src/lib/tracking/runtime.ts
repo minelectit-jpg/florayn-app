@@ -1,10 +1,11 @@
 /**
- * The lazy tracking runtime (TRACKING.md 5.2). Only the tracker stub loads it,
- * through import(), once the page is usable and the id answer says this
- * browser is tracked; nothing imports it statically. It sends the queued
- * browser events to /api/t/e/ in batches (the server copies) and, where the
- * id answer allows, loads the Meta, TikTok and Google tags and hands each
- * queued event to them (the browser copies).
+ * The lazy tracking runtime (TRACKING.md 5.2). Only the tracker's boot.ts
+ * loads it, through import(), once the page is usable and the id answer says
+ * this browser is tracked; nothing imports it statically. It prepares every
+ * queued event as it arrives (batch.ts: its id and its safe path), sends them
+ * to /api/t/e/ in batches (the server copies) and, where the id answer allows,
+ * loads the Meta, TikTok and Google tags and hands each event to them (the
+ * browser copies).
  *
  * Invariants 4 and 9: a vendor script is added only on a public path, after
  * `review` and `r` have left the address bar; a vendor is called only after
@@ -12,18 +13,19 @@
  * the queued event's own. Otherwise that browser copy is dropped; the server
  * copy still goes.
  */
+import { prepare, restoreUnsent, takeUnsent, type ReadyItem } from "./batch"
 import type { IdResponse, PurchaseBlock } from "./contract"
 import { isPrivatePath, pathnameOf } from "./paths"
 import * as google from "./pixels/google"
 import * as meta from "./pixels/meta"
 import * as tiktok from "./pixels/tiktok"
-import { fl, restoreUnsent, takeUnsent, type QueueItem } from "./queue"
+import { fl, type QueueItem } from "./queue"
 
 /** Sent as `rv` with every batch; the client budget check finds this chunk by it. */
 export const RUNTIME_VERSION = "fl-runtime-v1"
 
 type Platform = "meta" | "tiktok" | "google"
-type Pixel = { load: (cfg: IdResponse) => Promise<void>; fire: (item: QueueItem, cfg: IdResponse) => void }
+type Pixel = { load: (cfg: IdResponse) => Promise<void>; fire: (item: ReadyItem, cfg: IdResponse) => void }
 /**
  * One vendor. `state`: 0 waiting for a public page, 1 script loading (or
  * failed: never retried), 2 ready. `at` is its cursor into fl().q; a Purchase
@@ -59,6 +61,10 @@ export async function start(): Promise<void> {
   const answer = state.cfg ?? (await state.cfgPromise)
   if (!answer?.on || answer.optout) return
   cfg = answer
+  // The queue holds raw addresses until now: every item gets its id and its
+  // safe path before any vendor script can load, and so does each new one.
+  const q = state.q
+  for (const item of q) prepare(item)
   scrub()
   // Staff browsers still report to the dashboard (flagged there) but load no vendor.
   if (!cfg.staff) {
@@ -68,10 +74,9 @@ export async function start(): Promise<void> {
   }
   // track() only pushes, so notice new events here: vendors get them in the
   // same task, and the batch goes out at 10 or after 2 s.
-  const q = state.q
   const push = q.push
   q.push = (...items: QueueItem[]) => {
-    const length = push.apply(q, items)
+    const length = push.apply(q, items.map(prepare))
     if (!queued) {
       queued = true
       Promise.resolve().then(() => {
@@ -103,7 +108,7 @@ export function drain(): void {
     }
     while (vendor.state === 2 && vendor.at < q.length) {
       const index = vendor.at++
-      const item = q[index]
+      const item = q[index] as ReadyItem // prepared on arrival
       if (!isPublicNow() || location.pathname !== pathnameOf(item.p)) continue
       if (item.n !== "Purchase") call(vendor, item)
       else if (index >= vendor.from) purchase(vendor, item)
@@ -128,7 +133,7 @@ function inject(vendor: Vendor): void {
     })
 }
 
-function call(vendor: Vendor, item: QueueItem): void {
+function call(vendor: Vendor, item: ReadyItem): void {
   try {
     vendor.pixel.fire(item, cfg)
   } catch {
@@ -137,7 +142,7 @@ function call(vendor: Vendor, item: QueueItem): void {
 }
 
 /** A Purchase once per vendor per tab: sessionStorage `fl_p_<event_id>` lists the vendors that fired it. */
-function purchase(vendor: Vendor, item: QueueItem): void {
+function purchase(vendor: Vendor, item: ReadyItem): void {
   const block = item.d as unknown as PurchaseBlock | undefined
   if (!block?.platforms?.[vendor.name]) return
   const key = `fl_p_${item.id}`
