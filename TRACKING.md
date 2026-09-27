@@ -130,7 +130,7 @@ Each is forced by a repo rule or a vendor limit.
 | B1 | Changing `checkoutWorkflow`'s output breaks `/store/checkout/quote` and the isolated CI script | `checkoutWorkflow` stays byte-identical. A new `checkoutWithTrackingWorkflow` (same file) reuses the same `prepare-checkout` step, adds two tracking steps that return `new StepResponse(...)`, and folds the tracking block into `body` with `transform` only when it exists. Only `/store/checkout/route.ts` switches to it. A test asserts the quote route and the old workflow are unchanged. | 6.5, WP05 |
 | B2 | `emitted` set before the outbox insert can lose a Purchase forever | The `emitted` column is gone. Order context, hit and outbox rows are written in ONE knex transaction, idempotent by primary/unique keys. A platform that is off still gets a `skipped` Purchase row, so reconciliation is exact: "context exists, no `tracking_event (platform, 'Purchase', 'fl-N')` row at all". A test injects a failure between inserts. | 2.3, 6.5, 6.6, 7 |
 | B3 | Vendor stub queues (`fbq.queue`, ttq, `dataLayer`) can flush on `/order/<id>/` | Vendor functions are never called before that vendor's script `onload`; items wait in our queue. Every vendor call checks, at call time, that `location.pathname` is public and equals the item's pathname. No script is injected while the path is private. Purchase browser copies are skipped for a vendor that is not loaded yet (server copy covers Meta and TikTok). The gtag conversion passes `page_location: "https://<host>/checkout/"`. TikTok loads only after `spa_off_confirmed` (owner switches off SPA page views and automatic events). QA step 7 (Slow 3G, submit within 2 s of load). | 5.2, 5.5, 15 |
-| B4 | Meta Automatic Advanced Matching reads checkout fields while share is OFF | Owner turns AAM off on both datasets (decision 10). Code gate: `meta.aam_off_confirmed.<env>` must be ticked in admin for the resolved environment or the Meta browser pixel never loads there (CAPI still works). The live dataset's AAM can stay on for the WordPress site until cutover; it is turned off (and ticked) before `live_armed`. Admin shows the warning. QA: with share OFF, no `facebook.com/tr` request from `/checkout/` carries `ud[...]`. | 3.1, 5.5, 15 |
+| B4 | Meta Automatic Advanced Matching reads checkout fields while share is OFF | Owner turns AAM off on both datasets (decision 10). Code gate: `meta.aam_off_confirmed.<env>` must be ticked in admin for the resolved environment or the Meta browser pixel never loads there (CAPI still works). The live dataset's AAM can stay on for the WordPress site until cutover; it is turned off (and ticked) before `live_armed`. Admin shows the warning. QA: with share OFF, no `facebook.com/tr` request from `/checkout/` carries a contact hash; `ud[external_id]` (the `_fl_vid` hash) on Purchase is expected. | 3.1, 5.5, 15 |
 | B5 | Public endpoints can inject events into Meta/TikTok through the origin | No ad-platform row is ever created from a request that failed the edge check (`x-florayn-edge` == `TRACKING_EDGE_SECRET`, timing-safe). Without it `/api/t/id/` sets no cookies and `/api/t/e/` forwards nothing. Hosts are allowlisted in both apps. The backend replaces client prices with the variant index price, clamps values, and sends no ad row for unknown variant ids (still counted). The forwarder has a global events-per-second cap with a counter and an alert. Origin firewall is an owner infra step. | 3.4, 4.2, 4.3, 6.1, 10, 16 |
 | B6 | Ingest envelope cannot carry coalesced traffic; Medusa's 100 KB JSON limit | Envelope is `{ v, stats?, batches: [{ host, ctx, events }] }`, at most 200 events and 256 KB per request; the forwarder splits. WP04 owns the `middlewares.ts` entry `{ matcher: "/tracking/ingest", method: ["POST"], bodyParser: { sizeLimit: "512kb" } }`. A test pushes a 64 KB batch end to end. | 4.3, WP04 |
 | B7 | A "+0 B shared" gate against a committed baseline cannot pass | CI builds the merge-base and the head with the same fixture environment and compares them. Framework chunks exactly +0 B, webpack runtime at most +64 B, `.js` only, layout set unioned into each page's first load. PERFORMANCE.md wording updated by WP13. | 11, WP00 |
@@ -2331,8 +2331,9 @@ afterwards.
    platforms, and the dashboard records that session's IC too.)
 6. TEST ORDER 1: the browser Purchase fires before the URL changes; no request
    contains `/order/`; the server Purchase `fl-<n>` shows deduplicated; with
-   share OFF no `facebook.com/tr` request from `/checkout/` carries `ud[`
-   parameters (B4); Admin > Live shows it.
+   share OFF the only `ud[` parameter on a `facebook.com/tr` request from
+   `/checkout/` is `ud[external_id]` (the SHA-256 of `_fl_vid`, never a contact
+   hash) (B4); Admin > Live shows it.
 7. TEST ORDER 2 (B3): DevTools Slow 3G, fresh load of `/checkout/` with a bag,
    submit within 2 s of load: no request anywhere contains `/order/`; the
    Purchase arrives server-only.
@@ -2996,6 +2997,26 @@ Added by the build, check during QA:
 - Slow 3G (step 7): no `facebook.com/tr` request carries `/order/` in `dl`.
 - With a TikTok test pixel later: `ttq.ready()` fires after events.js loads.
 - In `next dev`, StrictMode sends one PageView per pathname.
+
+QA run 1 (2026-09-28, deployed 403c9d8, Meta on, TEST dataset, share OFF):
+- Step 1 (inert without edge) and the section 16 checks: pass (DEPLOY.md step 7).
+- Step 2: `fbclid=TEST123` landing loads fbevents at `load` (click id present),
+  config for 2247389409441720; PageView and ViewContent carry `eid`, `fbc`,
+  `fbp`; ViewContent content_ids = the `?case` variant, value 1400 BDT; no `ud[`.
+- Step 3: client navigation sends a browser ViewContent only, no browser PageView.
+- Step 4: AddToCart has the variant id, quantity 1, item_price 1400 and an `eid`.
+- Step 5: InitiateCheckout `ic-...`, value 1400, num_items 1; a reload resends
+  the same `ic-` id.
+- Step 6: TEST ORDER 1 = #1109 (1460 BDT with Dhaka delivery). Browser
+  Purchase `eid=fl-1109` fired from `/checkout/` (dl) before the URL changed; no
+  vendor request contains `/order/`; only `ud[external_id]` (not a phone or
+  name hash). Backend: `/store/checkout` 200, ingest 202, no warn/error logs.
+  Meta dataset details show `server_last_fired_time` set, so CAPI arrives.
+- Open: deduplication as seen in Meta Test Events (owner's screen); steps 7, 8,
+  9, 10, 11 (need DevTools throttling, a network cut, a review token, an ad
+  blocker or an admin session in the same browser); step 12 on #1109 by the
+  owner; step 15 test alert; step 16 after the Privacy approval. #1109 is
+  cancelled when QA ends.
 
 ### 19.8 Numbers only CI or a deploy can measure (TODO)
 
