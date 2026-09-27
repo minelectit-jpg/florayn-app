@@ -3029,7 +3029,17 @@ QA run 1 (2026-09-28, deployed 403c9d8, Meta on, TEST dataset, share OFF):
   ViewContent, AddToCart, InitiateCheckout 6.1 each (ip, ua, fbp, external_id
   100%, country and fbc 95-100%), the live baseline's level; Purchase EMQ not
   scored yet and expected below 8.6 while share is OFF.
-- Open: the Event Deduplication tab; steps 7, 8,
+- Deduplication confirmed in Test Events once Meta grouped the rows: each
+  pair shows the server row "Processed" and the browser row "Deduplicated";
+  for fl-1111 Meta kept our server copy and deduplicated both the browser copy
+  and its own server copy.
+- Step 12 on #1109 (4 Order Manager moves at 20:22 UTC, processing to
+  delivered): Meta's hourly dataset stats for 20:00-21:00 UTC show
+  OrderConfirmed 1 and Delivered 1. Test Events does not list these
+  `system_generated` events even with every filter ticked, so check them in
+  the dataset stats (Overview, or the ads dataset stats tool), not Test Events.
+- TEST ORDERs: #1109 (Claude), #1110 and #1111 (owner); all to be cancelled.
+- Open: steps 7, 8,
   9, 10, 11 (need DevTools throttling, a network cut, a review token, an ad
   blocker or an admin session in the same browser); step 12 on #1109 by the
   owner; step 15 test alert; step 16 after the Privacy approval. #1109 is
