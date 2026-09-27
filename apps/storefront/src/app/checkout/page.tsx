@@ -6,13 +6,19 @@ import CheckoutForm from "@/components/checkout-form"
 import { cartPromoCodes, getCart } from "@/lib/cart"
 import { getCheckoutSettings, getDistricts } from "@/lib/checkout"
 import { checkoutLines } from "@/lib/checkout-form-data"
+import { icEventId } from "@/lib/tracking/server/checkout-context"
+import { checkoutConsent, getTrackingConfig } from "@/lib/tracking/server/config"
 import "./checkout.css"
 
 export const metadata = { title: "Checkout", robots: { index: false, follow: false } }
 export const dynamic = "force-dynamic"
 
 export default async function CheckoutPage() {
-  const [cart, districts, settings, promoCodes] = await Promise.all([getCart(), getDistricts(), getCheckoutSettings(), cartPromoCodes()])
+  // Tracking (TRACKING.md 5.4) gets InitiateCheckout's id, derived from the
+  // cart id (a capability that never reaches the browser), and the consent
+  // line, which exists only while contact hashes are shared.
+  const [cart, districts, settings, promoCodes, tracking] = await Promise.all([getCart(), getDistricts(), getCheckoutSettings(),
+    cartPromoCodes(), getTrackingConfig()])
   const items = cart?.items ?? []
   if (!items.length) redirect("/cart/")
 
@@ -34,7 +40,8 @@ export default async function CheckoutPage() {
         <span className="checkout-guest"><LockKeyhole size={14} aria-hidden="true" /> Guest checkout · No account needed</span>
       </div>
       <CheckoutForm districts={districts} items={checkoutLines(items)} subtotal={cart?.subtotal ?? 0}
-        bundleDiscount={cart?.bundleDiscount ?? 0} currencyCode={cart?.currency_code ?? "bdt"} settings={settings} promoCodes={promoCodes} />
+        bundleDiscount={cart?.bundleDiscount ?? 0} currencyCode={cart?.currency_code ?? "bdt"} settings={settings} promoCodes={promoCodes}
+        trackingEventId={cart ? icEventId(cart.id) : null} consent={checkoutConsent(tracking)} />
     </div>
   )
 }

@@ -68,6 +68,8 @@ export default defineMiddlewares({
       method: ["POST"],
       bodyParser: { sizeLimit: "200mb" },
     },
+    // Storefront event envelopes (up to 256 KB each) can exceed the 100 KB JSON default.
+    { matcher: "/tracking/ingest", method: ["POST"], bodyParser: { sizeLimit: "512kb" } },
 
     /**
      * Populate req.auth_context on the custom checkout route from a customer

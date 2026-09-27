@@ -351,6 +351,7 @@ test("isolated bypass assertions match serialized workflow messages and reject u
   const { isExpectedWorkflowFailure: matches } = load("scripts/verify-checkout-isolated.ts", {
     "node:assert/strict": require("node:assert/strict"), "@medusajs/framework/utils": utils,
     "@medusajs/medusa/core-flows": {}, "../workflows/checkout": {}, "../workflows/order-summary": {},
+    "../lib/tracking/outbox": {}, "../lib/tracking/settings": {},
   })
   const expected = "CHECKOUT_QUOTE_REQUIRED"
   assert.equal(matches(new Error(expected), expected), true)

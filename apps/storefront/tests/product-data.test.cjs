@@ -125,6 +125,7 @@ test("projected data still selects valid fallback devices, null prices and fallb
     react: {
       useMemo: (fn) => fn(),
       useEffect() {},
+      useRef: (current) => ({ current }),
       useState(initial) {
         const slot = cursor++
         if (!(slot in states)) states[slot] = initial
@@ -134,6 +135,7 @@ test("projected data still selects valid fallback devices, null prices and fallb
     "@/lib/variant-matrix": { pairKey },
     "@/lib/product-view-data": productViewData,
     "@/lib/product-forms": { featuresGroup: () => undefined },
+    "@/lib/tracking/queue": { track() {} },
   })
   const product = fixture()
   const props = {

@@ -13,8 +13,9 @@ import { quoteCheckout, submitOrder } from "@/lib/cart"
 import type { CheckoutQuote, CheckoutSettings, DistrictsResponse } from "@/lib/checkout"
 import { EMPTY_CHECKOUT_FIELDS, normalizeCheckoutPhone, validateCheckout, type CheckoutFields, type CheckoutLine } from "@/lib/checkout-form-data"
 import { formatPrice } from "@/lib/money"
+import { track, trackPurchase } from "@/lib/tracking/queue"
 
-export default function CheckoutForm({ districts, items: initialItems, subtotal, bundleDiscount = 0, currencyCode, settings, promoCodes = [] }: {
+export default function CheckoutForm({ districts, items: initialItems, subtotal, bundleDiscount = 0, currencyCode, settings, promoCodes = [], trackingEventId, consent }: {
   districts: DistrictsResponse
   /** Discount codes already on the bag (a review reward, say). */
   promoCodes?: string[]
@@ -23,6 +24,10 @@ export default function CheckoutForm({ districts, items: initialItems, subtotal,
   bundleDiscount?: number
   currencyCode: string
   settings: CheckoutSettings
+  /** InitiateCheckout's `ic-` id from the server (TRACKING.md 5.4); null while tracking is off. */
+  trackingEventId?: string | null
+  /** The consent line, only while contact hashes are shared (TRACKING.md 12). */
+  consent?: { text: string; version: number } | null
 }) {
   const router = useRouter()
   const { applySummary } = useCart()
@@ -40,6 +45,23 @@ export default function CheckoutForm({ districts, items: initialItems, subtotal,
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [noteOpen, setNoteOpen] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState(false)
+
+  // InitiateCheckout, once per mount (the ref also covers StrictMode's second
+  // run), for the bag as the page loaded it. The form is still empty, so no
+  // customer detail can be in it.
+  const checkoutTracked = useRef(false)
+  useEffect(() => {
+    if (checkoutTracked.current || !trackingEventId || currencyCode.toUpperCase() !== "BDT") return
+    const lines = initialItems.filter((item) => item.variant_id)
+    if (!lines.length) return
+    checkoutTracked.current = true
+    track("InitiateCheckout", {
+      items: lines.map((item) => ({ id: item.variant_id, q: item.quantity, price: item.unit_price })),
+      value: Math.max(0, subtotal - bundleDiscount),
+      currency: "BDT",
+      num_items: initialItems.reduce((sum, item) => sum + item.quantity, 0),
+    }, trackingEventId)
+  }, [])
 
   useEffect(() => {
     const onUpdate = () => setUpdateAvailable(true)
@@ -115,6 +137,9 @@ export default function CheckoutForm({ districts, items: initialItems, subtotal,
         quote_version: currentQuote.version,
       })
       if (result.ok) {
+        // First, while the page is still /checkout/: the pixels fire the
+        // Purchase before router.push leaves for the private order page.
+        if (result.tracking) trackPurchase(result.tracking)
         applySummary({ itemCount: 0, subtotal: 0, currencyCode: currency, bundleDiscount: 0 })
         router.push(`/order/${result.order.id}/`)
         navigating = true
@@ -249,6 +274,7 @@ export default function CheckoutForm({ districts, items: initialItems, subtotal,
           {Object.keys(errors).length ? <div role="alert" tabIndex={-1} data-checkout-errors className="checkout-error-box"><p className="font-semibold">Please check before placing your order</p><ul>{Object.entries(errors).map(([key, message]) => <li key={key}>{key in EMPTY_CHECKOUT_FIELDS ? <button type="button" onClick={() => focusErrors({ [key]: message })}>{message}</button> : message}</li>)}</ul>{errors.cart_id ? <Link href="/cart/">Return to your bag</Link> : null}</div> : null}
           {submitButton()}
           <p className="checkout-terms">Please check your device model and delivery address before placing your order.</p>
+          {consent ? <p className="checkout-terms">{consent.text} <Link href="/privacy/">Privacy policy</Link></p> : null}
           {settings.support_phone ? <a href={`tel:${settings.support_phone}`} className="checkout-help"><Phone size={15} aria-hidden="true" /><span>{settings.support_label} <strong>{settings.support_phone}</strong></span></a> : null}
         </section>
       </aside>

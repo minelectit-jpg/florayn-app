@@ -11,6 +11,7 @@ import {
 } from "./checkout"
 import { getCustomerToken } from "./customer"
 import { getRegionId, sdk } from "./medusa"
+import { checkoutTrackingHeaders } from "@/lib/tracking/server/checkout-context"
 
 const CART_COOKIE = "florayn_cart_id"
 
@@ -307,8 +308,14 @@ export async function submitOrder(
 
   // Pass the customer session token when signed in, so the order links to the
   // account and shows up under "My orders" (guests send none, unchanged).
-  const customerToken = await getCustomerToken()
-  const result = await placeOrder({ ...input, cart_id: cartId }, customerToken)
+  // The ad tracking context is read alongside it from this request's own
+  // headers and cookies (TRACKING.md 4.4), never from the action's arguments;
+  // without one the order still goes through, untracked.
+  const [customerToken, trackingHeaders] = await Promise.all([
+    getCustomerToken(),
+    checkoutTrackingHeaders().catch(() => null),
+  ])
+  const result = await placeOrder({ ...input, cart_id: cartId }, customerToken, trackingHeaders)
 
   if (result.ok) {
     revalidatePath("/cart")

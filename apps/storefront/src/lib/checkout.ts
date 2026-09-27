@@ -1,5 +1,6 @@
 import { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } from "./medusa"
 import type { CheckoutLine } from "./checkout-form-data"
+import { isPurchaseBlock, type PurchaseBlock } from "./tracking/contract"
 
 export type CheckoutSettings = {
   heading: string
@@ -208,22 +209,37 @@ export async function getOrderSummary(
   }
 }
 
+/** The response's Purchase block when well formed. A placed order never fails over it. */
+function purchaseBlock(value: unknown): PurchaseBlock | undefined {
+  try {
+    return isPurchaseBlock(value) ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Places the order. Field-level errors come back as `errors`, keyed by field
  * name, so the form can put each message next to the input it belongs to.
+ *
+ * `trackingHeaders` (TRACKING.md 4.4) ride as request headers only, never in
+ * the body, and cannot replace the checkout's own. A placed order may come
+ * back with the browser's Purchase block; a malformed one is dropped, so
+ * tracking never fails an order.
  */
 export async function placeOrder(
   input: CheckoutInput,
-  customerToken?: string
+  customerToken?: string,
+  trackingHeaders?: Record<string, string> | null
 ): Promise<
-  { ok: true; order: PlacedOrder } | CheckoutFailure
+  { ok: true; order: PlacedOrder; tracking?: PurchaseBlock } | CheckoutFailure
 > {
   try {
     const res = await fetch(`${MEDUSA_BACKEND_URL}/store/checkout`, {
       method: "POST",
       cache: "no-store",
       signal: AbortSignal.timeout(45_000),
-      headers: headers(customerToken),
+      headers: { ...trackingHeaders, ...headers(customerToken) },
       body: JSON.stringify(input),
     })
 
@@ -238,7 +254,8 @@ export async function placeOrder(
     }
 
     if (typeof (data as any)?.order?.id !== "string" || !(data as any).order.id.trim()) throw new Error("Missing order")
-    return { ok: true, order: (data as any).order as PlacedOrder }
+    const tracking = purchaseBlock((data as any).tracking)
+    return { ok: true, order: (data as any).order as PlacedOrder, ...(tracking ? { tracking } : {}) }
   } catch {
     return {
       ok: false,

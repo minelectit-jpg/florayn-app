@@ -52,19 +52,31 @@ test("checkout DTO keeps selected images, model/case, quantity and prices withou
   }
   const result = plain(forms.checkoutLines([source]))
   assert.deepEqual(result, [{ id: "line_test", title: "Audit Bloom", variant_title: "Signature Earbuds / AirPods Pro 3",
-    quantity: 2, unit_price: 750, subtotal: 1500, thumbnail: "https://images.invalid/selected.webp" }])
-  assert.doesNotMatch(JSON.stringify(result), /PRIVATE|metadata|pairs|variant_test/)
+    quantity: 2, unit_price: 750, subtotal: 1500, thumbnail: "https://images.invalid/selected.webp", variant_id: "variant_test" }])
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE|metadata|pairs/)
   assert.ok(JSON.stringify(result).length < 500)
   assert.equal(forms.checkoutLines([{ ...source, variant: undefined }])[0].thumbnail, source.thumbnail)
   assert.equal(forms.checkoutLines([{ ...source, variant: undefined }])[0].variant_title, "Fallback variant")
   assert.equal(forms.checkoutLines([{ id: "no_image", title: "No image", quantity: 1, unit_price: 0 }])[0].thumbnail, null)
 })
 
+test("checkout lines carry the variant id for InitiateCheckout, null when the line has no variant", () => {
+  const line = { id: "line_test", title: "Audit case", quantity: 1, unit_price: 1400 }
+  assert.equal(forms.checkoutLines([{ ...line, variant: { id: "variant_01ABCDEFGHJK", title: "Signature / iPhone 17" } }])[0].variant_id, "variant_01ABCDEFGHJK")
+  assert.equal(forms.checkoutLines([line])[0].variant_id, null)
+  assert.equal(forms.checkoutLines([{ ...line, variant: { title: "No id" } }])[0].variant_id, null)
+})
+
+// The real contract, so the Purchase block check is the one checkout ships with.
+const contract = load("tracking/contract.ts", { "./paths": load("tracking/paths.ts") })
+// cart.ts reads the tracking context only through this module; the default is tracking off.
+const noTracking = { "@/lib/tracking/server/checkout-context": { checkoutTrackingHeaders: async () => null } }
+
 function apiHarness(response = {}, options = {}) {
   const calls = []
   const api = load("checkout.ts", { "./medusa": {
     MEDUSA_BACKEND_URL: "https://backend.invalid", MEDUSA_PUBLISHABLE_KEY: "pk_fixture_only",
-  } }, { AbortSignal: { timeout: (milliseconds) => ({ timeout: milliseconds }) }, fetch: async (url, init) => {
+  }, "./tracking/contract": contract }, { AbortSignal: { timeout: (milliseconds) => ({ timeout: milliseconds }) }, fetch: async (url, init) => {
     calls.push({ url, ...plain(init) })
     if (options.networkFailure) throw new Error("offline")
     return { ok: options.status == null || options.status < 400, status: options.status ?? 200,
@@ -137,6 +149,7 @@ test("cart subtotal remains the goods subtotal after checkout attaches delivery"
   const serverCart = { id: "cart_fixture", currency_code: "bdt", subtotal: 1460, item_subtotal: 1400,
     shipping_total: 60, total: 1360, items: [{ id: "line_test", title: "Audit case", unit_price: 1400, quantity: 1 }] }
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }), delete: (name) => deleted.push(name) }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 100, getBundleConfig: async () => ({}) },
@@ -168,6 +181,7 @@ test("successful checkout retains recovery capability and the next add starts a 
   const creationCalls = []
   const itemCalls = []
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({
       get: () => ({ value: cookie }),
       set: (name, value, options) => { cookieWrites.push({ name, value, options: plain(options) }); cookie = value },
@@ -221,6 +235,7 @@ test("successful checkout retains recovery capability and the next add starts a 
 test("a signed-in shopper's checkout forwards the customer token so the order links to the account", async () => {
   const placeOrderArgs = []
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
@@ -244,6 +259,7 @@ test("a signed-in shopper's checkout forwards the customer token so the order li
 test("a guest checkout forwards no customer token", async () => {
   const placeOrderArgs = []
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
@@ -264,6 +280,7 @@ test("a guest checkout forwards no customer token", async () => {
 test("an add that fails on an open bag keeps that bag instead of starting a new one", async () => {
   const creations = []
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_open_fixture" }), set: () => assert.fail("the bag must not be replaced") }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
@@ -283,6 +300,7 @@ test("a discount code is applied only if Medusa actually takes it, and the store
   const calls = []
   let promotions = [{ code: "BUNDLE-cart_fixture" }]
   const cart = load("cart.ts", {
+    ...noTracking,
     "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
     "next/cache": { revalidatePath: () => {} },
     "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
@@ -308,4 +326,129 @@ test("a discount code is applied only if Medusa actually takes it, and the store
   for (const bad of ["", "x", "BUNDLE-cart_fixture", "code with spaces", "A".repeat(41)]) assert.equal((await cart.applyPromoCode(bad)).ok, false, bad)
   assert.deepEqual(plain(await cart.removePromoCode("REVGOOD1")), { ok: true, codes: [] })
   assert.equal((await cart.removePromoCode("FREESHIP-cart_fixture")).ok, false, "the store's own offers cannot be removed by hand")
+})
+
+// ---------------------------------------------------------------- tracking (TRACKING.md 4.4, 5.4)
+
+const TRACKING_HEADERS = { "x-florayn-ingest-key": "k".repeat(64), "x-florayn-tracking": "eyJ2IjoxfQ" }
+
+function purchaseBlock() {
+  return { event_id: "fl-1234", value: 1460, currency: "BDT", num_items: 1,
+    contents: [{ id: "variant_01ABCDEFGHJK", quantity: 1, item_price: 1400 }],
+    platforms: { meta: true, tiktok: false, google: false }, match: { meta: { external_id: "e".repeat(64) } } }
+}
+
+const placed = (extra = {}) => ({ order: { id: "order_fixture", display_id: 1234, total: 1460, currency_code: "bdt" }, ...extra })
+const orderInput = () => ({ ...validFields, cart_id: "cart_fixture", quote_version: "a".repeat(64) })
+
+test("placeOrder sends the two tracking headers only when given, and never in the body", async () => {
+  const without = apiHarness(placed())
+  await without.placeOrder(orderInput())
+  await without.placeOrder(orderInput(), undefined, null)
+  for (const call of without.calls) {
+    assert.deepEqual(Object.keys(call.headers).sort(), ["content-type", "x-publishable-api-key"])
+  }
+
+  const withHeaders = apiHarness(placed())
+  await withHeaders.placeOrder(orderInput(), "customer.jwt.token", TRACKING_HEADERS)
+  const call = withHeaders.calls[0]
+  assert.equal(call.headers["x-florayn-ingest-key"], TRACKING_HEADERS["x-florayn-ingest-key"])
+  assert.equal(call.headers["x-florayn-tracking"], TRACKING_HEADERS["x-florayn-tracking"])
+  assert.equal(call.headers.authorization, "Bearer customer.jwt.token")
+  assert.equal(call.headers["x-publishable-api-key"], "pk_fixture_only")
+  assert.deepEqual(JSON.parse(call.body), orderInput(), "the body is the order input, unchanged")
+  assert.doesNotMatch(call.body, /florayn|eyJ2IjoxfQ|kkkk/)
+})
+
+test("tracking headers can never replace the checkout's own headers", async () => {
+  const h = apiHarness(placed())
+  await h.placeOrder(orderInput(), "customer.jwt.token", {
+    ...TRACKING_HEADERS, "content-type": "text/plain", "x-publishable-api-key": "pk_other", authorization: "Bearer other",
+  })
+  assert.equal(h.calls[0].headers["content-type"], "application/json")
+  assert.equal(h.calls[0].headers["x-publishable-api-key"], "pk_fixture_only")
+  assert.equal(h.calls[0].headers.authorization, "Bearer customer.jwt.token")
+})
+
+test("a placed order hands back a valid Purchase block; a malformed one is ignored and the order still succeeds", async () => {
+  const valid = await apiHarness(placed({ tracking: purchaseBlock() })).placeOrder(orderInput())
+  assert.equal(valid.ok, true)
+  assert.deepEqual(plain(valid.tracking), purchaseBlock())
+
+  const absent = await apiHarness(placed()).placeOrder(orderInput())
+  assert.equal(absent.ok, true)
+  assert.equal("tracking" in absent, false)
+
+  const block = purchaseBlock()
+  for (const tracking of [
+    null, "fl-1234", [], { ...block, event_id: "order_01SECRET" }, { ...block, event_id: "1234" },
+    { ...block, currency: "bdt" }, { ...block, value: -1 }, { ...block, value: "1460" },
+    { ...block, contents: [{ id: "custom-line", quantity: 1, item_price: 1400 }] },
+    { ...block, contents: [{ id: "variant_01ABCDEFGHJK", quantity: 0, item_price: 1400 }] },
+    { ...block, platforms: { meta: true, tiktok: false } },
+    { ...block, match: null }, { ...block, match: { meta: { ph: ["hash"] } } },
+    { ...block, match: { google: { address: { country: "US" } } } },
+  ]) {
+    const result = await apiHarness(placed({ tracking })).placeOrder(orderInput())
+    assert.equal(result.ok, true, JSON.stringify(tracking))
+    assert.equal(result.order.id, "order_fixture")
+    assert.equal(result.tracking, undefined, JSON.stringify(tracking))
+  }
+})
+
+test("a failed order never carries a Purchase block", async () => {
+  const result = await apiHarness({ errors: { form: "Try again" }, tracking: purchaseBlock() }, { status: 409 }).placeOrder(orderInput())
+  assert.equal(result.ok, false)
+  assert.equal(result.tracking, undefined)
+})
+
+function trackedCart(trackingHeaders, placeOrderArgs) {
+  return load("cart.ts", {
+    "@/lib/tracking/server/checkout-context": { checkoutTrackingHeaders: trackingHeaders },
+    "next/headers": { cookies: async () => ({ get: () => ({ value: "cart_fixture" }) }) },
+    "next/cache": { revalidatePath: () => {} },
+    "./bundles": { cartDiscount: () => 0, getBundleConfig: async () => ({}) },
+    "./customer": { getCustomerToken: async () => undefined },
+    "./checkout": {
+      placeOrder: async (...args) => {
+        placeOrderArgs.push(args)
+        return { ok: true, order: { id: "order_tracked", total: 1460, currency_code: "bdt" }, tracking: purchaseBlock() }
+      },
+      fetchCheckoutQuote: async () => ({ ok: false, errors: { form: "n/a" } }),
+    },
+    "./medusa": { getRegionId: async () => "region_fixture", sdk: { store: { cart: {} } } },
+  })
+}
+
+test("submitOrder takes the tracking headers only from checkoutTrackingHeaders, never from its arguments", async () => {
+  const args = []
+  let reads = 0
+  const cart = trackedCart(async () => { reads++; return { ...TRACKING_HEADERS } }, args)
+  const result = await cart.submitOrder({ ...validFields, quote_version: "v",
+    "x-florayn-tracking": "forged", tracking: { staff: false }, headers: { "x-florayn-ingest-key": "forged" } })
+  assert.equal(reads, 1)
+  assert.equal(result.ok, true)
+  assert.deepEqual(plain(result.tracking), purchaseBlock(), "the Purchase block reaches the form")
+  assert.equal(args.length, 1)
+  assert.deepEqual(plain(args[0][2]), TRACKING_HEADERS, "the third argument is exactly the module's headers")
+  assert.equal(args[0][1], undefined, "a guest still sends no customer token")
+})
+
+test("the order goes through untracked when there is no tracking context, or reading it fails", async () => {
+  for (const headers of [async () => null, async () => { throw new Error("outside a request scope") }]) {
+    const args = []
+    const result = await trackedCart(headers, args).submitOrder({ ...validFields, quote_version: "v" })
+    assert.equal(result.ok, true)
+    assert.equal(args.length, 1)
+    assert.equal(args[0][2], null)
+  }
+})
+
+test("lib/cart.ts (a \"use server\" file) gains no exported function for tracking", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../src/lib/cart.ts"), "utf8")
+  const exported = [...source.matchAll(/^export\s+(?:async\s+)?function\s+(\w+)/gm)].map((match) => match[1]).sort()
+  assert.deepEqual(exported, ["addManyToCart", "addToCart", "applyPromoCode", "cartPromoCodes", "getCart", "getCartSummary",
+    "quoteCheckout", "removeLineItem", "removePromoCode", "setLineItemQuantity", "submitOrder"])
+  assert.doesNotMatch(source, /^export\s+(?:const|let|var|default)\b/m)
+  assert.match(source, /import \{ checkoutTrackingHeaders \} from "@\/lib\/tracking\/server\/checkout-context"/)
 })

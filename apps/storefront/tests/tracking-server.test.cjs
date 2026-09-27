@@ -134,6 +134,7 @@ test("no \"use client\" module, or anything it imports, reaches lib/tracking/ser
   }
   walk(src)
   const isClient = (file) => /^\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*["']use client["']/.test(fs.readFileSync(file, "utf8"))
+  const isServerActions = (file) => /^\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*["']use server["']/.test(fs.readFileSync(file, "utf8"))
   const clients = files.filter(isClient)
   assert.ok(clients.length > 10, "found the client components")
   const specifiers = (file) => {
@@ -154,6 +155,9 @@ test("no \"use client\" module, or anything it imports, reaches lib/tracking/ser
       if (!target) continue
       assert.ok(!path.resolve(target).startsWith(serverDir + path.sep),
         `client code reaches ${srcKey(target)} via ${[...chain, srcKey(target)].join(" -> ")}`)
+      // A "use server" module reaches the browser only as action references (lib/cart.ts
+      // submitOrder reads the checkout tracking headers), so its own imports stay on the server.
+      if (isServerActions(target)) continue
       queue.push([target, [...chain, srcKey(target)]])
     }
   }

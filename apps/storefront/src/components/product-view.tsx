@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import type { MatchingProduct } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
@@ -24,6 +24,7 @@ import {
   type ProductDesignData,
   type ProductVariantMatrix,
 } from "@/lib/product-view-data"
+import { track } from "@/lib/tracking/queue"
 import { pairKey } from "@/lib/variant-matrix"
 
 export type ProductPick = { caseType: string; device: string }
@@ -196,11 +197,31 @@ export default function ProductView({
     if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
   }
 
+  // This mount's ViewContent (TRACKING.md 5.4): its variant and how many
+  // variant switches were sent after it. A ref, so StrictMode's second effect
+  // run sends nothing more, while every new mount (A -> B -> A) sends its own.
+  const viewed = useRef<{ id: string; n: number } | null>(null)
+
+  /** Queues a ViewContent for a pair; its variant id, or null without a price. */
+  function trackView(ct: string, dev: string, primary: boolean): string | null {
+    const id = matrix.variantIdByPair[pairKey(ct, dev)]
+    const price = id ? variantById.get(id)?.calculated_price?.calculated_amount : null
+    if (typeof price !== "number") return null
+    track("ViewContent", { items: [{ id, q: 1, price }], value: price, currency: "BDT",
+      handle: productHandle, device: dev, case_type: ct, primary })
+    return id
+  }
+
   // Honour ?variant=, ?device= and ?case= (see pickFromQuery) on the client so
-  // the page itself stays static/cacheable. Runs once after hydration.
+  // the page itself stays static/cacheable. Runs once after hydration, which is
+  // also when the page's ViewContent goes out, for the pair the query settles on.
   useEffect(() => {
     const devicePage = !!deviceName && deviceName === initialDevice
     const pick = pickFromQuery(window.location.search, matrix, caseTypeRecords, { caseType, device }, devicePage)
+    if (!viewed.current) {
+      const id = trackView(pick?.caseType ?? caseType, pick?.device ?? device, true)
+      if (id) viewed.current = { id, n: 0 }
+    }
     if (!pick) return
     setCaseType(pick.caseType)
     setDevice(pick.device)
@@ -208,6 +229,20 @@ export default function ProductView({
 
   const selectedId = matrix.variantIdByPair[pairKey(caseType, device)]
   const selected = (selectedId && variantById.get(selectedId)) || null
+
+  // A variant the shopper switches to after that ViewContent gets one more
+  // once it has stayed picked for 1.5 s, at most 3 per mount, not primary.
+  useEffect(() => {
+    const seen = viewed.current
+    if (!seen || !selectedId || selectedId === seen.id || seen.n >= 3) return
+    const timer = setTimeout(() => {
+      if (trackView(caseType, device, false)) {
+        seen.id = selectedId
+        seen.n++
+      }
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [selectedId])
 
   const items: GalleryItem[] = useMemo(() => {
     const imgs = (selected?.metadata?.images as string[] | undefined) ?? []

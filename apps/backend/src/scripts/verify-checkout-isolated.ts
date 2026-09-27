@@ -11,6 +11,10 @@ import {
 } from "@medusajs/medusa/core-flows"
 import { checkoutWorkflow } from "../workflows/checkout"
 import { orderSummaryWorkflow } from "../workflows/order-summary"
+import { checkoutWithTrackingWorkflow } from "../workflows/checkout"
+import type { CheckoutTrackingContext } from "../lib/tracking/contract"
+import { flush } from "../lib/tracking/outbox"
+import { invalidateTrackingSettings } from "../lib/tracking/settings"
 
 // Medusa serializes step errors before workflow-export throws errors[0].error.
 // These can be plain objects, so assert.rejects' Error-to-string regex loses
@@ -168,5 +172,77 @@ export default async function verifyCheckoutIsolated({ container }: ExecArgs) {
     id: products[0].variants![0].id, metadata: { images: ["https://example.invalid/changed-after-order.webp"] },
   }] } })
   assert.equal((await readSummary()).items[0].thumbnail, "https://example.invalid/selected-case.webp")
+
+  // Ad tracking at checkout (TRACKING.md 6.5, 14, I17): the TEST dataset with
+  // a fake token and dry run, so nothing leaves this machine. Two simultaneous
+  // submits plus a retry with a trusted context must keep one order, one
+  // stored context, one Purchase hit and one Purchase row per platform, and
+  // answer the same event id every time.
+  process.env.TRACKING_DRY_RUN = "1"
+  const trackingService: any = container.resolve("tracking")
+  const trackingPatch = { config: { meta: { enabled: true } }, meta_test_token: "ci-fake-token" }
+  const [savedTracking] = await trackingService.listTrackingSettings({ id: "trackset_default" }, { take: 1 })
+  if (savedTracking) await trackingService.updateTrackingSettings({ id: "trackset_default", ...trackingPatch })
+  else await trackingService.createTrackingSettings({ id: "trackset_default", ...trackingPatch })
+  invalidateTrackingSettings()
+  const { result: trackedCart } = await createCartWorkflow(container).run({ input: {
+    region_id: regions[0].id, sales_channel_id: channels[0].id,
+    items: [{ variant_id: products[0].variants![0].id, quantity: 1 }],
+  } })
+  const trackedBody = { ...body, cart_id: trackedCart.id }
+  const trackedQuote = (await checkoutWorkflow(container).run({ input: { body: trackedBody, complete: false } })).result
+  assert.equal(trackedQuote.status, 200, JSON.stringify(trackedQuote.body))
+  assert.ok(!("tracking" in trackedQuote.body), "The untracked workflow never adds a tracking block")
+  const trackedContext: CheckoutTrackingContext = {
+    v: 1, host: "new.florayn.com", page_url: "https://new.florayn.com/checkout/", edge: true,
+    vid: "v1.1790467200.0123456789abcdef", sid: "s1.1790467200.01234567", ua: "Mozilla/5.0 CI", ip: "203.0.113.7",
+    src: null, camp: null, fbp: null, fbc: null, ttp: null, ttclid: null, gclid: null, gbraid: null, wbraid: null,
+    country: null, device: null, audience: null, new: true, staff: false, optout: false, consent_version: 1,
+  }
+  const placeTracked = async () => (await checkoutWithTrackingWorkflow(container).run({ input: {
+    body: { ...trackedBody, quote_version: trackedQuote.body.quote.version }, complete: true, tracking: trackedContext,
+  } })).result
+  const trackedResults = await Promise.all([placeTracked(), placeTracked()])
+  trackedResults.push(await placeTracked())
+  const trackedOrder = trackedResults[0].body.order
+  const purchaseId = `fl-${trackedOrder?.display_id}`
+  for (const placed of trackedResults) {
+    assert.equal(placed.status, 200, JSON.stringify(placed.body))
+    assert.equal(placed.body.order.id, trackedOrder.id)
+    assert.equal(placed.body.tracking?.event_id, purchaseId, "Every retry answers the same Purchase event id")
+  }
+  const { data: trackedLinks } = await query.graph({ entity: "order_cart", fields: ["order_id"], filters: { cart_id: trackedCart.id } })
+  assert.equal(trackedLinks.length, 1)
+  const { data: [trackedSaved] } = await query.graph({ entity: "order", fields: ["id", "total"], filters: { id: trackedOrder.id } })
+  const purchaseBlock = trackedResults[0].body.tracking
+  assert.equal(purchaseBlock.value, Number(trackedSaved.total), "Purchase value is the order total including delivery")
+  assert.deepEqual(purchaseBlock.contents, [{ id: products[0].variants![0].id, quantity: 1, item_price: unitPrice }])
+  assert.deepEqual(purchaseBlock.platforms, { meta: true, tiktok: false, google: false })
+  assert.deepEqual(Object.keys(purchaseBlock.match.meta ?? {}), ["external_id"], "With sharing off only the hashed visitor id goes to the browser")
+  const pg = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const rowsOf = async (sql: string, bindings: string[]) => (await pg.raw(sql, bindings)).rows as any[]
+  const storedContexts = await rowsOf("select host, env, trusted, staff, optout from tracking_order_context where order_id = ?", [trackedOrder.id])
+  assert.deepEqual(storedContexts.map((row) => ({ ...row })), [{ host: "new.florayn.com", env: "test", trusted: true, staff: false, optout: false }])
+  assert.equal((await rowsOf("select event_id from tracking_hit where event_name = 'Purchase' and event_id = ?", [purchaseId])).length, 1)
+  const purchaseRows = await rowsOf(
+    "select platform, status, destination from tracking_event where event_name = 'Purchase' and event_id = ? order by platform", [purchaseId])
+  assert.deepEqual(purchaseRows.map((row) => row.platform), ["meta", "tiktok"], "Exactly one Purchase row per platform")
+  // The checkout's debounced background flush (2 s) may already have marked
+  // the Meta row in dry run by now; anything else would be a wrong state.
+  assert.ok(["pending", "dry_run"].includes(purchaseRows[0].status), `Meta Purchase row is ${purchaseRows[0].status}`)
+  assert.equal(purchaseRows[0].destination, "2247389409441720")
+  assert.equal(purchaseRows[1].status, "skipped", "TikTok is off, so its Purchase row is kept as skipped")
+  assert.equal(purchaseRows[1].destination, "")
+  const metaPurchaseStatus = async () => (await rowsOf(
+    "select status from tracking_event where platform = 'meta' and event_name = 'Purchase' and event_id = ?", [purchaseId]))[0]?.status
+  let metaStatus = purchaseRows[0].status
+  for (let attempt = 0; attempt < 40 && metaStatus !== "dry_run"; attempt++) {
+    // A background flush can hold the row for a moment (FOR UPDATE SKIP LOCKED).
+    await flush(container)
+    metaStatus = await metaPurchaseStatus()
+    if (metaStatus !== "dry_run") await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  assert.equal(metaStatus, "dry_run", "A flush sends the Meta Purchase (dry run, no network call)")
+  logger.info("CHECKOUT_TRACKING_PASS: concurrent tracked submits and a retry store one context, one Purchase hit and one Purchase row per platform with a stable fl-N block; the Meta row flushes in dry run")
   logger.info("CHECKOUT_INTEGRATION_PASS: real pricing, both delivery zones, current bundle, signed quote bypass prevention, edited cart, COD completion and concurrent safe retries")
 }

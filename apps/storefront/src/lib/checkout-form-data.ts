@@ -43,6 +43,8 @@ export type CheckoutLine = {
   subtotal: number
   total?: number
   thumbnail: string | null
+  /** For InitiateCheckout (TRACKING.md 5.4); quote lines may not carry it. */
+  variant_id?: string | null
 }
 
 /** Never send a product's metadata/card matrices across the client boundary. */
@@ -58,6 +60,7 @@ export function checkoutLines(items: CartItem[]): CheckoutLine[] {
       unit_price: item.unit_price,
       subtotal: item.unit_price * item.quantity,
       thumbnail: image ?? item.thumbnail ?? item.variant?.product?.thumbnail ?? null,
+      variant_id: item.variant?.id ?? null,
     }
   })
 }

@@ -18,6 +18,22 @@ import {
   type CartItem,
   type CartSummary,
 } from "@/lib/cart"
+import { track } from "@/lib/tracking/queue"
+
+/**
+ * AddToCart (TRACKING.md 5.4), queued once the server has taken the lines, in
+ * BDT only. The server replaces the prices anyway. It can never turn a
+ * successful add into an error.
+ */
+function trackAdd(currency: string, items: { id: string; q: number; price: number }[], value: number) {
+  try {
+    if ((currency || "bdt").toUpperCase() === "BDT" && items.length) {
+      track("AddToCart", { items, value, currency: "BDT" })
+    }
+  } catch {
+    // Tracking stays out of the bag's way.
+  }
+}
 
 type OptimisticLine = {
   productTitle: string
@@ -146,6 +162,10 @@ export default function CartProvider({
           variantId,
           quantity
         )
+        // Before the stale check: a slower add still put its line in the bag.
+        // The requested quantity, not the merged line's.
+        const price = added?.unitPrice ?? optimistic.unitPrice
+        trackAdd(serverSummary.currencyCode, [{ id: variantId, q: quantity, price }], price * quantity)
         if (seq !== requestSeq.current) {
           return
         }
@@ -201,6 +221,13 @@ export default function CartProvider({
 
       try {
         const { summary: serverSummary, items: serverItems } = await addManyToCartAction(items)
+        // The pack as asked for, each price from the bag (0 if missing) and
+        // the pack total as the value.
+        trackAdd(serverSummary.currencyCode, items.filter((i) => i.variantId).map((i) => ({
+          id: i.variantId,
+          q: i.quantity ?? 1,
+          price: serverItems.find((line) => line.variant?.id === i.variantId)?.unit_price ?? 0,
+        })), optimistic.unitPrice)
         if (seq === requestSeq.current) {
           setSummary(serverSummary)
           setItems(serverItems)

@@ -22,6 +22,7 @@ function load() {
     cache.set(filename, exports)
     vm.runInNewContext(code, { exports, URL, URLSearchParams, process: { env: {} }, require(dep) {
       if (dep === "@/lib/variant-matrix") return one(path.join(src, "lib/variant-matrix.ts"))
+      if (dep === "@/lib/tracking/queue") return { track() {} }
       if (dep.startsWith("@/") || dep.startsWith(".")) return { __esModule: true, default: () => null }
       return require(dep)
     } }, { filename })
