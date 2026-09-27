@@ -331,8 +331,9 @@ test("the scoped migration script inspects known schema only and applies exactly
   const helper = {
     getAllColumns: async (_conn, tables) => {
       assert.deepEqual(plain(tables.get("public")).map((table) => table.table_name), ["mikro_orm_migrations", "privacy_setting"])
+      // Real PostgreSQL introspection reports the boolean column as "bool" (CI run #80).
       return { "public.mikro_orm_migrations": history ? [{ name: "name" }] : [],
-        "public.privacy_setting": recorded ? columns.map((name) => ({ name, type: name === "published" ? "boolean" : "text", nullable: name === "deleted_at" })) : [] }
+        "public.privacy_setting": recorded ? columns.map((name) => ({ name, type: name === "published" ? "bool" : "text", nullable: name === "deleted_at" })) : [] }
     },
     getAllIndexes: async (_conn, tables) => {
       assert.equal(tables[0].table_name, "privacy_setting")

@@ -106,7 +106,8 @@ export default async function migratePrivacySettings({ container, args = [] }: E
     const after = await inspect()
     const missing = REQUIRED_COLUMNS.filter((name) => !after.columns.some((column) => column.name === name))
     if (!after.recorded || missing.length || !after.indexes.includes(INDEX) ||
-      !after.columns.some((column) => column.name === "published" && column.type === "boolean")) {
+      // PostgreSQL introspection names the boolean type by its short alias.
+      !after.columns.some((column) => column.name === "published" && ["bool", "boolean"].includes(column.type))) {
       throw new MedusaError(MedusaError.Types.DB_ERROR, "Privacy migration schema verification failed")
     }
     logger.info(`PRIVACY_MIGRATION_VERIFIED ${JSON.stringify(after)}`)
