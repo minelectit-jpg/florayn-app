@@ -154,10 +154,12 @@ export default async function verifyProductManager({ container }: ExecArgs) {
   const withPresentation = await stores.retrieveStore(store.id)
   assert.equal(withPresentation.metadata?.recommendation_fixture_keep, "preserved")
   assert.deepEqual(withPresentation.metadata?.[RECOMMENDATION_KEY], settings)
-  assert.deepEqual(withPresentation.metadata?.[PRESENTATION_KEY], { footer, delivery, buy_box })
+  // Saving one section stores every section (the others at their defaults: navigation and search too).
+  const savedPresentation = { ...DEFAULT_PRESENTATION, footer, delivery, buy_box }
+  assert.deepEqual(withPresentation.metadata?.[PRESENTATION_KEY], savedPresentation)
   await savePresentation({ scope: container, params: { section: "delivery" }, body: { settings: { ...delivery, link_label: "Unsafe", link_href: "javascript:alert(1)" } } } as any, res)
   assert.equal(status, 400)
-  assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[PRESENTATION_KEY], { footer, delivery, buy_box })
+  assert.deepEqual((await stores.retrieveStore(store.id)).metadata?.[PRESENTATION_KEY], savedPresentation)
   progress("editable footer, delivery and buy buttons persisted, public reads matched, unsafe links rejected and unrelated settings preserved")
   // Exact variant selection, independent ordering, draft rejection, and clearing.
   const picks = { recommended: [large.id, small.id], featured: [small.id] }

@@ -193,7 +193,9 @@ test("a failing, throwing or slow enqueue never fails or holds up the status upd
   const hung = harness({
     ops: [op("oop_a", "order_a", "processing"), op("oop_b", "order_b", "processing")],
     enqueue: () => new Promise((resolve) => { release = resolve }),
-    globals: { setTimeout: (fn, ms) => { hung.timers.push(ms); return setTimeout(fn, 1) } },
+    // The fast timer ignores unref(): with only an unref'd timer and a hung promise left,
+    // Node 22's test runner sees an empty event loop and cancels the test.
+    globals: { setTimeout: (fn, ms) => { hung.timers.push(ms); const timer = setTimeout(fn, 1); timer.unref = () => timer; return timer } },
   })
   const result = await hung.status.applyStatusChanges(hung.container, [
     { op: hung.ops.state.get("oop_a"), to: "confirmed", via: "staff" },
