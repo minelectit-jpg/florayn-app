@@ -3012,7 +3012,24 @@ QA run 1 (2026-09-28, deployed 403c9d8, Meta on, TEST dataset, share OFF):
   vendor request contains `/order/`; only `ud[external_id]` (not a phone or
   name hash). Backend: `/store/checkout` 200, ingest 202, no warn/error logs.
   Meta dataset details show `server_last_fired_time` set, so CAPI arrives.
-- Open: deduplication as seen in Meta Test Events (owner's screen); steps 7, 8,
+- Owner's run, TEST ORDER #1111 (2 items, bundle -300, delivery 100 = 2600),
+  browser session opened from Test Events: every browser event has a server
+  twin with the same event_id and name (PageView c39da7ac, ViewContent
+  ce9879fd, AddToCart 50edc5ac, InitiateCheckout ic-c0b49f08..., Purchase
+  fl-1111); client-side routes send a server PageView only. Test Events marks
+  every row "Processed" (no "Deduplicated" label); Meta's documented check is
+  Overview > event > Event Deduplication, read after a few hours.
+- Purchase fl-1111 arrived twice as Server: ours at 02:07:42 (8 parameters
+  with delivery_category, Country key) and one at 02:07:43 with exactly the
+  browser event's 7 parameters and no Country. buildMetaEvent always adds
+  delivery_category and the storefront sends no CAPI, so the second copy is
+  made on Meta's side (same event_id, so it is deduplicated). Watch "Additional
+  conversions reported" on the live dataset at cutover.
+- EMQ on the TEST dataset (ads dataset quality, 2026-09-28): PageView,
+  ViewContent, AddToCart, InitiateCheckout 6.1 each (ip, ua, fbp, external_id
+  100%, country and fbc 95-100%), the live baseline's level; Purchase EMQ not
+  scored yet and expected below 8.6 while share is OFF.
+- Open: the Event Deduplication tab; steps 7, 8,
   9, 10, 11 (need DevTools throttling, a network cut, a review token, an ad
   blocker or an admin session in the same browser); step 12 on #1109 by the
   owner; step 15 test alert; step 16 after the Privacy approval. #1109 is
