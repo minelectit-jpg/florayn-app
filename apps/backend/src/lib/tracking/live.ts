@@ -18,13 +18,19 @@ import type { VariantIndexState } from "./variant-index"
  * "Today" is Asia/Dhaka midnight to now. Event counts are the closed-minute
  * rollups (tracking_minute) plus the raw hits since the rollup watermark, so
  * they stay exact while the rollup job is behind and never count a hit twice.
- * Staff hits (flag 8) are never counted. Orders come from the order module
- * (query.graph), not from tracking: drafts and imported florayn.com orders are
- * left out, cancelled ones are counted apart and add no revenue.
+ * Staff hits (flag 8) are never counted. Orders come from the order module's
+ * tables, not from tracking: drafts and imported florayn.com orders are left
+ * out, cancelled ones are counted apart and add no revenue. They are one SQL
+ * read with the totals Medusa stores in order_summary, never query.graph with
+ * `total` (that loads every line, tax line and adjustment and recomputes the
+ * totals on the event loop that serves checkout).
  *
- * One result is shared for 10 s per host filter (every open Live tab polls),
- * the 7-day order history for 5 minutes and the report for 5 minutes. Each
- * part is read on its own, so a missing table blanks one card, not the page.
+ * One result is shared for poll_seconds (at least 10 s) per host filter, so
+ * any number of open Live tabs cost one computation per poll. The outbox
+ * counts and today's unknown content ids are shared for 60 s, the 7-day order
+ * history until Dhaka midnight (its cancellations re-read every 5 minutes)
+ * and the report for 5 minutes. Each part is read on its own, so a missing
+ * table blanks one card, not the page.
  * Raw SQL through the PG_CONNECTION knex is the documented exception of
  * lib/tracking/db.ts; every value is a binding. Nothing here returns customer
  * data: hits carry no names, phones, emails, IPs or user agents.
@@ -163,8 +169,10 @@ export class LiveInputError extends Error {}
 const MINUTE_MS = 60_000
 const DAY_MS = 86_400_000
 const SPARK_STEP_MS = 5 * MINUTE_MS
+/** The shortest Live cache; it is poll_seconds when that is longer. */
 const LIVE_CACHE_MS = 10_000
-const HISTORY_CACHE_MS = 5 * MINUTE_MS
+const HISTORY_PATCH_MS = 5 * MINUTE_MS
+const HEALTH_CACHE_MS = 60_000
 const REPORT_CACHE_MS = 5 * MINUTE_MS
 const LAG_KICK_S = 120
 const TABLE_ROWS = 25
@@ -662,41 +670,76 @@ order by received_at desc limit 20`,
 }
 
 /**
- * Orders placed in [from, to) (to open-ended when null) through query.graph,
- * with their order_op rows to drop imported ones and see cancellations.
+ * One order's facts, drafts left out: its order_op row (imported orders are
+ * dropped, the manager's cancellations seen) and the total Medusa stores in
+ * order_summary for the order's current version (current_order_total, the
+ * same figure as the computed `total`; order edits write a new version).
  */
-async function loadOrders(container: any, db: Db, from: number, to: number | null): Promise<OrderFact[]> {
-  const query = container.resolve(ContainerRegistrationKeys.QUERY)
-  const createdAt: Record<string, Date> = { $gte: new Date(from) }
-  if (to !== null) createdAt.$lt = new Date(to)
-  const { data } = await query.graph({
-    entity: "order",
-    fields: ["id", "total", "created_at", "canceled_at", "is_draft_order"],
-    filters: { created_at: createdAt },
-    pagination: { skip: 0, take: MAX_ORDERS },
-  })
-  const orders = (data ?? []).filter((order: any) => order?.id && order.is_draft_order !== true)
+const ORDER_COLUMNS = `select o.id, o.created_at, o.canceled_at, o.is_draft_order, op.source, op.workflow_status,
+  (select case when jsonb_typeof(s.totals->'current_order_total') = 'number' then (s.totals->>'current_order_total')::float8 end
+    from order_summary s where s.order_id = o.id and s.deleted_at is null and s.version <= o.version
+    order by s.version desc limit 1) as total
+from "order" o left join order_op op on op.order_id = o.id and op.deleted_at is null
+where o.deleted_at is null and o.is_draft_order is not true`
+
+/** Orders placed in [from, to) (to open-ended when null), in one query. */
+async function loadOrders(db: Db, from: number, to: number | null): Promise<OrderFact[]> {
+  const bindings: unknown[] = [new Date(from)]
+  if (to !== null) bindings.push(new Date(to))
+  bindings.push(MAX_ORDERS)
+  const rows = rowsOf(await db.raw(
+    `${ORDER_COLUMNS} and o.created_at >= ?${to !== null ? " and o.created_at < ?" : ""}
+order by o.created_at limit ?`,
+    bindings as any[]))
   const ops = new Map<string, { source: string | null; workflow_status: string | null }>()
-  if (orders.length) {
-    for (const row of rowsOf(await db.raw(
-      `select order_id, source, workflow_status from order_op
-where deleted_at is null and order_id in (select jsonb_array_elements_text(?::jsonb))`,
-      [JSON.stringify(orders.map((order: any) => String(order.id)))]))) {
-      ops.set(row.order_id, { source: row.source ?? null, workflow_status: row.workflow_status ?? null })
-    }
-  }
-  return orderFacts(orders, ops)
+  for (const row of rows) ops.set(row.id, { source: row.source ?? null, workflow_status: row.workflow_status ?? null })
+  return orderFacts(rows, ops)
+}
+
+/** Which of these orders are cancelled now (canceled_at, or the order manager's status). */
+async function cancelledNow(db: Db, ids: readonly string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set()
+  const rows = rowsOf(await db.raw(
+    `select o.id from "order" o left join order_op op on op.order_id = o.id and op.deleted_at is null
+where o.id in (select jsonb_array_elements_text(?::jsonb)) and (o.canceled_at is not null or op.workflow_status = 'cancelled')`,
+    [JSON.stringify(ids)]))
+  return new Set(rows.map((row) => String(row.id)))
 }
 
 let historyCache: { midnight: number; at: number; orders: Promise<OrderFact[]> } | null = null
 
-/** The 7 Dhaka days before today (pace and yesterday), shared for 5 minutes. */
-function orderHistory(container: any, db: Db, midnight: number, now: number): Promise<OrderFact[]> {
-  if (historyCache && historyCache.midnight === midnight && now - historyCache.at < HISTORY_CACHE_MS) return historyCache.orders
-  const entry = { midnight, at: now, orders: loadOrders(container, db, midnight - 7 * DAY_MS, midnight) }
+/**
+ * The 7 Dhaka days before today (pace and yesterday). Those orders are all
+ * placed, so they are read once per Dhaka day; every 5 minutes only their
+ * cancellations are read again (by id).
+ */
+function orderHistory(db: Db, midnight: number, now: number): Promise<OrderFact[]> {
+  const cached = historyCache
+  if (cached && cached.midnight === midnight && now - cached.at < HISTORY_PATCH_MS) return cached.orders
+  const orders = cached && cached.midnight === midnight
+    ? cached.orders.then(async (facts) => {
+      const cancelled = await cancelledNow(db, facts.map((fact) => fact.id))
+      return facts.map((fact) => ({ ...fact, cancelled: cancelled.has(fact.id) }))
+    })
+    : loadOrders(db, midnight - 7 * DAY_MS, midnight)
+  const entry = { midnight, at: now, orders }
   historyCache = entry
+  // A failed read is not kept: the next poll reads the whole history again.
   entry.orders.catch(() => { if (historyCache === entry) historyCache = null })
   return entry.orders
+}
+
+const sharedReads = new Map<string, { until: number; value: Promise<unknown> }>()
+
+/** One read per key shared for `ttlMs`; a failed read is not kept. */
+function sharedRead<T>(key: string, now: number, ttlMs: number, read: () => Promise<T>): Promise<T> {
+  const cached = sharedReads.get(key)
+  if (cached && now < cached.until) return cached.value as Promise<T>
+  for (const [other, entry] of sharedReads) if (now >= entry.until) sharedReads.delete(other)
+  const entry = { until: now + ttlMs, value: read() as Promise<unknown> }
+  sharedReads.set(key, entry)
+  entry.value.catch(() => { if (sharedReads.get(key) === entry) sharedReads.delete(key) })
+  return entry.value as Promise<T>
 }
 
 async function unknownToday(db: Db, midnight: number, hosts: string[] | null): Promise<number> {
@@ -759,8 +802,8 @@ async function buildLive(container: any, config: TrackingConfig, filter: HostFil
   const todayPeople = await part("today's visitors", { visitors: 0, sessions: 0 }, () => people(db, midnight, now, done, hosts))
   const pastEvents = await part("yesterday's events", emptyTotals(), () => eventTotals(db, yesterday, now - DAY_MS, done, hosts))
   const pastPeople = await part("yesterday's visitors", { visitors: 0, sessions: 0 }, () => people(db, yesterday, now - DAY_MS, done, hosts))
-  const todayOrders = await part("today's orders", null as OrderFact[] | null, () => loadOrders(container, db, midnight, null))
-  const history = await part("the last 7 days of orders", null as OrderFact[] | null, () => orderHistory(container, db, midnight, now))
+  const todayOrders = await part("today's orders", null as OrderFact[] | null, () => loadOrders(db, midnight, null))
+  const history = await part("the last 7 days of orders", null as OrderFact[] | null, () => orderHistory(db, midnight, now))
   const today = todayOrders ? summarizeOrders(todayOrders, midnight, Number.POSITIVE_INFINITY) : NO_ORDERS
   const past = history ? summarizeOrders(history, yesterday, now - DAY_MS) : NO_ORDERS
   const pace = history ? paceProjection(today.net, history, now) : null
@@ -775,8 +818,9 @@ async function buildLive(container: any, config: TrackingConfig, filter: HostFil
     ...recent.map((hit) => hit.handle).filter((handle): handle is string => typeof handle === "string")]
   const titles = await part("product names", new Map<string, string>(), () => productTitles(container, handles))
 
+  // The outbox counts scan tracking_event and the unknown ids a day of hits: both change slowly, so 60 s old is fine.
   const health: LiveHealth = {
-    outbox: await part<LiveHealth["outbox"]>("the outbox", null, () => outboxHealth(container)),
+    outbox: await part<LiveHealth["outbox"]>("the outbox", null, () => outboxHealth(container, { maxAgeMs: HEALTH_CACHE_MS })),
     jobs: await part<LiveHealth["jobs"]>("the jobs", null, () => jobStates(container)),
     rollup_lag_s: lag,
     watermark: watermark?.done_through ?? null,
@@ -784,7 +828,8 @@ async function buildLive(container: any, config: TrackingConfig, filter: HostFil
       async () => ({ builds: await feedMeta(container), last_fetch: await lastFeedFetches(container) })),
     variant_index: await part<LiveHealth["variant_index"]>("the variant index", null,
       () => getState<VariantIndexState>(db, "variant_index")),
-    unknown_content_ids_today: await part<number | null>("unknown content ids", null, () => unknownToday(db, midnight, hosts)),
+    unknown_content_ids_today: await part<number | null>("unknown content ids", null,
+      () => sharedRead(`unknown:${filter.key}:${midnight}`, now, HEALTH_CACHE_MS, () => unknownToday(db, midnight, hosts))),
   }
 
   return {
@@ -830,17 +875,18 @@ async function settingsOrDefaults(container: any): Promise<{ config: TrackingCon
 const liveCache = new Map<string, { at: number; value: Promise<LivePayload> }>()
 
 /**
- * GET /admin/tracking/live. One result per host filter is shared for 10 s,
- * so any number of open Live tabs cost one computation per 10 s. Throws
- * LiveInputError for an unknown `host`.
+ * GET /admin/tracking/live. One result per host filter is shared for
+ * poll_seconds (at least 10 s), so any number of open Live tabs cost one
+ * computation per poll. Throws LiveInputError for an unknown `host`.
  */
 export async function computeLive(container: any, options: { host?: string | null } = {}): Promise<LivePayload> {
   const { config, ok } = await settingsOrDefaults(container)
   const filter = resolveHostFilter(config, options.host)
   if (!filter) throw new LiveInputError("Pick one of the listed hosts, or all hosts.")
   const now = Date.now()
+  const cacheMs = Math.max(LIVE_CACHE_MS, config.dashboard.poll_seconds * 1000)
   const cached = liveCache.get(filter.key)
-  if (cached && now - cached.at < LIVE_CACHE_MS) return cached.value
+  if (cached && now - cached.at < cacheMs) return cached.value
   const entry = {
     at: now,
     value: buildLive(container, config, filter, now).then((payload) => {

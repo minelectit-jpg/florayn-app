@@ -340,6 +340,37 @@ test("a toggle or platform that is off gives a skipped row; a missing token a bl
   assert.deepEqual(rows(noToken).map((row) => [row.status, row.last_error, row.payload.event_id]), [["blocked", "no token", "oc-fl-1234"]])
 })
 
+test("contact hashes follow the order's stored consent: none for an order placed before sharing was turned on", async () => {
+  const shareOn = config({ privacy: { share_contact_hashes: true, consent_text: "We measure ads.", consent_version: 2 } })
+  const CONTACT = ["ct", "em", "fn", "ln", "ph"]
+  const delivered = async (context) => {
+    const h = harness({ config: shareOn, contexts: [contextRow({}, context)] })
+    assert.equal(await h.lib.enqueueStatusEvents(h.container, [move("shipped", "delivered")]), 1)
+    const [row] = plain(rows(h))
+    assert.equal(row.event_name, "Delivered")
+    return row.payload.user_data
+  }
+
+  // Placed while sharing was off: the storefront sent no consent version, so
+  // sharing turned on later adds nothing to its Delivered event.
+  const before = await delivered({ consent_version: null })
+  for (const key of CONTACT) assert.ok(!(key in before), `${key} left out`)
+  assert.deepEqual(Object.keys(before).sort(), ["country", "external_id", "fbp"])
+  const text = JSON.stringify(before)
+  for (const secret of [sha("8801712345678"), sha("buyer@example.com"), "01712345678", "buyer@example.com"]) assert.ok(!text.includes(secret))
+
+  // Placed with the consent line on screen: the contact hashes go.
+  const after = await delivered({ consent_version: 2 })
+  assert.deepEqual(Object.keys(after).sort(), ["country", "ct", "em", "external_id", "fbp", "fn", "ln", "ph"])
+  assert.deepEqual(after.ph, [sha("8801712345678")])
+  assert.deepEqual(after.em, [sha("buyer@example.com")])
+
+  // A stored version never shares on its own: sharing off today means no hashes.
+  const off = harness({ contexts: [contextRow({}, { consent_version: 2 })] })
+  await off.lib.enqueueStatusEvents(off.container, [move("shipped", "delivered")])
+  for (const key of CONTACT) assert.ok(!(key in rows(off)[0].payload.user_data), `${key} left out while sharing is off`)
+})
+
 test("the destination is the context's stored environment, not today's host role", async () => {
   // Stored before live sending was armed: stays on TEST even after arming.
   const armedLater = harness({ config: config({ live_armed: true }), contexts: [contextRow({ host: "florayn.com", env: "test" })] })

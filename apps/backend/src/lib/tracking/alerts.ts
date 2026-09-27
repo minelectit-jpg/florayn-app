@@ -240,7 +240,13 @@ async function checkCheckoutWithoutTracking(ctx: CheckContext): Promise<AlertFin
   return [{ key: "checkout_without_tracking", kind: "checkout_without_tracking", active: missing > 0 || rejected > 0, title, lines }]
 }
 
-/** purchase_not_enqueued (B10): a trusted order context from the last 3 h (older than 10 min) has no Purchase row for an enabled platform. */
+/**
+ * purchase_not_enqueued (B10): a trusted order context from the last 3 h
+ * (older than 10 min) has no Purchase row for an enabled platform. The lookup
+ * names the enabled platforms, the leading column of tracking_event_key
+ * (platform, event_name, event_id), so it is a few index probes instead of a
+ * scan of the whole outbox every minute.
+ */
 async function checkPurchaseNotEnqueued(ctx: CheckContext): Promise<AlertFinding[]> {
   const title = "Purchases not queued for the ad platforms"
   const enabled = PLATFORMS.filter((platform) => ctx.config[platform].enabled)
@@ -253,7 +259,8 @@ where trusted and not staff and not optout and env is not null
   let missing = 0
   if (ids.length) {
     const present = new Set((await rows(ctx.db,
-      `select platform, event_id from tracking_event where event_name = 'Purchase' and event_id in (${marks(ids)})`, ids))
+      `select platform, event_id from tracking_event
+where platform in (${marks(enabled)}) and event_name = 'Purchase' and event_id in (${marks(ids)})`, [...enabled, ...ids]))
       .map((r) => `${r.platform}:${r.event_id}`))
     missing = ids.filter((id) => enabled.some((platform) => !present.has(`${platform}:${id}`))).length
   }

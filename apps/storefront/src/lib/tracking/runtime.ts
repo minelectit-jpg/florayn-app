@@ -9,9 +9,9 @@
  *
  * Invariants 4 and 9: a vendor script is added only on a public path, after
  * `review` and `r` have left the address bar; a vendor is called only after
- * its script loaded, and only while the current pathname is public and equals
- * the queued event's own. Otherwise that browser copy is dropped; the server
- * copy still goes.
+ * its script loaded, and only while the current pathname is public, equals
+ * the queued event's own and carries no `review` or `r`. Otherwise that
+ * browser copy is dropped; the server copy still goes.
  */
 import { prepare, restoreUnsent, takeUnsent, type ReadyItem } from "./batch"
 import type { IdResponse, PurchaseBlock } from "./contract"
@@ -45,10 +45,16 @@ let queued = false
 
 const isPublicNow = () => !isPrivatePath(location.pathname)
 
+/** A review link's token (`order_<id>.<sig>`) or stars in the address bar. */
+function carriesReview(): boolean {
+  const params = new URLSearchParams(location.search)
+  return params.has("review") || params.has("r")
+}
+
 /** Drop the review link's token and stars from the address bar, keeping Next's history state. */
 function scrub(): void {
+  if (!carriesReview()) return
   const url = new URL(location.href)
-  if (!url.searchParams.has("review") && !url.searchParams.has("r")) return
   url.searchParams.delete("review")
   url.searchParams.delete("r")
   history.replaceState(history.state, "", url.pathname + url.search + url.hash)
@@ -109,7 +115,10 @@ export function drain(): void {
     while (vendor.state === 2 && vendor.at < q.length) {
       const index = vendor.at++
       const item = q[index] as ReadyItem // prepared on arrival
-      if (!isPublicNow() || location.pathname !== pathnameOf(item.p)) continue
+      // Each SDK reads location.href when called. A client navigation to a
+      // review link (?review=) wakes this before the page has read and dropped
+      // the token, so the token is not scrubbed here: that browser copy is dropped.
+      if (!isPublicNow() || carriesReview() || location.pathname !== pathnameOf(item.p)) continue
       if (item.n !== "Purchase") call(vendor, item)
       else if (index >= vendor.from) purchase(vendor, item)
     }

@@ -40,6 +40,7 @@ export type TrackingConfig = {
     test_id: string
     live_id: string
     browser: BrowserMode
+    /** SPA page views, automatic events AND automatic advanced matching are OFF in both pixels (gates the pixel). */
     spa_off_confirmed: boolean
   }
   google: {
@@ -448,7 +449,7 @@ export function parseTrackingPatch(
     pattern(tiktok, "test_id", "The TikTok TEST pixel code", TIKTOK_PIXEL, true, "must be 16 to 24 capital letters and digits", (value) => { next.tiktok.test_id = value })
     pattern(tiktok, "live_id", "The TikTok live pixel code", TIKTOK_PIXEL, true, "must be 16 to 24 capital letters and digits", (value) => { next.tiktok.live_id = value })
     mode(tiktok, "browser", "TikTok browser loading", BROWSER_MODES, (value) => { next.tiktok.browser = value })
-    flag(tiktok, "spa_off_confirmed", "SPA page views OFF", (value) => { next.tiktok.spa_off_confirmed = value })
+    flag(tiktok, "spa_off_confirmed", "SPA page views and automatic advanced matching OFF in TikTok", (value) => { next.tiktok.spa_off_confirmed = value })
   }
 
   const google = section("google")

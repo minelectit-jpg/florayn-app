@@ -607,6 +607,8 @@ test("checkout puts trackPurchase first inside result.ok, and the page never han
   const page = read("app/checkout/page.tsx")
   assert.match(page, /trackingEventId=\{cart \? icEventId\(cart\.id\) : null\}/)
   assert.match(page, /consent=\{checkoutConsent\(tracking\)\}/)
+  // The order's consent version follows the same rule as the line on screen.
+  assert.match(read("lib/tracking/server/checkout-context.ts"), /consent_version: checkoutConsent\(config\)\?\.version \?\? null/)
   assert.match(page, /getTrackingConfig\(\)\]\)/, "the config is read in the page's existing Promise.all")
   assert.doesNotMatch(page.replace(/icEventId\(cart\.id\)/, ""), /cart\.id|cart\?\.id/)
 })

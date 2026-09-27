@@ -117,6 +117,18 @@ function hitFlags(event: BrowserEvent, batch: IngestBatch, priced: Priced | null
 }
 
 /**
+ * The dashboard row's key (tracking_hit's primary key is event name + id).
+ * The InitiateCheckout id is one per cart, so the ad platforms count a
+ * reopened checkout once; the hit adds the session to it, so a later session
+ * that opens checkout for the same cart still records its IC and the Live
+ * funnel shows it (a reload in the same session still records one). The
+ * outbox rows keep the plain id.
+ */
+export function hitEventId(event: Pick<BrowserEvent, "n" | "id">, sessionId: string | null): string {
+  return event.n === "InitiateCheckout" && sessionId ? `${event.id}:${sessionId}` : event.id
+}
+
+/**
  * The dashboard row. Product facts come from the index when it knows the
  * first item (the handle is what the rollup and the catalog labels key on),
  * else from what the browser sent. Never the IP or user agent.
@@ -131,12 +143,13 @@ function buildHit(
   const d = event.d ?? {}
   const first = Array.isArray(d.items) ? (d.items as EventItem[])[0] : undefined
   const indexed = first ? variants.get(first.id) : undefined
+  const sessionId = ctx.optout ? null : ctx.sid
   return {
     event_name: event.n,
-    event_id: event.id,
+    event_id: hitEventId(event, sessionId),
     origin: "b",
     visitor_id: ctx.optout ? null : ctx.vid,
-    session_id: ctx.optout ? null : ctx.sid,
+    session_id: sessionId,
     source: ctx.src,
     campaign: ctx.camp,
     device_class: ctx.device,
@@ -296,7 +309,8 @@ export function envelopeVariantIds(envelope: IngestEnvelope): string[] {
  * Records one envelope: hits, outbox rows and counters (buildRows plus the
  * storefront's `sf.*` stats, which arrive even when there are no batches) in
  * ONE transaction with a 5 s statement timeout. Resending the same envelope
- * adds no rows: hits and outbox rows are keyed by event id. After the commit
+ * adds no rows: hits and outbox rows are keyed by event id (an
+ * InitiateCheckout hit by its id and session, hitEventId). After the commit
  * the outbox flush is scheduled (never awaited) and stale jobs are kicked.
  * Returns how many events were accepted.
  */

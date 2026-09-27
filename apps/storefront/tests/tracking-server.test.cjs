@@ -771,7 +771,7 @@ test("checkoutTrackingHeaders builds the 4.4 context from headers() and cookies(
     v: 1, host: "new.florayn.com", page_url: "https://new.florayn.com/checkout/", edge: true, ip: "2001:db8::7",
     ua: EDGE_HEADERS["user-agent"], vid: SHOPPER._fl_vid, sid: SHOPPER._fl_sid, src: "meta_paid", camp: "sept-sale",
     fbp: SHOPPER._fbp, fbc: SHOPPER._fbc, ttp: "ttp-1", ttclid: "E.C.P.abc", gclid: null, gbraid: null, wbraid: "1BBBB",
-    country: "BD", device: "mobile", audience: "men", new: true, staff: false, optout: false, consent_version: 4,
+    country: "BD", device: "mobile", audience: "men", new: true, staff: false, optout: false, consent_version: null,
   })
   const backend = loadBackendContract()
   assert.deepEqual(plain(backend.parseCheckoutContext(context)), context, "the backend parser keeps every value")
@@ -779,6 +779,19 @@ test("checkoutTrackingHeaders builds the 4.4 context from headers() and cookies(
   const source = fs.readFileSync(path.join(serverDir, "checkout-context.ts"), "utf8")
   assert.doesNotMatch(source, /^["']use server["']/m, "not a Server Action file")
   assert.deepEqual([...source.matchAll(/from "(next\/[^"]+)"/g)].map((match) => match[1]), ["next/headers"])
+})
+
+test("the checkout context carries a consent version only when the consent line is shown", async () => {
+  const version = async (privacy) => {
+    const { module } = loadCheckout({ headers: EDGE_HEADERS, cookies: SHOPPER, config: { privacy } })
+    return decode((await module.checkoutTrackingHeaders())["x-florayn-tracking"]).consent_version
+  }
+  // Sharing on with a sentence: the line renders under Place order, so its version goes.
+  assert.equal(await version({ share: true, consent_version: 4, consent_text: "We send hashed contact details." }), 4)
+  // No line on screen: sharing off, or on without a sentence. The backend then never hashes this order's contact details.
+  assert.equal(await version({ share: false, consent_version: 4, consent_text: "We send hashed contact details." }), null)
+  assert.equal(await version({ share: true, consent_version: 4, consent_text: "   " }), null)
+  assert.equal(await version(undefined), null, "the all-off defaults")
 })
 
 test("staff, opted-out and edge-less checkouts keep their flags", async () => {

@@ -180,7 +180,7 @@ const VISITOR = { _fl_vid: VID, _fl_sid: SID, _fl_src: SRC }
 
 // ---------------------------------------------------------------- shape
 
-test("every route is force-dynamic, no middleware is added and next.config.ts is untouched by design", () => {
+test("every route is force-dynamic and no middleware is added (next.config.ts only adds the private pages' Referrer-Policy, see private-referrer.test.cjs)", () => {
   const s = scenario()
   assert.equal(s.id.dynamic, "force-dynamic")
   assert.equal(s.e.dynamic, "force-dynamic")
@@ -547,6 +547,34 @@ test("rate limits drop above the per-visitor budget (burst 60, then 120 a minute
   assert.equal(other.status, 204)
   await s.runAfter()
   assert.equal(s.forwarded.flatMap((call) => call.events).length, passed + 1, "another visitor has its own budget")
+})
+
+test("a fresh _fl_vid per batch from addresses rotating inside one IPv6 /64 gets one address's budget", async () => {
+  const s = scenario()
+  const count = () => s.forwarded.flatMap((call) => call.events).length
+  const fresh = () => ({ ...VISITOR, _fl_vid: `v1.1790467200.${crypto.randomBytes(8).toString("hex")}` })
+  const started = Date.now()
+  for (let i = 0; i < 60; i += 1) {
+    const res = await s.e.POST(request("/api/t/e/", {
+      cookies: fresh(),
+      headers: { "cf-connecting-ip": `2001:db8:1:2:${i.toString(16)}:${crypto.randomBytes(2).toString("hex")}::1` },
+      body: batch(Array.from({ length: 25 }, () => pageView())),
+    }))
+    assert.equal(res.status, 204)
+  }
+  await s.runAfter()
+  // The /64's burst is 1,200 events, plus 20 a second of refill while the loop ran (1,500 were offered).
+  const ceiling = 1200 + Math.ceil(((Date.now() - started) * 1200) / 60_000)
+  const passed = count()
+  assert.ok(passed >= 1200 && passed <= ceiling, `${passed} passed (ceiling ${ceiling})`)
+  assert.equal(s.stats["sf.rate_dropped"], 1500 - passed)
+  assert.ok(s.forwarded.every((call) => call.ctx.ip.startsWith("2001:db8:1:2:")), "the ctx keeps each full address")
+
+  for (const ip of ["2001:db8:1:3::1", "198.51.100.9"]) {
+    await s.e.POST(request("/api/t/e/", { cookies: fresh(), headers: { "cf-connecting-ip": ip }, body: batch(Array.from({ length: 25 }, () => pageView())) }))
+    await s.runAfter()
+  }
+  assert.equal(count(), passed + 50, "the next /64 and an IPv4 shopper still get through")
 })
 
 // ---------------------------------------------------------------- staff and opt-out links

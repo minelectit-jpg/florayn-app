@@ -138,11 +138,33 @@ test("deletions and collection/category membership expire readers; inventory doe
   await Promise.all(work)
   assert.deepEqual(h.rebuilt, [])
   assert.deepEqual(h.invalidated[0], { tags: ["products", "catalog"] })
+  assert.deepEqual(h.stale, [h.container], "collection/category changes mark the ad catalog stale")
   const stock = h.send("inventory-level.updated")
   await h.tick()
   await stock
   assert.deepEqual(h.invalidated[1], { tags: ["stock"] })
   assert.equal(h.rebuilt.length, 0)
+  assert.equal(h.stale.length, 1, "a stock-only batch leaves the ad catalog to its daily rebuild")
+})
+
+test("orders' stock events never mark the ad catalog stale; a batch with a product change still does", async () => {
+  const h = harness()
+  for (const name of ["inventory.reservation-item.created", "inventory.inventory-level.updated", "reservation-item.created", "inventory-item.updated"]) {
+    h.send(name)
+  }
+  await h.tick()
+  assert.deepEqual(h.invalidated, [{ tags: ["stock"] }])
+  assert.deepEqual(h.stale, [])
+
+  let calls = 0
+  const retried = harness({ delivery: async () => ++calls > 1 })
+  retried.send("inventory-level.updated")
+  await retried.tick()
+  assert.deepEqual(retried.stale, [], "the failed stock-only batch did not mark it")
+  retried.send("product-variant.updated", { id: "variant" })
+  await retried.tick()
+  assert.equal(retried.invalidated.length, 2)
+  assert.deepEqual(retried.stale, [retried.container], "the merged retry carries the product change")
 })
 
 test("events arriving during a rebuild form a later batch without concurrent writers", async () => {

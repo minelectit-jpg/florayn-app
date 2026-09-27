@@ -364,6 +364,57 @@ test("a browser copy needs the event's own pathname on a public page at call tim
     "every queued event still goes to /api/t/e/ (the endpoint rejects private paths)")
 })
 
+test("vendors ready, a client navigation to a review link's ?review= address gets no browser copy; the server copy still goes", async () => {
+  const token = "order_01ABC.sig1"
+  const tab = await started("https://new.florayn.com/product/a/?case=signature", cfgWith({ tiktok: { id: IDS.tiktok, load: true } }))
+  await tab.advance(0)
+  await tab.loadMeta()
+  await tab.loadTikTok()
+  // Each SDK reads the address bar when called: note it at every call.
+  const hrefs = []
+  const spy = (target, method) => {
+    const real = target[method]
+    target[method] = (...args) => {
+      hrefs.push(tab.location.href)
+      return real(...args)
+    }
+  }
+  spy(tab.context.fbq, "callMethod")
+  for (const method of ["page", "track", "identify"]) spy(tab.context.ttq, method)
+  const before = { meta: tab.metaCalls.length, tiktok: tab.tiktokCalls.length }
+  assert.deepEqual(before, { meta: 1, tiktok: 1 }, "each had the first PageView")
+
+  // The review list, then one of its products: the stub wakes the runtime
+  // before the page has read the token, and the product page's event follows.
+  tab.visit(`/review/${token}/`)
+  tab.visit(`/product/b/?review=${token}#customer-reviews`)
+  tab.queue.track("ViewContent", { items: [{ id: VARIANT, q: 1, price: 1500 }], value: 1500, currency: "BDT" })
+  await flush()
+  assert.equal(tab.metaCalls.length, before.meta, "no Meta call")
+  assert.equal(tab.tiktokCalls.length, before.tiktok, "no ttq.page() or ttq.track()")
+  assert.deepEqual(hrefs, [])
+  assert.equal(tab.location.search, `?review=${token}`, "the runtime leaves the token for the page to read")
+  assert.equal(tab.log.filter(([kind]) => kind === "replace").length, 0)
+
+  // The page reads the token and drops it: the next event goes, the dropped ones never do.
+  tab.context.history.replaceState(tab.context.history.state, "", "/product/b/#customer-reviews")
+  tab.queue.track("AddToCart", { items: [{ id: VARIANT, q: 1, price: 1500 }], value: 1500, currency: "BDT" })
+  await flush()
+  assert.deepEqual(tab.names(tab.metaCalls.slice(before.meta)), ["track AddToCart"])
+  assert.deepEqual(tab.names(tab.tiktokCalls.slice(before.tiktok)), ["track AddToCart"])
+
+  // The stars alone keep it back too.
+  tab.visit("/product/c/?r=5")
+  await flush()
+  assert.equal(tab.tiktokCalls.length, before.tiktok + 1, "no ttq.page() while ?r= is there")
+  assert.ok(hrefs.length > 0 && hrefs.every((href) => !/[?&](review|r)=/.test(href)), hrefs.join(" "))
+
+  await tab.advance(2000)
+  const sent = tab.fetches.flatMap((call) => call.body.events.map((event) => `${event.n} ${event.p}`))
+  assert.deepEqual(sent, ["PageView /product/a/?case=signature", "PageView /product/b/", "ViewContent /product/b/", "AddToCart /product/b/", "PageView /product/c/"],
+    "every server copy still goes, cut to its safe path")
+})
+
 test("no vendor script is added on a private page; it waits for the next public pathname", async () => {
   const tab = page("https://new.florayn.com/account/")
   tab.fl().cfg = cfgWith({ tiktok: { id: IDS.tiktok, load: true } })

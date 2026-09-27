@@ -22,8 +22,9 @@ import type { Env, TrackingConfig, TrackingSettingsView } from "./settings"
  * Nothing here reads cart or order metadata for tracking (C4): the context
  * comes from tracking_order_context. Names, phone, district and email are read
  * from the saved order only to hash them, and only while
- * `share_contact_hashes` is on (buildMatchKeys). The raw order id stays in the
- * outbox's internal `order_id` column; the platforms only ever see `fl-N`.
+ * `share_contact_hashes` is on AND that order's shopper was shown the consent
+ * line (sharesContact). The raw order id stays in the outbox's internal
+ * `order_id` column; the platforms only ever see `fl-N`.
  *
  * Raw SQL through the PG_CONNECTION knex is the documented exception of
  * lib/tracking/db.ts (tracking tables and the order_op lookups need
@@ -254,6 +255,17 @@ function sendable(ctx: OrderContextRow): boolean {
 }
 
 /**
+ * Whether this order's contact details may be hashed (C7): sharing is on now
+ * AND its shopper was shown the consent line at checkout. The storefront sends
+ * `consent_version` only when the line rendered, so an order placed while
+ * sharing was off keeps its status events and reconciled Purchase free of
+ * contact hashes after sharing is turned on.
+ */
+function sharesContact(config: TrackingConfig, ctx: OrderContextRow): boolean {
+  return config.privacy.share_contact_hashes === true && ctx.context.consent_version != null
+}
+
+/**
  * The dataset id or pixel code for the context's stored environment, or ""
  * when none is configured. Deliberately not gated on `enabled`: a platform
  * that is off still gets its destination on the skipped row, so "Send
@@ -339,7 +351,7 @@ export function buildOrderEventRows(input: OrderEventRowsInput): OutboxInsert[] 
   const time = kind === "Purchase" ? order.created_at : input.at
   if (!eventId || !purchaseEventId(order.display_id) || !isValidDate(time)) return []
   const config = settings.config
-  const event = eventInput(kind, eventId, time, order, ctx, config.privacy.share_contact_hashes === true)
+  const event = eventInput(kind, eventId, time, order, ctx, sharesContact(config, ctx))
   const rows: OutboxInsert[] = []
   for (const platform of PLATFORMS_FOR[kind] ?? []) {
     const base = { platform, env, event_name: kind, event_id: eventId, event_time: time, source, order_id: order.id }
@@ -367,8 +379,9 @@ export function buildOrderEventRows(input: OrderEventRowsInput): OutboxInsert[] 
  * drop the whole block). A platform is true only for a trusted, non-staff,
  * non-opted-out context whose platform has an id for its environment (Google:
  * live only). Match data exists only for a platform that is true, and follows
- * the share rule: `{ external_id }` only while sharing is off. Null when the
- * display id is unusable.
+ * the share rule: `{ external_id }` only while sharing is off or when this
+ * order's shopper was not shown the consent line. Null when the display id is
+ * unusable.
  */
 export function buildPurchaseBlock(order: OrderForEvents, ctx: OrderContextRow, settings: TrackingSettingsView): PurchaseBlock | null {
   const eventId = purchaseEventId(order.display_id)
@@ -382,7 +395,7 @@ export function buildPurchaseBlock(order: OrderForEvents, ctx: OrderContextRow, 
     tiktok: ok && config.tiktok.enabled && destinationId(config, env, "tiktok") !== "",
     google: ok && env === "live" && google.enabled && Boolean(google.conversion_id && google.purchase_label),
   }
-  const keys = buildMatchKeys({ order, visitorId: ctx.context.vid, share: config.privacy.share_contact_hashes === true })
+  const keys = buildMatchKeys({ order, visitorId: ctx.context.vid, share: sharesContact(config, ctx) })
   const match: PurchaseBlock["match"] = {}
   if (platforms.meta && Object.keys(keys.metaPixel).length) match.meta = keys.metaPixel
   if (platforms.tiktok && Object.keys(keys.tiktokPixel).length) match.tiktok = keys.tiktokPixel

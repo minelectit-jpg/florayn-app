@@ -13,8 +13,9 @@
  * loader script carries the switch as a server-side pixel setting
  * (HistoryObserver, dynamic_web_pageview), not as a ttq.load() option. No
  * documented load option was found, so none is passed: the owner turns SPA
- * page views and automatic events off in both pixels, and the id answer loads
- * TikTok only once `spa_off_confirmed` is ticked (3.4).
+ * page views, automatic events and automatic advanced matching off in both
+ * pixels, and the id answer loads TikTok only once `spa_off_confirmed` is
+ * ticked (3.4).
  */
 import type { ReadyItem } from "../batch"
 import type { IdResponse, PurchaseBlock } from "../contract"

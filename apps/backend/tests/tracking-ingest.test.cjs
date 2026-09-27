@@ -493,13 +493,47 @@ test("staff traffic is recorded as internal and never reaches an ad platform", (
 })
 
 test("opted-out traffic, if it ever arrives, keeps no ids and sends nothing", () => {
-  const rows = build([pageView(), viewContent()], { ctx: { optout: true } })
-  assert.equal(rows.hits.length, 2)
+  const ic = initiateCheckout()
+  const rows = build([pageView(), viewContent(), ic], { ctx: { optout: true } })
+  assert.equal(rows.hits.length, 3)
   for (const hit of rows.hits) {
     assert.equal(hit.visitor_id, null)
     assert.equal(hit.session_id, null)
   }
+  assert.equal(rows.hits[2].event_id, ic.id, "no session to key an InitiateCheckout hit by")
   assert.deepEqual(rows.outbox, [])
+})
+
+test("an InitiateCheckout hit is keyed by its cart id and the session; its outbox rows keep the cart id", () => {
+  const ic = initiateCheckout()
+  const vc = viewContent()
+  const rows = build([ic, vc])
+  assert.deepEqual(rows.hits.map((hit) => hit.event_id), [`${ic.id}:${CTX.sid}`, vc.id], "other events keep their own id")
+  assert.deepEqual(rows.outbox.filter((row) => row.event_name === "InitiateCheckout").map((row) => [row.platform, row.event_id, row.payload.event_id]),
+    [["meta", ic.id, ic.id], ["tiktok", ic.id, ic.id]])
+  assert.equal(ingestLib.hitEventId({ n: "InitiateCheckout", id: ic.id }, null), ic.id)
+  assert.equal(ingestLib.hitEventId({ n: "AddToCart", id: vc.id }, "s9"), vc.id)
+})
+
+test("the same cart's checkout in a later session records a second hit but queues nothing new for the ad platforms", async () => {
+  const { pg, container } = setup()
+  env.TRACKING_INGEST_SECRET = SECRET
+  const ic = initiateCheckout()
+  assert.deepEqual((await post(container, envelope([ic]))).body, { accepted: 1 })
+  assert.deepEqual((await post(container, envelope([plain(ic)]))).body, { accepted: 1 })
+  assert.equal(pg.hits.size, 1, "a reload in the same session is still one checkout")
+  assert.equal(pg.rows().length, 2)
+  calls.order.length = 0
+
+  const later = "s2.1790470800.0a1b2c3e"
+  assert.deepEqual((await post(container, envelope([plain(ic)], { sid: later }))).body, { accepted: 1 })
+  assert.deepEqual([...pg.hits.values()].map((hit) => [hit.event_id, hit.session_id]), [
+    [`${ic.id}:${CTX.sid}`, CTX.sid],
+    [`${ic.id}:${later}`, later],
+  ], "each session's funnel gets its InitiateCheckout")
+  assert.deepEqual(pg.rows().map((row) => `${row.platform}:${row.event_id}`), [`meta:${ic.id}`, `tiktok:${ic.id}`],
+    "Meta and TikTok still get the cart's checkout once")
+  assert.deepEqual(calls.order, ["commit", "kickStaleJobs"], "nothing new to send")
 })
 
 // ---------------------------------------------------------------- outbox rows

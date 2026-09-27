@@ -40,20 +40,27 @@ export type ImageState = {
   converted: number
   failed: number
   last_error: string | null
+  /** The run stopped at its time budget (imageRunBudget); the next run carries on. */
+  budget_hit?: boolean
 }
 export type ConvertResult = ImageState & { skipped?: "running" | "not_needed" }
 
 type SharpInstance = {
   resize(width: number, height: number, options: { fit: "inside"; withoutEnlargement?: boolean }): SharpInstance
-  jpeg(options: { quality: number; mozjpeg: boolean }): SharpInstance
+  jpeg(options: { quality: number }): SharpInstance
   toBuffer(): Promise<Buffer>
 }
-type SharpFactory = (input: Buffer) => SharpInstance
+type SharpFactory = ((input: Buffer) => SharpInstance) & { concurrency?: (threads: number) => number }
+
+/** How long one catalog-job run may spend: inside sharp (about one core's CPU time, see loadSharp) and in all. */
+export type ImageRunBudget = { convertMs: number; runMs: number }
 
 export const FEED_JPG_PREFIX = "feed-jpg"
 const IMAGES_PER_ITEM = 3
 const DAY_LIMIT = 150
 const NIGHT_LIMIT = 600
+const DAY_BUDGET: ImageRunBudget = { convertMs: 20_000, runMs: 120_000 }
+const NIGHT_BUDGET: ImageRunBudget = { convertMs: 120_000, runMs: 600_000 }
 const DHAKA_OFFSET_MS = 6 * 3600_000
 const RETRY_FAILED_AFTER_MS = 24 * 3600_000
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024
@@ -62,10 +69,23 @@ const MAX_ERROR = 300
 const IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 const CF_TRANSFORM = "cdn-cgi/image/format=jpeg,width=1200,quality=82"
 
+function isNight(now: Date): boolean {
+  const hour = new Date(now.getTime() + DHAKA_OFFSET_MS).getUTCHours()
+  return hour >= 1 && hour < 7
+}
+
 /** Images per catalog-job run: 150 by day, 600 between 01:00 and 07:00 Dhaka. */
 export function imageBatchLimit(now: Date = new Date(Date.now())): number {
-  const hour = new Date(now.getTime() + DHAKA_OFFSET_MS).getUTCHours()
-  return hour >= 1 && hour < 7 ? NIGHT_LIMIT : DAY_LIMIT
+  return isNight(now) ? NIGHT_LIMIT : DAY_LIMIT
+}
+
+/**
+ * What one run may spend, whichever of the count and the budget comes first:
+ * by day 20 s inside sharp and 2 minutes in all (the conversions share the
+ * two vCPUs with checkout), between 01:00 and 07:00 Dhaka 2 and 10 minutes.
+ */
+export function imageRunBudget(now: Date = new Date(Date.now())): ImageRunBudget {
+  return isNight(now) ? NIGHT_BUDGET : DAY_BUDGET
 }
 
 function sha1(value: string): string {
@@ -146,7 +166,11 @@ export async function readyImageSources(container: any): Promise<Set<string>> {
 
 let sharpLoad: Promise<SharpFactory | null> | null = null
 
-/** sharp, or null when it is not installed or its binary does not load. Cached per process. */
+/**
+ * sharp, or null when it is not installed or its binary does not load. Cached
+ * per process. libvips is held to one thread, so a conversion takes at most
+ * one of the server's two vCPUs, never both.
+ */
 export function loadSharp(): Promise<SharpFactory | null> {
   sharpLoad ??= (async () => {
     try {
@@ -155,7 +179,9 @@ export function loadSharp(): Promise<SharpFactory | null> {
       const name = "sharp"
       const loaded: any = await import(name)
       const factory = loaded?.default ?? loaded
-      return typeof factory === "function" ? factory as SharpFactory : null
+      if (typeof factory !== "function") return null
+      ;(factory as SharpFactory).concurrency?.(1)
+      return factory as SharpFactory
     } catch {
       return null
     }
@@ -255,15 +281,21 @@ export function isConverting(): boolean {
 }
 
 /**
- * Converts up to `limit` pending feed images to JPEG copies, `concurrency`
- * at a time (2 by default): resize to fit 1200 x 1200, JPEG quality 82 with
- * mozjpeg, upload to feed-jpg/<sha1(source_url)>.jpg (immutable), record in
- * catalog_image. A failed image is recorded with its error and retried after
- * 24 h. Without sharp it records `sharp_missing` in tracking_state
- * `catalog:images` and returns without throwing. One run per process at a time.
+ * Converts up to `limit` pending feed images to JPEG copies, one at a time
+ * and within the run's budget (imageRunBudget, or `budget`): resize to fit
+ * 1200 x 1200, plain JPEG quality 82 (mozjpeg costs about 40% more CPU for
+ * files nobody downloads twice), upload to feed-jpg/<sha1(source_url)>.jpg
+ * (immutable), record in catalog_image. A failed image is recorded with its
+ * error and retried after 24 h. Without sharp it records `sharp_missing` in
+ * tracking_state `catalog:images` and returns without throwing. One run per
+ * process at a time. `concurrency` is accepted from older callers and
+ * ignored: the conversions share the two vCPUs with checkout.
  */
-export async function convertPending(container: any, options: { limit: number; concurrency?: number }): Promise<ConvertResult> {
-  const at = new Date(Date.now()).toISOString()
+export async function convertPending(container: any,
+  options: { limit: number; concurrency?: number; budget?: ImageRunBudget }): Promise<ConvertResult> {
+  const started = Date.now()
+  const at = new Date(started).toISOString()
+  const budget = options.budget ?? imageRunBudget(new Date(started))
   const empty: ImageState = { at, sharp_missing: false, needed: 0, ready: 0, pending: 0, converted: 0, failed: 0, last_error: null }
   if (converting) return { ...empty, skipped: "running" }
   converting = true
@@ -310,40 +342,42 @@ export async function convertPending(container: any, options: { limit: number; c
       }
     }
 
-    let next = 0
-    const worker = async () => {
-      while (next < batch.length) {
-        const sourceUrl = batch[next++]
-        let problem: string | null = null
-        try {
-          const source = await download(sourceUrl, catalog)
-          if ("error" in source) {
-            problem = source.error
-          } else {
-            const jpg = await sharp(source.body).resize(1200, 1200, { fit: "inside" }).jpeg({ quality: 82, mozjpeg: true }).toBuffer()
-            const key = jpgKey(sourceUrl)
-            await r2Client().send(new PutObjectCommand({
-              Bucket: r2Bucket(),
-              Key: key,
-              Body: jpg,
-              ContentType: "image/jpeg",
-              CacheControl: IMAGE_CACHE_CONTROL,
-            }))
-            await recordImage(container, sourceUrl, `${catalog.image_base_url}/${key}`, jpg.length, null)
-            state.converted += 1
-          }
-        } catch (error) {
-          problem = errorText(error)
+    // One image at a time, until the batch or the run's budget is used up.
+    let convertMs = 0
+    for (const sourceUrl of batch) {
+      if (convertMs >= budget.convertMs || Date.now() - started >= budget.runMs) {
+        state.budget_hit = true
+        break
+      }
+      let problem: string | null = null
+      try {
+        const source = await download(sourceUrl, catalog)
+        if ("error" in source) {
+          problem = source.error
+        } else {
+          const convertStart = Date.now()
+          const jpg = await sharp(source.body).resize(1200, 1200, { fit: "inside" }).jpeg({ quality: 82 }).toBuffer()
+            .finally(() => { convertMs += Date.now() - convertStart })
+          const key = jpgKey(sourceUrl)
+          await r2Client().send(new PutObjectCommand({
+            Bucket: r2Bucket(),
+            Key: key,
+            Body: jpg,
+            ContentType: "image/jpeg",
+            CacheControl: IMAGE_CACHE_CONTROL,
+          }))
+          await recordImage(container, sourceUrl, `${catalog.image_base_url}/${key}`, jpg.length, null)
+          state.converted += 1
         }
-        if (problem !== null) {
-          state.failed += 1
-          state.last_error = problem.slice(0, MAX_ERROR)
-          await recordImage(container, sourceUrl, null, null, state.last_error).catch(() => undefined)
-        }
+      } catch (error) {
+        problem = errorText(error)
+      }
+      if (problem !== null) {
+        state.failed += 1
+        state.last_error = problem.slice(0, MAX_ERROR)
+        await recordImage(container, sourceUrl, null, null, state.last_error).catch(() => undefined)
       }
     }
-    const workers = Math.max(1, Math.min(4, Math.floor(options.concurrency ?? 2)))
-    await Promise.all(Array.from({ length: workers }, worker))
 
     state.ready += state.converted
     state.pending = Math.max(0, state.pending - state.converted - state.failed)

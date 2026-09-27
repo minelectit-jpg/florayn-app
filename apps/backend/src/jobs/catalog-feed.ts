@@ -36,7 +36,7 @@ export async function runCatalogJob(container: any): Promise<void> {
 
   let converted = 0
   if (config.catalog.image_mode === "jpeg_copies") {
-    const images = await convertPending(container, { limit: imageBatchLimit(now), concurrency: 2 })
+    const images = await convertPending(container, { limit: imageBatchLimit(now) })
     converted = images.converted
   }
 

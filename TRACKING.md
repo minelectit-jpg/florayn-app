@@ -364,7 +364,9 @@ create index if not exists tracking_order_context_created on tracking_order_cont
 ip, ua, fbp, fbc, ttp, ttclid, gclid, gbraid, wbraid, country, device, audience,
 page_url, consent_version, new`). No names, phones or emails. Hashes are
 computed from the order at send time. There is no `emitted` column: once-only
-sending is the outbox unique key (B2).
+sending is the outbox unique key (B2). As built (19.10): `consent_version` is
+null when the shopper was shown no consent line (4.4), and an order's contact
+details are hashed only when it is set (6.2).
 
 ### 2.4 Dashboard tables
 
@@ -408,6 +410,13 @@ create table if not exists tracking_counter (
   hour timestamptz not null, key text not null, n bigint not null default 0,
   primary key (hour, key));
 ```
+
+As built (19.10): an InitiateCheckout hit's `event_id` is `<ic id>:<session
+id>` (`ingest.hitEventId`), or the plain id without a session (opt-out). The
+outbox rows and the Meta/TikTok payloads keep the plain per-cart `ic-` id, so
+the platforms still dedup a reopened checkout, while a later session that
+reopens it records its own IC hit (session flag 4). A reload in the same
+session still records one.
 
 `tracking_state` keys:
 - `job:outbox`, `job:rollup`, `job:reconcile`, `job:catalog` hold
@@ -574,7 +583,7 @@ Implemented identically in the backend (`hostRole`, `destinationFor` in
 
 | Route (file) | Owner | Contents |
 |---|---|---|
-| Tracking `src/admin/routes/tracking/page.tsx` (sidebar, `defineRouteConfig({ label: "Tracking", icon })`) | WP01 | Host banner ("new.florayn.com -> TEST", "florayn.com -> LIVE, armed/disarmed"); "Allow live sending" (`live_armed`) with a confirm dialog; test/live host lists. Meta: enable, test dataset id, test token, test event code, live dataset id, live token, API version, browser loading, two AAM checkboxes ("Automatic Advanced Matching is OFF on the TEST dataset" / "... on the live dataset") with the warning "Turn it OFF in Events Manager before ticking; the browser pixel stays off for that dataset until you do", COD events. TikTok: enable, ids, tokens, browser loading, "SPA page views and automatic events are OFF in both pixels" checkbox. Google: enable, conversion id, purchase label, loading (note: "only on live hosts"). Privacy: consent text with a "Use suggested wording" button (Appendix B text), "Share hashed contact details" switch (disabled with a link to Admin > Privacy until the page is published and text is set). Alerts: email, active hours, no-purchase window, repeat hours, "Send test alert" (POST `/admin/tracking/test-alert`, friendly message on 404). Dashboard: target, poll seconds. Links to Health, Catalog, Live. `email_configured` warning. |
+| Tracking `src/admin/routes/tracking/page.tsx` (sidebar, `defineRouteConfig({ label: "Tracking", icon })`) | WP01 | Host banner ("new.florayn.com -> TEST", "florayn.com -> LIVE, armed/disarmed"); "Allow live sending" (`live_armed`) with a confirm dialog; test/live host lists. Meta: enable, test dataset id, test token, test event code, live dataset id, live token, API version, browser loading, two AAM checkboxes ("Automatic Advanced Matching is OFF on the TEST dataset" / "... on the live dataset") with the warning "Turn it OFF in Events Manager before ticking; the browser pixel stays off for that dataset until you do", COD events. TikTok: enable, ids, tokens, browser loading, "SPA page views and automatic events are OFF in both pixels" checkbox (as built, 19.10: "SPA page views, automatic events and automatic advanced matching are OFF in both pixels"; same `spa_off_confirmed` key, wider meaning). Google: enable, conversion id, purchase label, loading (note: "only on live hosts"). Privacy: consent text with a "Use suggested wording" button (Appendix B text), "Share hashed contact details" switch (disabled with a link to Admin > Privacy until the page is published and text is set). Alerts: email, active hours, no-purchase window, repeat hours, "Send test alert" (POST `/admin/tracking/test-alert`, friendly message on 404). Dashboard: target, poll seconds. Links to Health, Catalog, Live. `email_configured` warning. |
 | Tracking > Health `src/admin/routes/tracking/health/page.tsx` (no config export) | WP03 | Per platform/env: pending, retry, blocked, failed, expired, skipped, sent (24 h); last success; last error (class + fbtrace_id/request_id); job states; counters (24 h sums of `tracking_counter`); variant index state; "Retry blocked/failed" and "Send skipped from the last 6 days" buttons; "Send test event"; "Send test alert". Polls every 30 s while visible. |
 | Tracking > Catalog `src/admin/routes/tracking/catalog/page.tsx` (no config export) | WP08 | Enable, base URL, image base URL, image mode, guard %, include/exclude case types (saved through `POST /admin/tracking/settings`); feed URLs with copy buttons; last build (items, warnings, status); last Meta/TikTok fetch; held build with "Publish anyway"; "Rebuild now"; "Convert images" with progress and the sharp status; "Rotate token". |
 | Live `src/admin/routes/live/page.tsx` (sidebar, `label: "Live"`) | WP07 | Section 9, plus "Exclude this browser" staff links. |
@@ -739,8 +748,8 @@ export type PurchaseBlock = {
 `trailingSlash: true` 308-redirects slashless paths: ALWAYS call with the slash
 (`/api/t/id/`, `/api/t/e/`), including `sendBeacon`. Every handler exports
 `dynamic = "force-dynamic"`, answers `Cache-Control: private, no-store`, and
-never runs on document requests. There is no `middleware.ts` and
-`next.config.ts` is not touched.
+never runs on document requests. There is no `middleware.ts`, and
+`next.config.ts` only adds the private pages' `Referrer-Policy` header (19.10).
 
 Request reading (`lib/tracking/server/request-context.ts`, `readRequest(req)`):
 - `host` = `normHost(Host header)`. Never `X-Forwarded-Host`; never
@@ -780,6 +789,10 @@ Request reading (`lib/tracking/server/request-context.ts`, `readRequest(req)`):
 2. Rate limit (`rate-limit.ts`, in-memory token buckets, LRU capped at 50k keys):
    per visitor id 120 events/min with burst 60, and per trusted IP 1,200
    events/min. Over the limit: dropped, counter `sf.rate_dropped` (I14).
+   As built (19.10): the IP bucket is per IP source, `ipSource()`: an IPv4
+   address, an IPv6 address's /64 (one phone or home can use any address in
+   it), an IPv4-mapped IPv6 address as its IPv4 address. The ingest `ctx.ip`
+   keeps the full address.
 3. At most 25 events; each validated with `validateEvent`; invalid ones dropped
    individually (counter `sf.invalid`).
 4. Clock fix (I1): `age = sent_at - t`; drop if `age < -60_000` or
@@ -845,6 +858,12 @@ vendor cookies (`on: true`, every `load` false). `_fl_vid` is never refreshed
 usable one. Opt-out also expires `_fbp`/`_fbc` under the parent domain, which
 at cutover clears the WordPress pixel's cookies in that browser. The staff
 and opt-out pages send `Referrer-Policy: no-referrer` and `noindex`.
+`next.config.ts` `headers()` sends `Referrer-Policy: no-referrer` for
+`/order/:path*`, `/review/:path*` and `/account/:path*` (the bare, slash and
+nested forms, no other route; `app/men` has no private route, and
+`tests/private-referrer.test.cjs` fails if one appears without the header).
+`/review/[token]` also sets metadata `referrer: "no-referrer"`, like
+`/order/[id]`, for a soft navigation into it (19.10).
 
 ### 4.3 Storefront to backend ingest (WP11 sends, WP04 receives)
 
@@ -872,6 +891,14 @@ and opt-out pages send `Referrer-Policy: no-referrer` and `noindex`.
   events, groups by `(host, ctx)`, splits so each request has at most 200 events
   and 256 KB; fetch keep-alive, 3 s timeout, one retry; never throws. Global cap
   3,000 events per 10 s window; excess dropped (counter `sf.cap_dropped`).
+  As built (19.10): the cap is shared fairly per IP source. When the window
+  that just ended was offered more than 2,700 events (cap less
+  `FAIR_SHARE.reserveEvents` 300), each source may forward at most its max-min
+  (water-filling) share of 2,700 in the next window, never under 25
+  (`minEvents`, one batch). No share after a gap of 20 s or more; the first
+  window of a flood is still first come. Sources past 10,000 in a window
+  (`maxSources`) share one allowance. Share and cap drops both count as
+  `sf.cap_dropped`.
   Accumulated counters ride in `stats`; when counters are non-zero and nothing
   was forwarded for 60 s, it sends a stats-only envelope (`batches: []`).
   Optout traffic is never forwarded; staff traffic is forwarded with
@@ -904,11 +931,17 @@ Storefront (`lib/tracking/server/checkout-context.ts`, WP11):
 `next/headers` (never Server Action arguments) and returns the two headers, or
 null only when `TRACKING_INGEST_SECRET` is unset. Staff, optout and edge-less
 requests still send a context with their flags (the backend decides).
+As built (19.10): `consent_version` is the version of the consent line shown
+under Place order (`checkoutConsent(config)?.version`), or null when no line
+rendered (share OFF, or ON with a blank sentence).
 
 Backend (`lib/tracking/checkout-context.ts`, WP05): `decodeTrackingHeader(headers)`
 returns `{ ctx: CheckoutTrackingContext | null, rejected: boolean }`; it never
 reads `req.body` or cart metadata and never throws. `rejected` (header present,
-key wrong) bumps `checkout.header_rejected`.
+key wrong) bumps `checkout.header_rejected`. As built (19.10): only once the
+order was placed (status 200 with an order id), so a bare POST with a forged
+header cannot raise the alert; `checkout.untrusted` is still counted on every
+request with a verified context.
 
 Response: the existing body, plus `tracking: PurchaseBlock` (4.1) only when the
 order was placed (status 200 with `order.id`) and a context was stored for it.
@@ -1107,7 +1140,11 @@ the marker constant `RUNTIME_VERSION = "fl-runtime-v1"`, sent as `rv` in every
 the cursor on, the vendor call happens only if, at that moment,
 `!isPrivatePath(location.pathname)` and `location.pathname` equals the item's
 pathname; otherwise that vendor's copy is dropped (the server copy still goes).
-Then the cursor advances.
+Then the cursor advances. As built (19.10): also only while the address bar
+carries no `review` or `r` (`carriesReview()`). A client navigation to a
+`?review=` link wakes `drain()` before the product page has read and dropped
+the token, so those browser copies are dropped; `drain()` never scrubs
+(scrubbing stays in `start()` and the injection).
 - Meta: `PageView` with `d.first` gives `fbq("track", "PageView", {}, { eventID })`;
   route-change PageViews get no Meta browser copy. VC/ATC/IC give
   `fbq("track", name, customData, { eventID })`. Purchase (only if
@@ -1246,7 +1283,8 @@ Server copy fields:
   turns off automatic SPA page views, pass it and record in a code comment what
   was verified and where. The owner also switches off SPA page views and
   automatic events in both pixels (owner step C), which the `spa_off_confirmed`
-  gate requires.
+  gate requires. As built (19.10): and Automatic advanced matching, which
+  reads the checkout's phone and email; the same checkbox confirms it.
 - **Google** (`pixels/google.ts`): `dataLayer`/`gtag` stub; when `!cfg.share`,
   `gtag("consent", "default", { ad_user_data: "denied" })` first; then
   `gtag("js", new Date())` and `gtag("config", id, { send_page_view: false })`,
@@ -1354,6 +1392,14 @@ from `shipping_address.province`, falling back to `metadata.district`.
 `match-keys.ts`: `buildMatchKeys({ order, visitorId, share })` returns
 `{ metaCapi, metaPixel, tiktokApi, tiktokPixel, google }`; empty fields are
 omitted; share OFF keeps only external_id (and Meta country).
+
+As built (19.10): `share` is decided per order (`order-events.ts`
+`sharesContact`): `privacy.share_contact_hashes === true` AND the stored
+`tracking_order_context.context.consent_version != null`, i.e. that shopper
+was shown the consent line. It covers the Purchase server rows, the COD
+status rows, reconcile and the browser Purchase block's match data (Meta and
+TikTok pixel keys, Google `user_data`). Turning sharing ON never adds hashes
+to an order placed before it.
 
 `event-ids.ts`: `purchaseEventId(displayId)`, `statusEventId(kind, displayId)`,
 `isBrowserEventId(name, id)`.
@@ -1644,7 +1690,9 @@ replaced, not migrated.
 - Rebuilt by the catalog job when the index is empty, when `catalog:stale` is
   newer than the last index build, or once every 24 h, whether or not the
   catalog is enabled. Until the first build every VC/ATC/IC counts as unknown and
-  sends nothing to ad platforms (fail safe).
+  sends nothing to ad platforms (fail safe). As built (19.10): stock-only event
+  batches no longer set `catalog:stale` (8.5), so the index follows a pure
+  stock change at its 24 h rebuild, or sooner with any product change.
 
 ### 8.2 Items and columns
 
@@ -1692,6 +1740,14 @@ Meta needs JPEG/PNG; renders are WebP on the rate-limited r2.dev host.
   max-age=31536000, immutable`, recorded in `catalog_image`. `image_link` =
   `catalog.image_base_url` + `/` + key (`https://img.florayn.com/feed-jpg/...`).
   Paced at 150 per 15-min run by day and 600 at night (01:00-07:00 Dhaka).
+  As built (19.10): `sharp.concurrency(1)` is set once per process and
+  `convertPending` converts one image at a time (the `concurrency` option is
+  accepted and ignored; the job and the Catalog route still pass 2). The JPEG
+  is plain `.jpeg({ quality: 82 })`, no mozjpeg. Each run also has a budget,
+  `imageRunBudget(now)`: by day 20 s inside sharp and 120 s wall time, 01:00-07:00
+  Dhaka 120 s and 600 s; whichever of the count and the budget comes first. A
+  run stopped by the budget writes `budget_hit: true` to `catalog:images`, and
+  the next run carries on.
 - `image_mode: "cf_transform"` (needs owner OK to enable Cloudflare Image
   Transformations): `image_link` =
   `https://img.florayn.com/cdn-cgi/image/format=jpeg,width=1200,quality=82/<source key>`;
@@ -1717,7 +1773,11 @@ published answers 404 and is logged with status 404.
 
 - `lib/storefront-events.ts` calls `markCatalogStale(container)` (sets
   `catalog:stale`) after a processed product/variant/option/stock batch: one
-  import and one call, never throwing into the batch.
+  import and one call, never throwing into the batch. As built (19.10): only
+  for a batch with a product, variant, option or collection/category change.
+  Stock-only batches (reservation and inventory-level events, which every order
+  fires) no longer set it; the feed's availability after a pure stock change
+  refreshes at the daily 03:30 Dhaka rebuild.
 - The job rebuilds the feed when stale or at the daily forced rebuild (03:30
   Dhaka), only while `catalog.enabled`. It builds rows, serialises TSV and
   computes a `content_hash` of the rows; an unchanged hash marks the candidate
@@ -1790,6 +1850,14 @@ Definitions:
   excluding drafts and imported orders (`order_op.source`); cancelled =
   `canceled_at` set or op status `cancelled`; revenue excludes cancelled.
   `web_purchases` = Purchase hits without the internal flag.
+  As built (19.10): not `query.graph` with `total` (it hydrated every line,
+  tax line and adjustment and re-totalled on the event loop that serves
+  checkout). One SQL read of `"order"` left join `order_op`, drafts and deleted
+  orders excluded, with the total = `order_summary.totals.current_order_total`
+  of the latest summary version at or below `order.version` (null or not a
+  number gives 0). The 7-day history is read once per Dhaka day; every 5
+  minutes only its cancellations are re-read by id (`canceled_at` or op status
+  `cancelled`, so an undone cancellation shows too).
 - Pace: today's orders divided by the share of the last 7 days' orders placed by
   this time of day. Target = `dashboard.daily_order_target` (300).
 - Product names resolved for the top 10 rows only. Unknown content ids = today's
@@ -1798,7 +1866,10 @@ Definitions:
 
 The page polls every `poll_seconds` only while visible (setInterval +
 `visibilitychange`, the `florayn-import-drawer.tsx` pattern); the server shares
-one result for 10 s. The spark chart is inline SVG, no chart library. The page
+one result for 10 s (as built, 19.10: for `max(10 s, poll_seconds)`, so every
+poll no longer misses it; Live reads the outbox counts through
+`outboxHealth(container, { maxAgeMs: 60_000 })`, and today's unknown content
+ids are cached 60 s per host filter). The spark chart is inline SVG, no chart library. The page
 labels its definitions ("counts JS-running, non-bot visitors; ad-blocked
 visitors appear only through the server Purchase"). 7d/30d tabs read
 `tracking_day_dim` + `tracking_session`, cached 5 min. The page shows the staff
@@ -1824,8 +1895,8 @@ Other packages never email: they write state that `checkAlerts` reads.
 | `token` | a row became `blocked` in the last hour (auth/permission class, or "no token" for an enabled platform) |
 | `payload` | at least 10 `failed` rows in 1 h for a platform |
 | `send_failures` | at least 50 `retry` rows older than 30 min for a platform |
-| `checkout_without_tracking` (B10) | a platform is enabled and, in the last 60 min, a storefront order (`metadata.checkout_quote_version` set, `is_draft_order = false`, no `order_op.source`) older than 5 min has no `tracking_order_context`, or `checkout.header_rejected > 0` |
-| `purchase_not_enqueued` (B10) | a trusted, non-staff, non-optout order context from the last 3 h, older than 10 min, has no Purchase row for an enabled platform |
+| `checkout_without_tracking` (B10) | a platform is enabled and, in the last 60 min, a storefront order (`metadata.checkout_quote_version` set, `is_draft_order = false`, no `order_op.source`) older than 5 min has no `tracking_order_context`, or `checkout.header_rejected > 0` (as built, 19.10: counted only for a placed order) |
+| `purchase_not_enqueued` (B10) | a trusted, non-staff, non-optout order context from the last 3 h, older than 10 min, has no Purchase row for an enabled platform (as built, 19.10: the lookup pins `platform in (<enabled>)`, so it is index-only probes on `tracking_event_key`, not a scan of the outbox every minute) |
 | `edge_missing` | a platform is enabled and in the last hour `sf.untrusted >= 50` or `checkout.untrusted >= 1` (the Cloudflare header rule is missing or the secret differs) |
 | `no_purchase` (I5) | only while `live_armed`; only between `active_from_hour` and `active_to_hour` Dhaka (10-24); zero Purchase hits from live hosts in the last `no_purchase_hours`; and the average for the same window over the last 14 days is at least 4.6 (so zero has under 1% chance) |
 | `sweep_stale` | any job's `last_run_at` older than max(10 min, 3 x its `staleAfterMs`) |
@@ -1914,7 +1985,10 @@ Rules:
   pixels, ONLY while `share_contact_hashes` is ON, which the server allows only
   with a non-empty consent text AND a published Privacy page (C7). Until then
   Purchase carries only external_id, ip, ua, fbp, fbc, country; expect Purchase
-  EMQ below the 8.6 baseline in that state.
+  EMQ below the 8.6 baseline in that state. As built (19.10): per order, only
+  when that shopper was shown the consent line (the stored context carries a
+  `consent_version`), so turning share ON adds nothing to older orders' COD
+  events or reconciled Purchases.
 - Meta Automatic Advanced Matching is OFF on the TEST dataset before the TEST
   pixel loads, and OFF on the live dataset before `live_armed` (decision 10,
   per-environment gate in 3.4).
@@ -1929,7 +2003,12 @@ Rules:
   config, so enhanced conversions stay off.
 - The review token and private URLs never reach vendors (invariant 4).
   `/order/` never appears in `event_source_url`, `dl`, `page.url` or
-  `page_location`.
+  `page_location`. As built (19.10): nor as `document.referrer` (the private
+  pages send `Referrer-Policy: no-referrer`), nor through a vendor call while
+  `review` or `r` is in the address bar.
+- As built (19.10): TikTok's Automatic advanced matching reads the checkout's
+  phone and email fields like Meta's AAM, so the TikTok pixel waits for
+  `spa_off_confirmed`, which now also confirms it is OFF in both pixels.
 
 Doc changes (WP13, done 2026-09-27):
 - CHECKOUT.md gains a "Tracking" section (header contract, the Purchase step
@@ -2247,7 +2326,9 @@ afterwards.
 3. Client-navigate to another product: one server PageView, no browser PageView.
 4. Add to cart (single, pack, quick-add): AddToCart ids, quantities, values
    (server-replaced prices).
-5. Checkout: InitiateCheckout once; reload: same `ic-` id, still one.
+5. Checkout: InitiateCheckout once; reload: same `ic-` id, still one. (As
+   built, 19.10: reopening it in a later session sends the same `ic-` id to the
+   platforms, and the dashboard records that session's IC too.)
 6. TEST ORDER 1: the browser Purchase fires before the URL changes; no request
    contains `/order/`; the server Purchase `fl-<n>` shows deduplicated; with
    share OFF no `facebook.com/tr` request from `/checkout/` carries `ud[`
@@ -2281,6 +2362,12 @@ afterwards.
 17. TikTok (later, once a TikTok test pixel and token exist): repeat 2-8 for
     TikTok with `ads_only` via `?ttclid=TEST`; confirm no `analytics.tiktok.com`
     request contains `/order/` before ticking `spa_off_confirmed` for real use.
+    As built (19.10): also confirm, with share OFF, that no TikTok request from
+    `/checkout/` carries a hashed email or phone (Automatic advanced matching
+    OFF in both pixels, owner step C).
+18. As built (19.10): after TEST ORDER 1, open its review link, tap a product:
+    no vendor request and no `Referer` carries `review=` or `/review/`.
+    `/order/`, `/review/` and `/account/` answer `Referrer-Policy: no-referrer`.
 
 ---
 
@@ -2297,7 +2384,11 @@ Code is safe with none of these done: tracking stays inert (invariant 8).
    (c) no bot challenge on `/api/t/`;
    (d) optional free rate-limit rule on `/api/t/` above 60 requests per 10 s per
    IP. Confirm the existing click-id cache-key Transform Rule leaves the browser
-   URL intact.
+   URL intact. As built (19.10): (d) is REQUIRED and saved before (b) switches
+   tracking on. Free plan: expression
+   `(starts_with(http.request.uri.path, "/api/t/"))` (Path only, no Host, one
+   rule per zone), characteristics IP, 60 requests per 10 s, Block for 10 s.
+   DEPLOY.md "Ad tracking runbook" step 2 has the clicks and step 7 the check.
 3. Origin firewall (443 to Cloudflare ranges only): NOTE `api.new.florayn.com`
    is not proxied and shares the origin's 443, so this needs that host proxied
    first (or an allowlist for the storefront's own egress and admin users).
@@ -2315,7 +2406,8 @@ Code is safe with none of these done: tracking stays inert (invariant 8).
 7. Verify with a browser user agent: `/api/t/id/` 200 `private, no-store` and
    `on: true` only through Cloudflare; `/store/tracking-config`;
    `/feeds/<token>/meta.tsv` 200 then 304; admin Tracking, Health, Catalog, Live
-   and Privacy pages load; jobs show fresh runs.
+   and Privacy pages load; jobs show fresh runs. As built (19.10): the
+   rate-limit check of DEPLOY.md step 7 answers 429 after about 60 calls.
 8. Backups: `pg_dump --exclude-table-data=tracking_hit
    --exclude-table-data=tracking_event`.
 
@@ -2349,7 +2441,10 @@ Never paste a token in chat. Paste it only into Admin > Tracking.
    `D9ODDBJC77U97D5Q7MQG` ("Live token").
 2. In both pixels: First-party cookies ON; automatic events OFF; single-page app
    (history) page views OFF. Then tick "SPA page views and automatic events are
-   OFF" and turn TikTok on.
+   OFF" and turn TikTok on. As built (19.10): also turn Automatic advanced
+   matching OFF in both pixels (it reads the checkout's phone and email); the
+   checkbox now reads "SPA page views, automatic events and automatic advanced
+   matching are OFF in both pixels".
 
 **D. Google Ads (at cutover)**
 Goals > Conversions > Settings: Enhanced conversions for web ON (Google tag),
@@ -2372,7 +2467,9 @@ ON. Google stays off on new.florayn.com by design.
 **F. Privacy and consent**
 Admin > Privacy: start from the suggested draft (Appendix A), correct it,
 Publish. Then Admin > Tracking > Privacy: use or edit the suggested sentence
-(Appendix B), save, and turn "Share hashed contact details" ON.
+(Appendix B), save, and turn "Share hashed contact details" ON. Only orders
+placed after that (whose shoppers saw the sentence) get hashed contact
+details; see 19.10 for one caution about orders placed before these fixes.
 
 **G. Ad URLs**
 - Meta URL parameters: `utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}`
@@ -2502,7 +2599,9 @@ Static audits (2026-09-27), all pass:
   says nobody edits (`next.config.ts`, `lib/revalidation.ts`,
   `lib/storefront-write-domains.ts`, `lib/florayn-import.ts`,
   `workflows/checkout-service.ts`, `api/store/checkout/quote/route.ts`) have no
-  diff against df87006, and there is no `middleware.ts`.
+  diff against df87006, and there is no `middleware.ts`. (Later, 19.10:
+  `next.config.ts` gained `headers()` for the private pages' `Referrer-Policy`;
+  everything else in it is unchanged and pinned by a test.)
 - No `package.json` or lockfile differs from HEAD. Across the tracking commits
   the only manifest changes are the two approved dependencies (19.4).
 - `workflow_status` is written only by `lib/order-status.ts`, the initial
@@ -2616,7 +2715,8 @@ Each item is what the code does where the spec was silent or said otherwise.
   even while alerts are off. Feed alerts also clear on a later catalog build
   that was not held.
 - `outboxHealth()` returns an array and is shared for 10 s per process
-  (`?fresh=1` on the Health route bypasses it).
+  (`?fresh=1` on the Health route bypasses it). Live reads it with
+  `maxAgeMs: 60_000` (19.10).
 
 **WP08 (variant index, catalog feed).**
 - `.gz` is served as `application/gzip` (raw bytes); `.tsv` adds
@@ -2658,8 +2758,9 @@ Each item is what the code does where the spec was silent or said otherwise.
 - `checkoutTrackingHeaders()` also returns null when `headers()`/`cookies()`
   throw, so checkout can never fail on it (the `checkout_without_tracking`
   alert reports it).
-- The per-IP bucket has a burst of 1,200. The forwarder retries once only on a
-  network error, timeout, 5xx, 408 or 429.
+- The per-IP bucket has a burst of 1,200 (per IP source, an IPv6 /64, since
+  19.10). The forwarder retries once only on a network error, timeout, 5xx,
+  408 or 429.
 - Response helpers live in `server/request-context.ts`; the staff and opt-out
   pages send `no-referrer` and `noindex`.
 
@@ -2769,8 +2870,8 @@ Health counter labels added (19.2).
 |---|---|---|
 | `sf.untrusted` | storefront (`/api/t/id/`, `/api/t/e/`) | request without a valid edge header |
 | `sf.unknown_host` | storefront | host not in test or live hosts |
-| `sf.rate_dropped` | storefront | events over the per-visitor or per-IP limit |
-| `sf.cap_dropped` | storefront forwarder | events over the global 3,000 per 10 s cap |
+| `sf.rate_dropped` | storefront | events over the per-visitor or per-IP-source limit (IPv4 address or IPv6 /64) |
+| `sf.cap_dropped` | storefront forwarder | events over the global 3,000 per 10 s cap, or over a source's fair share of it (19.10) |
 | `sf.invalid` | storefront | invalid events, events past 25, clock-dropped events |
 | `sf.forward_failed` | storefront forwarder | batches the backend did not accept (sent with the next envelope) |
 | `sf.bot` | storefront | bot or missing user agent |
@@ -2779,7 +2880,7 @@ Health counter labels added (19.2).
 | `ingest.no_destination` | backend ingest | platform enabled but no id for the host's env |
 | `ingest.invalid` | backend ingest | event refused on re-validation or the time window |
 | `ingest.unknown_host` | backend ingest | batch host not listed (storefront config cache out of step) |
-| `checkout.header_rejected` | `/store/checkout` | tracking header present, key wrong |
+| `checkout.header_rejected` | `/store/checkout` | tracking header present, key wrong, and the order was placed (19.10) |
 | `checkout.untrusted` | `/store/checkout` | context present without the edge flag |
 | `outbox.<status>.<platform>.<env>` | outbox sender | rows reaching each status per hour |
 
@@ -2801,7 +2902,8 @@ per-platform keys of 2.4; `alerts:last`; `prune:last`;
 message, destination }`; `token_fp:<platform>:<env>`; `catalog:stale`;
 `catalog:alert`; `catalog:build` `{ at, status, items, content_hash,
 config_fp }` (status `published`, `held`, `unchanged` or
-`published_anyway`); `catalog:images`; `variant_index`.
+`published_anyway`); `catalog:images` (plus `budget_hit` when a run stopped
+at its time budget, 19.10); `variant_index`.
 
 ### 19.6 Deploy order and operator steps
 
@@ -2848,9 +2950,10 @@ git.
    `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 4. Cloudflare, host `new.florayn.com` only: the `/api/t/` cache bypass rule
    (last), the Transform Rule that sets `x-florayn-edge` to
-   `TRACKING_EDGE_SECRET`, no bot challenge on `/api/t/`, optionally the
-   rate-limit rule; check the click-id cache-key rule leaves the address bar
-   intact. Origin firewall: not until `api.new.florayn.com` is proxied or
+   `TRACKING_EDGE_SECRET`, no bot challenge on `/api/t/`, and the rate-limit
+   rule on `/api/t/` (REQUIRED since 19.10, saved before the Transform Rule;
+   DEPLOY.md runbook step 2 rule 4); check the click-id cache-key rule leaves
+   the address bar intact. Origin firewall: not until `api.new.florayn.com` is proxied or
    moved (16.3).
 5. Deploy the backend, wait for healthy, then the storefront. Purge the HTML
    by prefix and warm (DEPLOY.md step 6). Never judge speed cold.
@@ -2858,14 +2961,16 @@ git.
    Cloudflare gives 200, `private, no-store`, `on: true` and the three `_fl_`
    cookies; straight to the origin it gives `on: false` and no cookie;
    `/store/tracking-config` has no token or email; the five admin pages load
-   and Health shows fresh job runs.
+   and Health shows fresh job runs; the rate-limit loop answers 429 after about
+   60 calls (no 429 at all: fix the rule before turning a platform on).
 7. Owner, Meta TEST (17.A): paste the TEST token, the test event code, turn
    Automatic Advanced Matching OFF in Events Manager, tick it in Admin >
    Tracking, turn Meta on. Staff exclude their browsers (17.H).
 8. QA on the TEST dataset, section 15 (19.7).
 9. Later, each on its own OK: catalog image mode and enabling the catalog
-   (17.E), Privacy page and share (17.F, then TEST ORDER 5), TikTok (17.C),
-   backups with the table exclusions (16.8), cutover (18).
+   (17.E), Privacy page and share (17.F, then TEST ORDER 5), TikTok (17.C,
+   with Automatic advanced matching OFF in both pixels), backups with the
+   table exclusions (16.8), cutover (18).
 
 ### 19.7 QA on the TEST dataset
 
@@ -2928,6 +3033,8 @@ Added by the build, check during QA:
 - `outboxHealth()` aggregates all of `tracking_event` (about 1M rows at
   target) at most every 10 s per process, and Live's unknown-ids count scans
   today's hits every 10 s while open. Watch both; counters could replace them.
+  (19.10: from Live both now run at most once a minute; the Health page still
+  reads the outbox counts with its 10 s cache and on Retry.)
 - `kickStaleJobs` from an admin route restarts a job only in a process that
   loaded that job file.
 - Before the first variant-index build every product event counts as unknown,
@@ -2942,6 +3049,113 @@ Added by the build, check during QA:
   Cloudflare rules of 16.2 must be widened to `florayn.com` and `www`.
 - Postgres has no backups yet (pre-cutover audit); when they are set up, use
   the exclusions in 16.8.
+
+### 19.10 Review fixes (2026-09-27)
+
+An adversarial review of 3376b89 confirmed 11 findings. All 11 are fixed in
+the working tree, not yet committed. No migration and no new setting: they
+ship with the normal backend-then-storefront deploy. The sections above carry
+"As built (19.10)" notes where the spec changed.
+
+| # | Finding | Fix (file) |
+|---|---|---|
+| 1 | Contact hashes for orders whose shopper never saw the consent line, once share turns ON | The storefront sends `consent_version` only when the line rendered (`checkoutConsent(config)?.version ?? null`, `server/checkout-context.ts`). The backend hashes per order: share ON and a stored version (`sharesContact`, `order-events.ts`); covers Purchase, COD status rows, reconcile and the browser block (6.2) |
+| 2 | Rate limits keyed on client-controlled values; one IPv6 /64 could take the whole forward cap | `ipSource()` keys the IP bucket per IPv4 address or IPv6 /64 (`server/rate-limit.ts`); the 3,000 per 10 s cap is shared max-min fairly per source (`FAIR_SHARE`, `fairShare`, `server/forward.ts`); the Cloudflare rule is required (DEPLOY.md). Signing `_fl_vid` was not done: the review showed it gains nothing |
+| 3 | A bare POST with a forged header raised `checkout_without_tracking` | `checkout.header_rejected` counts only for a placed order (`api/store/checkout/route.ts`) |
+| 4 | Review token reached TikTok/Meta on a client navigation after the pixels loaded | `drain()` skips vendor calls while `review` or `r` is in the address bar (`runtime.ts`, 5.2) |
+| 5 | `/review/<token>/` leaked the token through `document.referrer` | `Referrer-Policy: no-referrer` for `/order/*`, `/review/*`, `/account/*` (`next.config.ts` `headers()`), plus metadata on `/review/[token]` (4.2) |
+| 6 | No gate for TikTok's Automatic advanced matching | `spa_off_confirmed` now also confirms it (admin label and help text, validation label; same key); owner step 17.C and QA 15.17 |
+| 7 | `purchase_not_enqueued` scanned the whole outbox every minute | The lookup pins `platform in (<enabled>)`, an index-only probe on `tracking_event_key` (`alerts.ts`) |
+| 8 | The per-cart IC id dropped the IC hit of every later session | The hit key is `<ic id>:<session id>` (`ingest.hitEventId`); outbox rows and payloads keep the plain id (2.4) |
+| 9 | Every order's stock batch rebuilt the variant index | Only product/variant/option/catalog batches call `markCatalogStale` (`storefront-events.ts`, 8.5) |
+| 10 | Feed image conversion saturated both vCPUs | `sharp.concurrency(1)`, one image at a time, no mozjpeg, per-run time budget (`catalog-images.ts`, 8.3) |
+| 11 | Live re-totalled orders and scanned the outbox on every poll | One SQL read with `order_summary` totals, 7-day history cached per Dhaka day, outbox counts and unknown ids at most once a minute, Live cache `max(10 s, poll_seconds)` (`live.ts`, 9) |
+
+Tests added: consent per order (status events, purchase, reconcile, block,
+checkout counting), the settings label, the storefront context version, the
+runtime review-link test, `tests/private-referrer.test.cjs` (evaluates the
+real `next.config.ts`, matches its sources with Next's own matcher and pins
+every other key), `tests/tracking-abuse.test.cjs` (IPv6 /64 replay of the
+finding, fair share) and a route-level /64 test, the alert lookup, IC hit
+keys and the two-session rollup, the Live SQL and caches, the stock-only
+batch and the image budget. The consent, runtime and abuse fixes were
+checked by mutation: their new tests fail against the old code. The order
+and alert SQL was also run on a throwaway
+local Postgres 17.6: the alert lookup plans as an Index Only Scan on
+`tracking_event_key`.
+
+Verification (after all four groups):
+
+| Check | Result |
+|---|---|
+| `cd apps/backend && npm test` (Node 24.12) | 515 tests, 515 pass |
+| `cd apps/backend && npx -y node@22 --test tests/*.test.cjs` (22.23.3) | 515 tests, 515 pass |
+| `cd apps/storefront && npm test` (Node 24.12) | 499 tests, 499 pass |
+| `cd apps/storefront && npx -y node@22 --test tests/*.test.cjs` (22.23.3) | 499 tests, 499 pass |
+| `npx tsc --noEmit -p apps/backend` / `-p apps/storefront` | exit 0 / exit 0 |
+| `cd apps/backend && npx medusa build` | exit 0; `medusa lint` 0 errors, 188 warnings (the same count; in touched files only the older `throw new Error` in `lib/storefront-events.ts`) |
+| Storefront production build, fixture API on `http://127.0.0.1:9931` | exit 0; the same 26 prerendered routes and 5 `generateStaticParams` routes as the base build |
+| `check-client-budget.cjs` against the pre-tracking base | "Within budget." (below) |
+| `next start` of that build, headers | `/order/x/`, `/review/x/`, `/review/order_01ABC.sig1`, `/account/`, `/account/login/` send `Referrer-Policy: no-referrer`; `/shop/`, `/men/`, `/privacy/` do not |
+
+| measure | base | head | delta | limit |
+|---|---|---|---|---|
+| framework (rootMainFiles) | 100,883 | 100,883 | 0 | = 0 |
+| webpack runtime | 1,918 | 1,955 | +37 | <= 64 |
+| `/layout` set | 31,404 | 32,113 | +709 | <= 1,200 |
+| `/page` | 139,421 | 140,167 | +746 | <= 778 |
+| `/shop/page` | 186,465 | 187,211 | +746 | <= 778 |
+| `/collection/[slug]/page` | 136,198 | 136,944 | +746 | <= 778 |
+| `/product/[slug]/page` | 202,805 | 203,774 | +969 | <= 1,046 |
+| `/checkout/page` | 144,988 | 146,374 | +1,386 | <= 1,546 |
+| lazy runtime chunk (`fl-runtime-v1`) | - | 2,695 | - | <= 6,000 |
+
+The runtime chunk grew 16 B (`carriesReview`); no first-load set grew.
+A review token contains a dot, so Next serves `/review/<token>` without the
+trailing slash (the slash form answers 308); both forms get the header.
+
+Still open after the fixes (not done here):
+- Contexts stored by a storefront from before this fix always carry a
+  `consent_version`. If one ever placed tracked orders in production, keep
+  share OFF until 90 days after this deploy (order contexts are kept 90
+  days), or add a guard: store the consent version current when share turned
+  ON and require a stored version at or above it (a new stored setting).
+- The checkout page and its Server Action read `getTrackingConfig()`
+  separately; if the config is revalidated between render and Place order,
+  that one submit can carry a version for a line the shopper did not see, or
+  the reverse.
+- Wording only, the gate is right: `server/config.ts` (~line 172) and
+  `pixels/tiktok.ts` (~line 17) still describe `spa_off_confirmed` as SPA page
+  views only, and the Health label for `sf.cap_dropped` still says "global
+  cap" (`admin/routes/tracking/health/page.tsx`).
+- `jobs/catalog-feed.ts` and `api/admin/tracking/catalog/route.ts` still pass
+  `concurrency: 2`, now ignored (`tests/catalog-feed.test.cjs` asserts it).
+- Feed availability after a pure stock change lags until 03:30 Dhaka. Faster
+  needs a stock-only state key the catalog job reads only while the catalog
+  is enabled, refreshing `in_stock` from `blankAvailability`.
+- Live's today query still scans Medusa's `"order"` (no `created_at` index),
+  now at most once per poll; revisit past about 100k orders. The Health page
+  still runs `OUTBOX_HEALTH_SQL` with its 10 s cache.
+- `order_summary.current_order_total` matches the computed total for
+  checkout orders and confirmed order edits; a direct line-item update that
+  bypassed order changes would diverge (the codebase has none).
+- Existing race: when the runtime started on a private page and the shopper
+  then client-navigates to `/product/x/?review=<token>`, injection's
+  `setTimeout(0)` scrub can run before the product page reads the token, so
+  the review form loses its prefill (no leak).
+- Cloudflare does not document whether its rate-limit IP characteristic
+  groups IPv6 by /64; the origin's /64 keying covers that. A holder of a
+  larger block (a /48) still gets one budget per /64; IPv4 stays per address
+  (not /24) so carrier NAT is not penalised. The fair share reacts one window
+  (10 s) late. The free plan has one rate-limiting rule per zone: if the
+  florayn.com zone already uses it, the owner must choose.
+- A document loaded with `no-referrer` keeps it for its life, also after
+  soft navigation to public pages, so later requests from that tab carry no
+  `Referer`. Same-origin fetch and beacon POSTs keep `Origin` and
+  `sec-fetch-site: same-origin` (checked in Chromium), so Server Actions and
+  `/api/t/*` are unaffected.
+- The Live orders SQL ran on a throwaway local Postgres, not yet in CI or
+  production (19.9's first bullet still applies to the rest).
 
 ---
 

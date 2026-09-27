@@ -5,7 +5,8 @@ import { redirect } from "next/navigation"
 import { getReviewProgram } from "@/lib/review-actions"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = { title: "Write a review", robots: { index: false, follow: false } }
+// The token is in the address: no referrer leaves this page (next.config.ts sends the header too).
+export const metadata: Metadata = { title: "Write a review", robots: { index: false, follow: false }, referrer: "no-referrer" }
 
 type Params = { params: Promise<{ token: string }> }
 

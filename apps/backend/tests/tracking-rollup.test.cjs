@@ -448,6 +448,23 @@ test("sessions upsert with least/greatest/bit-or and pageviews += n across windo
   assert.match(sql, /when 'Purchase' then 8 else 0 end \| case when \(flags & 8\) <> 0 then 16 else 0 end/)
 })
 
+test("a cart's InitiateCheckout in two sessions (hits keyed id:session by ingest) gives each session the IC stage", async () => {
+  const rollup = loadRollup()
+  const w = morning()
+  const ic = "ic-0123456789abcdef01234567"
+  w.hits.push(
+    hit({ event_id: `${ic}:s1`, event_name: "InitiateCheckout", received_at: at("04:05:10"), path: "/checkout/", value: 1400, items: 1 }),
+    hit({ event_id: `${ic}:s4`, event_name: "InitiateCheckout", received_at: at("04:08:00"), visitor_id: "v1", session_id: "s4",
+      path: "/checkout/", value: 1400, items: 1 }),
+    hit({ event_id: "fl-1002", event_name: "Purchase", origin: "s", received_at: at("04:08:40"), session_id: "s4", path: "/checkout/", value: 1520, items: 1 }),
+  )
+  await rollup.rollupOnce(container(w))
+  assert.equal(w.sessions.get("s1").flags & 4, 4)
+  assert.equal(w.sessions.get("s4").flags, 4 | 8, "the returning buyer's session has its checkout, not only its Purchase")
+  const ics = [...w.minute].filter(([key]) => key.includes("|InitiateCheckout|")).map(([, row]) => row.count)
+  assert.deepEqual(ics, [1, 1])
+})
+
 test("the advisory lock keeps a second concurrent run out, and a locked run changes nothing", async () => {
   const rollup = loadRollup()
   const w = morning()

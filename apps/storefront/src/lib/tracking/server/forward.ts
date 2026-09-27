@@ -2,6 +2,7 @@ import { MEDUSA_BACKEND_URL } from "../../medusa"
 import type { BrowserEvent } from "../contract"
 import { assertServer } from "./guard"
 import { derivedIngestKey } from "./keys"
+import { ipSource } from "./rate-limit"
 import type { IngestContext } from "./request-context"
 
 assertServer()
@@ -13,9 +14,10 @@ assertServer()
  * grouped by (host, ctx), and POSTed to /tracking/ingest in envelopes of at
  * most 200 events and 256 KB, with the derived ingest key, a 3 s timeout and
  * one retry. A global cap of 3,000 events per 10 s protects the backend from
- * a flood. Counters (sf.*) ride in `stats`; if they are non-zero and nothing
- * was sent for 60 s they go alone. Nothing here throws and nothing is sent
- * without TRACKING_INGEST_SECRET.
+ * a flood, and it is shared fairly between IP sources (FAIR_SHARE), so one
+ * source cannot crowd out every shopper. Counters (sf.*) ride in `stats`; if
+ * they are non-zero and nothing was sent for 60 s they go alone. Nothing here
+ * throws and nothing is sent without TRACKING_INGEST_SECRET.
  */
 export const FORWARD_LIMITS = {
   coalesceMs: 250,
@@ -28,6 +30,18 @@ export const FORWARD_LIMITS = {
   statsIdleMs: 60_000,
   maxStatKeys: 50,
 } as const
+
+/**
+ * The cap's fair share. When the window that just ended was offered more than
+ * the cap less `reserveEvents`, each IP source (an IPv4 address or an IPv6
+ * /64, ipSource) may forward at most its max-min fair share of that budget in
+ * the next window: a source that offered little keeps all of it, and the
+ * heaviest are held to one equal share, never less than one full batch
+ * (`minEvents`). The reserve leaves room for sources that were quiet in the
+ * last window. At most `maxSources` are told apart in a window; the ones
+ * after that share one allowance.
+ */
+export const FAIR_SHARE = { reserveEvents: 300, minEvents: 25, maxSources: 10_000 } as const
 
 export type IngestBatch = { host: string; ctx: IngestContext; events: BrowserEvent[] }
 export type IngestEnvelope = { v: 1; stats: Record<string, number>; batches: IngestBatch[] }
@@ -57,6 +71,24 @@ export type Forwarder = {
 /** The backend's stat key pattern (lib/tracking/contract.ts parseIngestEnvelope). */
 const STAT_KEY = /^[a-z0-9_.:-]{1,60}$/
 const RETRY_STATUSES = [408, 429]
+
+/**
+ * Max-min fair share (water-filling): the largest per-source allowance that
+ * fits `budget` when each source takes min(what it offered, allowance), but
+ * at least `floor`. Infinity when everything offered fits.
+ */
+export function fairShare(offered: number[], budget: number, floor: number): number {
+  const sorted = offered.filter((n) => n > 0).sort((a, b) => a - b)
+  let left = budget
+  for (let index = 0; index < sorted.length; index += 1) {
+    const level = left / (sorted.length - index)
+    if (sorted[index] > level) return Math.max(floor, Math.floor(level))
+    left -= sorted[index]
+  }
+  return Number.POSITIVE_INFINITY
+}
+
+type Source = { offered: number; kept: number }
 
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8")
 
@@ -123,6 +155,10 @@ export function createForwarder(deps: ForwarderDeps): Forwarder {
   let lastSentAt = deps.now()
   let windowStart = Number.NEGATIVE_INFINITY
   let windowCount = 0
+  /** What each IP source offered and was given in the current window. */
+  let sources = new Map<string, Source>()
+  /** The current window's allowance per source (FAIR_SHARE). */
+  let share = Number.POSITIVE_INFINITY
 
   function addStats(deltas: Record<string, number>): void {
     for (const [key, n] of Object.entries(deltas)) {
@@ -159,6 +195,24 @@ export function createForwarder(deps: ForwarderDeps): Forwarder {
     } catch {
       // Counters are best effort.
     }
+  }
+
+  /** This window's share, from what the window that just ended was offered; none after a gap. */
+  function nextShare(now: number): number {
+    if (now - windowStart >= 2 * FORWARD_LIMITS.capWindowMs) return Number.POSITIVE_INFINITY
+    return fairShare([...sources.values()].map((source) => source.offered),
+      FORWARD_LIMITS.capEvents - FAIR_SHARE.reserveEvents, FAIR_SHARE.minEvents)
+  }
+
+  function sourceOf(ctx: IngestContext): Source {
+    let key = typeof ctx.ip === "string" && ctx.ip ? ipSource(ctx.ip) : "-"
+    if (!sources.has(key) && sources.size >= FAIR_SHARE.maxSources) key = "*"
+    let source = sources.get(key)
+    if (!source) {
+      source = { offered: 0, kept: 0 }
+      sources.set(key, source)
+    }
+    return source
   }
 
   async function flush(): Promise<void> {
@@ -200,13 +254,19 @@ export function createForwarder(deps: ForwarderDeps): Forwarder {
       if (!events.length) return Promise.resolve()
       const now = deps.now()
       if (now - windowStart >= FORWARD_LIMITS.capWindowMs) {
+        share = nextShare(now)
         windowStart = now
         windowCount = 0
+        sources = new Map()
       }
-      const kept = events.slice(0, Math.max(0, FORWARD_LIMITS.capEvents - windowCount))
+      const source = sourceOf(ctx)
+      source.offered += events.length
+      const room = Math.min(FORWARD_LIMITS.capEvents - windowCount, share - source.kept)
+      const kept = events.slice(0, Math.max(0, room))
       if (kept.length < events.length) bumpStat("sf.cap_dropped", events.length - kept.length)
       if (!kept.length) return Promise.resolve()
       windowCount += kept.length
+      source.kept += kept.length
 
       const id = `${host}\n${JSON.stringify(ctx)}`
       const group = groups.get(id)

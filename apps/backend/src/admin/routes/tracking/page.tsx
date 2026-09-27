@@ -383,8 +383,10 @@ const TrackingPage = () => {
               <Checkbox id="spa_off" checked={form.tiktok.spa_off_confirmed}
                 onCheckedChange={(value) => setSection("tiktok", { spa_off_confirmed: value === true })} />
               <div>
-                <Label htmlFor="spa_off" size="small">SPA page views and automatic events are OFF in both pixels</Label>
-                <Text size="xsmall" className="text-ui-fg-muted">The TikTok pixel does not load until this is ticked.</Text>
+                <Label htmlFor="spa_off" size="small">SPA page views, automatic events and automatic advanced matching are OFF in both pixels</Label>
+                <Text size="xsmall" className="text-ui-fg-muted">
+                  Turn all three OFF in TikTok Events Manager before ticking: automatic advanced matching reads the checkout's phone and email fields. The TikTok pixel does not load until this is ticked.
+                </Text>
               </div>
             </div>
           </Container>

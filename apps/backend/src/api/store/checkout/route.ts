@@ -15,9 +15,13 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   // 4.4, 6.5). It never fails or delays the order: a bad header only means
   // this order is placed without tracking, and the counters are not awaited.
   const tracking = decodeTrackingHeader(req.headers)
-  countCheckoutHeader(req.scope, tracking)
+  countCheckoutHeader(req.scope, { ...tracking, rejected: false })
   const { result } = await checkoutWithTrackingWorkflow(req.scope).run({
     input: { body: req.body, complete: true, customerId, tracking: tracking.ctx },
   })
+  // A rejected header counts only once an order was placed: the header name is
+  // public, so a bare POST must not raise the checkout_without_tracking alert.
+  // A real secret mismatch also shows there as orders without a context.
+  if (tracking.rejected && result.status === 200 && result.body?.order?.id) countCheckoutHeader(req.scope, tracking)
   return res.status(result.status).json(result.body)
 }

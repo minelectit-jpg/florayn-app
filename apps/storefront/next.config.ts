@@ -69,6 +69,22 @@ const nextConfig: NextConfig = {
    */
   experimental: { serverActions: { bodySizeLimit: "4mb" } },
 
+  /*
+   * The private pages (lib/tracking/paths.ts; none exist under /men): their
+   * addresses carry an order id or a review token (TRACKING.md 4.1). A full
+   * navigation out of one would otherwise hand that address to the next page
+   * as document.referrer, which the Meta, TikTok and Google tags read
+   * themselves. `/x/:path*` matches /x, /x/ and everything below, with or
+   * without the trailing slash, and no other route. This adds one response
+   * header and nothing else: caching and ISR are untouched.
+   */
+  async headers() {
+    return ["order", "review", "account"].map((segment) => ({
+      source: `/${segment}/:path*`,
+      headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+    }))
+  },
+
   images: {
     /*
      * Next's on-demand image optimizer IS used (it turns the 1200px ~37KB R2

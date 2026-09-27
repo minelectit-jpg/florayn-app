@@ -74,7 +74,9 @@ on conflict (bucket, event_name, source, host) do update set count = excluded.co
 /**
  * Step 4a: one upsert per session seen in the window (staff hits included,
  * marked internal). Session flags: 1 VC, 2 ATC, 4 IC, 8 Purchase, 16 internal.
- * The hit flag 16 (new visitor) of the session's first hit sets is_new_visitor.
+ * IC hits are keyed per cart and session (ingest's hitEventId), so a buyer who
+ * reopens checkout in a later session gets flag 4 there too. The hit flag 16
+ * (new visitor) of the session's first hit sets is_new_visitor.
  */
 export const SESSION_SQL = `with w as (
   select event_id, event_name, received_at, visitor_id, session_id, source, campaign, device_class, audience,

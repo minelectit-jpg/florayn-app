@@ -342,7 +342,9 @@ async function reconcileOps(container: any, stats: ReconcileStats): Promise<void
  * (c) Trusted, non-staff, non-opted-out contexts from the last 6 days that
  * lack a Purchase row for a platform. buildOrderEventRows decides the missing
  * row's state, so a platform that is off gets its `skipped` row: this never
- * becomes a silent backfill.
+ * becomes a silent backfill. It also hashes contact details only for an order
+ * whose stored context carries a consent version, so turning sharing on never
+ * adds them to a Purchase placed before the shopper could see the line.
  */
 async function reconcileRows(container: any, stats: ReconcileStats): Promise<void> {
   const db = trackingDb(container)

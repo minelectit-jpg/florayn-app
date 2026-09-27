@@ -437,6 +437,9 @@ Hard ordering rules:
   the backend refuse every ingest and checkout header (the
   `checkout_without_tracking` alert fires once a platform is on).
 - Backend before storefront.
+- The Cloudflare rate-limit rule on `/api/t/` (step 2, rule 4) is saved
+  **before** the edge header rule (step 2, rule 2) switches tracking on, and
+  stays while tracking is on.
 
 ### 1. Secrets (Coolify, both apps)
 
@@ -458,7 +461,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ### 2. Cloudflare rules for `new.florayn.com`
 
-Every rule is scoped to the host, so live `florayn.com` is untouched.
+Every rule is scoped to the host (the rate limit to the `/api/t/` path, which
+live `florayn.com` does not have), so live `florayn.com` is untouched.
 
 1. **Cache bypass** (Caching > Cache Rules): when
    `(http.host eq "new.florayn.com" and starts_with(http.request.uri.path, "/api/t/"))`,
@@ -469,15 +473,32 @@ Every rule is scoped to the host, so live `florayn.com` is untouched.
    `(http.host eq "new.florayn.com")`, Set static `x-florayn-edge` to the
    storefront's `TRACKING_EDGE_SECRET`. "Set" replaces any value a visitor
    sends, so it cannot be forged through Cloudflare. Tracking switches on for
-   that host as soon as this rule and the storefront secret match.
+   that host as soon as this rule and the storefront secret match, so save
+   rule 4 first.
 3. **No bot challenge on `/api/t/`.** The calls are `fetch` and `sendBeacon`,
    which cannot solve a challenge. Bot Fight Mode on the free plan cannot be
    skipped per path; if it is on, check in QA that a normal browser's
    `/api/t/` calls return 200/204, not a challenge.
-4. **Optional rate limit** (Security > WAF > Rate limiting rules): the same
-   `/api/t/` expression, above 60 requests per 10 seconds per IP, Block for
-   10 seconds. The endpoints have their own limits; this only sheds floods at
-   the edge.
+4. **Rate limit on `/api/t/` (required).** Security > WAF > Rate limiting
+   rules > Create rule, before rule 2 switches tracking on:
+   - Rule name: `Tracking endpoints`
+   - If incoming requests match, Edit expression:
+     `(starts_with(http.request.uri.path, "/api/t/"))`
+   - With the same characteristics: IP
+   - When rate exceeds: 60 requests, period 10 seconds
+   - Then take action: Block, duration 10 seconds
+   - Deploy
+
+   The free plan allows only the path in a rate-limiting rule (not the host)
+   and one such rule per zone; this is it. On Pro or higher, use rule 1's
+   host-scoped expression instead. A real tab calls at most about once every
+   2 seconds, so 60 per 10 seconds is a dozen busy tabs behind one address, and
+   a blocked address loses only tracking for 10 seconds, never a page or
+   checkout. The storefront's own limits (per visitor, per IPv4 address or
+   IPv6 /64, and a fair share per source of the 3,000 events per 10 s forward
+   cap) keep one source from crowding out real shoppers; this rule is what
+   stops a request flood before it reaches the origin's CPU. Step 7 checks
+   it.
 5. Check that the existing click-id cache-key Transform Rule (it rewrites the
    origin query of document requests to keep only `case`) leaves the browser
    address intact: after opening
@@ -505,7 +526,10 @@ lockfile) and the backend image installs it, so JPEG copies of catalog images
 left is the owner's choice in Admin > Tracking > Catalog: keep JPEG copies on
 `img.florayn.com`, or switch to `cf_transform` after enabling Cloudflare Image
 Transformations on the zone. The catalog stays off until the owner enables
-it.
+it. Nothing to configure for the CPU: the conversion uses one sharp thread,
+one image at a time, and stops each run at a time budget (by day 20 s of
+conversion or 2 minutes in all, at night 2 and 10 minutes); the next run
+carries on (TRACKING.md 8.3).
 
 ### 5. Migrations over the SSH tunnel, before the backend deploy
 
@@ -579,10 +603,24 @@ curl -sS -D - --resolve new.florayn.com:443:<origin-ip> -A "$UA" -H "origin: htt
 # Public tracking config: ids and modes only, never a token or an email
 curl -sS -H "x-publishable-api-key: <pk_...>" https://api.new.florayn.com/store/tracking-config
 
+# The private pages send no referrer: each prints "Referrer-Policy: no-referrer"
+for p in /review/x/ /order/x/ /account/login/; do
+  curl -sS -o /dev/null -D - -A "$UA" "https://new.florayn.com$p" | grep -i "^referrer-policy"
+done
+
 # Once a feed is published (Admin > Tracking > Catalog shows the URL): 200 with an ETag, then 304
 curl -sS -o /dev/null -D - -A "$UA" "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
 curl -sS -o /dev/null -D - -A "$UA" -H 'If-None-Match: "<etag from above>"' "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
+
+# Last, the rate-limit rule: 100 calls, 10 at a time, from your address; about 60 give 204 and the
+# rest 429 (Cloudflare's count is approximate). Your address then gets 429 on /api/t/ for 10 seconds.
+seq 1 100 | xargs -P 10 -I{} curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" \
+  -H "origin: https://new.florayn.com" -H "content-type: text/plain" \
+  -d '{"v":1,"sent_at":1,"events":[]}' https://new.florayn.com/api/t/e/ | sort | uniq -c
 ```
+
+No 429 at all means the rule is missing or not deployed: fix it before
+turning a platform on.
 
 Then in the admin: Tracking, Tracking > Health, Tracking > Catalog, Live and
 Privacy all load, and Health shows fresh runs for the outbox, rollup,
@@ -608,3 +646,9 @@ TRACKING.md sections 15 and 17. Rollback lever: switch a platform off in
 Admin > Tracking (it takes effect within 10 seconds; later events are kept as
 `skipped`, and sending them later is an explicit Retry). Removing
 `TRACKING_EDGE_SECRET` from the storefront makes tracking inert again.
+
+Before TikTok is turned on, its Automatic advanced matching goes OFF in both
+pixels too (with SPA page views and automatic events), then the one checkbox
+in Admin > Tracking is ticked (TRACKING.md 17.C). Turning "Share hashed
+contact details" ON affects only orders placed after it: an order's contact
+details are hashed only if its shopper was shown the consent line.

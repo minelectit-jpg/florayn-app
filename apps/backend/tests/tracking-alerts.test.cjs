@@ -111,7 +111,12 @@ function fakeDb(w) {
         assert.match(s, /created_at >= now\(\) - interval '3 hours' and created_at < now\(\) - interval '10 minutes'/)
         return { rows: w.trusted }
       }
-      if (/from tracking_event where event_name = 'Purchase' and event_id in/.test(s)) return { rows: w.purchaseRows.filter((r) => bindings.includes(r.event_id)) }
+      const purchase = /from tracking_event where platform in \(([?, ]+)\) and event_name = 'Purchase' and event_id in/.exec(s)
+      if (purchase) {
+        const platforms = bindings.slice(0, (purchase[1].match(/\?/g) ?? []).length)
+        const ids = bindings.slice(platforms.length)
+        return { rows: w.purchaseRows.filter((r) => platforms.includes(r.platform) && ids.includes(r.event_id)) }
+      }
       if (/from tracking_hit where event_name = 'Purchase'/.test(s)) return { rows: [{ n: w.livePurchases }] }
       if (/generate_series\(1, 14\)/.test(s)) return { rows: [{ total: w.history }] }
       if (/from tracking_hit where received_at >= now\(\) - interval '1 hour' and host in/.test(s)) return { rows: [{ n: w.liveHits }] }
@@ -455,6 +460,25 @@ test("per-platform kinds only fire for enabled platforms; platform-wide kinds ne
   assert.equal(s.w.graph.entity, "order")
   assert.equal(s.w.graph.filters.created_at.$gte.getTime(), s.time.now() - HOUR)
   assert.equal(s.w.graph.filters.created_at.$lte.getTime(), s.time.now() - 5 * MINUTE)
+})
+
+test("purchase_not_enqueued probes the outbox key: the enabled platforms first, then Purchase and the order ids", async () => {
+  const s = setup()
+  s.w.trusted = [{ order_id: "order_1", display_id: 1001 }, { order_id: "order_2", display_id: 1002 }]
+  s.w.purchaseRows = [{ platform: "meta", event_id: "fl-1001" }, { platform: "tiktok", event_id: "fl-1002" }]
+  await s.run()
+  const lookup = () => s.w.queries.filter((q) => /from tracking_event where platform in/.test(q.sql)).at(-1)
+  // tracking_event_key is (platform, event_name, event_id): without the platform Postgres 17 reads the whole table.
+  assert.match(lookup().sql, /^select platform, event_id from tracking_event where platform in \(\?\) and event_name = 'Purchase' and event_id in \(\?, \?\)$/)
+  assert.deepEqual(plain(lookup().bindings), ["meta", "fl-1001", "fl-1002"])
+  assert.match(s.emails[0].text, /^1 order from the last 3 hours has tracking data but no Purchase queued for Meta\./m,
+    "a TikTok row does not count for Meta")
+  s.w.config.tiktok.enabled = true
+  s.w.purchaseRows.push({ platform: "meta", event_id: "fl-1002" }, { platform: "tiktok", event_id: "fl-1001" })
+  s.time.advance(MINUTE)
+  await s.run()
+  assert.deepEqual(plain(lookup().bindings), ["meta", "tiktok", "fl-1001", "fl-1002"])
+  assert.equal(s.w.state.get("alert:purchase_not_enqueued").open, false, "every order is queued for both platforms")
 })
 
 test("sweep_stale uses max(10 min, 3 x staleAfterMs) and ignores jobs that never ran", async () => {

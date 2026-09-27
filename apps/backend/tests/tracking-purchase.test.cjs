@@ -458,6 +458,11 @@ test("buildOrderEventRows follows the 6.1 table for Purchase", () => {
   assert.deepEqual(metaShared.payload.user_data.ph, [sha("8801712345678")])
   assert.deepEqual(metaShared.payload.user_data.em, [sha("buyer@example.com")])
   assert.equal(tiktokShared.payload.user.phone, sha("+8801712345678"))
+  // ...but only for a shopper who was shown the consent line: no stored version, no contact hashes.
+  const unconsented = contextRow(h, ctx({ consent_version: null }))
+  const [metaQuiet, tiktokQuiet] = build(unconsented, view({ ...shareOn, tiktok: { ...shareOn.tiktok, enabled: true, test_id: PIXEL } }))
+  assert.deepEqual(Object.keys(metaQuiet.payload.user_data).sort(), ["client_ip_address", "client_user_agent", "country", "external_id", "fbp"])
+  assert.ok(!("phone" in tiktokQuiet.payload.user) && !("email" in tiktokQuiet.payload.user))
 
   // A live context goes to the live dataset.
   const live = config({ live_armed: true })
@@ -538,6 +543,11 @@ test("buildPurchaseBlock matches the storefront's strict isPurchaseBlock and the
   assert.equal(storefrontContract.isPurchaseBlock(liveBlock), true)
   const liveNoShare = config({ live_armed: true, google: { enabled: true } })
   assert.equal(block(contextRow(h, ctx({ host: "florayn.com" }), liveNoShare), liveNoShare).match.google, undefined)
+  // Sharing is on, but this shopper never saw the consent line (no stored version): the external id only.
+  const unconsented = block(contextRow(h, ctx({ host: "www.florayn.com", consent_version: null }), liveGoogle), { ...liveGoogle, tiktok: { ...liveGoogle.tiktok, enabled: true, live_id: PIXEL } })
+  assert.deepEqual(unconsented.platforms, { meta: true, tiktok: true, google: true })
+  assert.deepEqual(unconsented.match, { meta: { external_id: sha(VID) }, tiktok: { external_id: sha(VID) } })
+  assert.equal(storefrontContract.isPurchaseBlock(unconsented), true)
 
   for (const patch of [{ edge: false }, { staff: true }, { optout: true }, { host: "evil.example" }]) {
     const quiet = block(contextRow(h, ctx(patch)))
@@ -845,6 +855,33 @@ test("POST /store/checkout decodes the header, counts problems and runs the trac
   assert.deepEqual([conflicted.code, conflicted.body], [409, { errors: { form: "changed" } }])
 })
 
+test("POST /store/checkout counts a rejected header only when an order was placed", async () => {
+  const response = () => ({ headers: {}, code: null, setHeader() {}, status(code) { this.code = code; return this }, json() { return this } })
+  const forged = { "x-florayn-tracking": "x" }
+  // Anyone can send the public header name with a junk body: no order, no alert.
+  for (const routeResult of [{ status: 400, body: { errors: { cart_id: "missing" } } }, { status: 409, body: { errors: { form: "changed" } } },
+    { status: 200, body: { quote: { total: 1473 } } }]) {
+    const h = harness({ env: { TRACKING_INGEST_SECRET: SECRET }, routeResult })
+    const res = response()
+    await h.load("api/store/checkout/route.ts").POST({ headers: forged, body: {}, scope: h.container }, res)
+    await tick()
+    assert.equal(res.code, routeResult.status)
+    assert.equal(h.routeRuns[0].input.tracking, null)
+    assert.deepEqual(h.db.counters, {}, JSON.stringify(routeResult))
+  }
+  // A placed order whose header was rejected is a real secret mismatch: counted once.
+  const placed = harness({ env: { TRACKING_INGEST_SECRET: SECRET } })
+  await placed.load("api/store/checkout/route.ts").POST({ headers: { ...forged, "x-florayn-ingest-key": "bad" }, body: {}, scope: placed.container }, response())
+  await tick()
+  assert.deepEqual(placed.db.counters, { "checkout.header_rejected": 1 })
+  // The edge check still counts on every attempt (only a signed context can carry it).
+  const untrusted = harness({ env: { TRACKING_INGEST_SECRET: SECRET }, routeResult: { status: 409, body: {} } })
+  await untrusted.load("api/store/checkout/route.ts").POST({ headers: { "x-florayn-tracking": encode(ctx({ edge: false })), "x-florayn-ingest-key": KEY },
+    body: {}, scope: untrusted.container }, response())
+  await tick()
+  assert.deepEqual(untrusted.db.counters, { "checkout.untrusted": 1 })
+})
+
 // ---------------------------------------------------------------- reconcile
 
 test("reconcilePurchases covers (a) carts, (b) missing order_op rows and (c) missing platform rows, skipping imported and draft orders", async () => {
@@ -906,6 +943,26 @@ test("reconcilePurchases covers (a) carts, (b) missing order_op rows and (c) mis
 
   const second = plain(await h.purchase.runReconcile(h.container))
   assert.deepEqual([second.recorded, second.ops_created, second.rows_added], [0, 0, 0])
+})
+
+test("reconcile hashes contact details only for orders whose shopper saw the consent line", async () => {
+  const shareOn = config({ privacy: { share_contact_hashes: true, consent_text: "We measure ads.", consent_version: 2 } })
+  const other = "order_01JTESTORDER0000000000002"
+  const h = harness({ config: shareOn, orders: [order(), order({ id: other, display_id: 1235 })] })
+  const seed = (id, display, consent) => h.db.orderContexts.set(id, {
+    order_id: id, display_id: display, cart_id: null, host: "new.florayn.com", env: "test", context: ctx({ consent_version: consent }),
+    trusted: true, staff: false, optout: false, purchase_time: new Date(CREATED), created_at: Date.now() - 10 * 60_000,
+  })
+  // Placed while sharing was off (no version), then sharing was turned on before reconcile ran.
+  seed(ORDER_ID, 1234, null)
+  seed(other, 1235, 2)
+  await h.purchase.runReconcile(h.container)
+  const before = h.db.events.get("meta|Purchase|fl-1234").payload.user_data
+  const after = h.db.events.get("meta|Purchase|fl-1235").payload.user_data
+  for (const key of ["ct", "em", "fn", "ln", "ph"]) {
+    assert.ok(!(key in before), `${key} left out without consent`)
+    assert.ok(key in after, `${key} sent with consent`)
+  }
 })
 
 test("reconcile runs every part even when one fails, then reports the first error", async () => {

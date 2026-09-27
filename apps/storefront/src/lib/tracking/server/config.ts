@@ -169,7 +169,8 @@ export function destinationFor(config: PublicTrackingConfig, host: string, platf
  * Which vendor scripts this browser may load (4.2). A platform needs a
  * destination here and a browser mode other than "off"; Meta also needs
  * Automatic Advanced Matching confirmed off for that dataset, TikTok needs its
- * SPA page views confirmed off, and "ads_only" needs the platform's click
+ * SPA page views, automatic events and automatic advanced matching confirmed
+ * off (spa_off_confirmed), and "ads_only" needs the platform's click
  * cookie (already present or set by this response, `justSet`). Staff and
  * opted-out browsers load nothing.
  */

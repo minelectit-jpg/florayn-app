@@ -200,7 +200,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       if (isConverting()) return res.status(409).json({ message: "Images are already being converted." })
       const enabled = config.catalog.enabled
       background("convert_images", async () => {
-        const result = await convertPending(req.scope, { limit: imageBatchLimit(), concurrency: 2 })
+        const result = await convertPending(req.scope, { limit: imageBatchLimit() })
         if (result.skipped === "running") return "Images were already being converted."
         let note = `Converted ${result.converted} images (${result.failed} failed, ${result.pending} still to do).`
         if (result.converted > 0 && enabled) {

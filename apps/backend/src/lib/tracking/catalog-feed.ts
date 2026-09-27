@@ -514,9 +514,11 @@ export async function publishAnyway(container: any): Promise<{ ok: boolean; item
 }
 
 /**
- * Records that products, variants, options or stock changed, so the catalog
- * job rebuilds the variant index and the feed. Called after every processed
- * storefront event batch; never throws.
+ * Records that products, variants, options, collections or categories
+ * changed, so the catalog job rebuilds the variant index and the feed. Called
+ * after a processed storefront event batch with such a change; a stock-only
+ * batch (every order reserves stock) is not, and the feed's availability
+ * catches up at the daily 03:30 rebuild. Never throws.
  */
 export async function markCatalogStale(container: any): Promise<void> {
   try {

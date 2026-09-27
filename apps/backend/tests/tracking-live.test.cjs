@@ -2,7 +2,7 @@
 // admin/routes/live/page.tsx, TRACKING.md 9): Dhaka day boundaries, rollups +
 // raw tail without double counting at the watermark, live visitors over
 // non-internal browser hits, the pace projection, orders without drafts and
-// imported ones (cancelled counted apart), the shared 10 s result, staff links
+// imported ones (cancelled counted apart), the result shared per poll, staff links
 // equal to the Appendix C vector, and a page that polls only while visible,
 // renders an empty database and uses no chart library. The database is a
 // fake that answers each query from in-memory rows.
@@ -32,7 +32,7 @@ function clock(start = NOW) {
     constructor(...args) { super(...(args.length ? args : [now])) }
     static now() { return now }
   }
-  return { Date: FakeDate, advance(ms) { now += ms } }
+  return { Date: FakeDate, advance(ms) { now += ms }, set(ms) { now = ms } }
 }
 
 function makeLoader(stubs, globals = {}) {
@@ -214,9 +214,26 @@ function liveDb(w) {
         ]
         return { rows: [{ visitors: distinct(rows.map((r) => r.visitor_id)), sessions: distinct(rows.map((r) => r.session_id)) }] }
       }
-      if (s.startsWith("select order_id, source, workflow_status from order_op")) {
+      if (s.startsWith("select o.id, o.created_at, o.canceled_at, o.is_draft_order, op.source, op.workflow_status,")) {
+        // One read: the order, its order_op row and order_summary's current_order_total for the current version.
+        assert.match(s, /from order_summary s where s\.order_id = o\.id and s\.deleted_at is null and s\.version <= o\.version order by s\.version desc limit 1\) as total/)
+        assert.match(s, /left join order_op op on op\.order_id = o\.id and op\.deleted_at is null/)
+        assert.match(s, /where o\.deleted_at is null and o\.is_draft_order is not true and o\.created_at >= \?/)
+        const bounded = s.includes("and o.created_at < ?")
+        const from = time(bindings[0])
+        const to = bounded ? time(bindings[1]) : Infinity
+        assert.equal(bindings.at(-1), 20_000, "at most MAX_ORDERS rows")
+        w.orderReads.push({ from, to })
+        return { rows: w.orders
+          .filter((o) => time(o.created_at) >= from && time(o.created_at) < to && o.is_draft_order !== true)
+          .map((o) => ({ ...o, created_at: new Date(o.created_at), source: w.ops.get(o.id)?.source ?? null,
+            workflow_status: w.ops.get(o.id)?.workflow_status ?? null })) }
+      }
+      if (s.startsWith("select o.id from \"order\" o left join order_op op")) {
         const ids = JSON.parse(bindings[0])
-        return { rows: ids.filter((id) => w.ops.has(id)).map((id) => ({ order_id: id, ...w.ops.get(id) })) }
+        w.cancelReads.push(ids)
+        return { rows: w.orders.filter((o) => ids.includes(o.id) && (o.canceled_at || w.ops.get(o.id)?.workflow_status === "cancelled"))
+          .map((o) => ({ id: o.id })) }
       }
       if (s.includes("as purchase from tracking_session")) {
         const [from, to] = bindings
@@ -289,7 +306,7 @@ function liveDb(w) {
 }
 
 function liveWorld({ hits = [], watermark = null, orders = [], ops = new Map(), products = new Map(), dayDim = [], cfg = config(), extraSessions = [] } = {}) {
-  const w = { hits, orders, ops, products, dayDim, queries: [], graph: [], state: new Map(), broken: false, cfg, settingsFail: false }
+  const w = { hits, orders, ops, products, dayDim, queries: [], graph: [], orderReads: [], cancelReads: [], state: new Map(), broken: false, cfg, settingsFail: false }
   const rolled = rolledUp(hits, watermark)
   w.minute = rolled.minute
   w.sessions = [...rolled.sessions, ...extraSessions]
@@ -314,12 +331,8 @@ function container(w) {
         return {
           async graph(input) {
             w.graph.push(input)
-            if (input.entity === "product") return { data: input.filters.handle.filter((h) => w.products.has(h)).map((handle) => ({ handle, title: w.products.get(handle) })) }
-            assert.equal(input.entity, "order")
-            assert.deepEqual([...input.fields], ["id", "total", "created_at", "canceled_at", "is_draft_order"])
-            const from = time(input.filters.created_at.$gte)
-            const to = input.filters.created_at.$lt ? time(input.filters.created_at.$lt) : Infinity
-            return { data: w.orders.filter((o) => time(o.created_at) >= from && time(o.created_at) < to) }
+            assert.equal(input.entity, "product", "orders are one SQL read, never query.graph with totals")
+            return { data: input.filters.handle.filter((h) => w.products.has(h)).map((handle) => ({ handle, title: w.products.get(handle) })) }
           },
         }
       }
@@ -463,31 +476,97 @@ test("orders exclude drafts and imported orders, count cancelled apart and leave
   assert.equal(payload.today.target, 300, "the owner's default daily target")
   assert.equal(payload.yesterday_same_time.orders_all, 1, "yesterday counts only up to this time")
   assert.equal(payload.yesterday_same_time.revenue_all, 1000)
-  const graphs = w.graph.filter((g) => g.entity === "order")
-  assert.equal(new Date(graphs[0].filters.created_at.$gte).toISOString(), new Date(MIDNIGHT).toISOString(), "today is from Dhaka midnight")
-  assert.equal(new Date(graphs[1].filters.created_at.$lt).toISOString(), new Date(MIDNIGHT).toISOString())
-  assert.equal(new Date(graphs[1].filters.created_at.$gte).toISOString(), new Date(MIDNIGHT - 7 * DAY).toISOString())
+  assert.deepEqual(w.orderReads, [{ from: MIDNIGHT, to: Infinity }, { from: MIDNIGHT - 7 * DAY, to: MIDNIGHT }],
+    "today is from Dhaka midnight, the history the 7 days before")
 
   const facts = live.orderFacts(orders, ops)
   assert.deepEqual(plain(facts).map((f) => f.id), ["o_a", "o_cancel", "o_opcancel", "o_f", "o_yday", "o_yday_late"])
 })
 
-test("the 10 s cache: one shared result per host filter", async () => {
+test("the poll_seconds cache: one shared result per host filter", async () => {
   const time = clock()
   const { live } = loadLive(time)
   const w = liveWorld({ hits: [hit({ received_at: at(NOW - MINUTE) })], watermark: floorMinute(NOW - 30_000) })
   const c = container(w)
   const [a, b] = await Promise.all([live.computeLive(c), live.computeLive(c)])
   assert.equal(a, b, "two calls share one object")
-  time.advance(9_000)
-  assert.equal(await live.computeLive(c), a)
+  assert.equal(a.poll_seconds, 15)
+  time.advance(14_900)
+  assert.equal(await live.computeLive(c), a, "shared for the whole 15 s poll interval")
   const other = await live.computeLive(c, { host: HOST })
   assert.notEqual(other, a, "another host filter has its own result")
   assert.equal(other.filter.key, `host:${HOST}`)
-  time.advance(1_500)
+  time.advance(600)
   const fresh = await live.computeLive(c)
-  assert.notEqual(fresh, a, "after 10 s it is computed again")
-  assert.equal(fresh.generated_at, new Date(NOW + 10_500).toISOString())
+  assert.notEqual(fresh, a, "after poll_seconds it is computed again")
+  assert.equal(fresh.generated_at, new Date(NOW + 15_500).toISOString())
+
+  const slow = clock()
+  const { live: slower } = loadLive(slow)
+  const sw = liveWorld({ cfg: config({ dashboard: { daily_order_target: 300, poll_seconds: 45 } }) })
+  const first = await slower.computeLive(container(sw))
+  slow.advance(44_000)
+  assert.equal(await slower.computeLive(container(sw)), first, "a 45 s poll interval shares for 45 s")
+  slow.advance(1_000)
+  assert.notEqual(await slower.computeLive(container(sw)), first)
+})
+
+test("each poll reads today's orders once; the history is read once a Dhaka day and only its cancellations every 5 minutes", async () => {
+  const time = clock()
+  const { live } = loadLive(time)
+  const day = (d, h) => new Date(MIDNIGHT - d * DAY + h * 3_600_000).toISOString()
+  const orders = [
+    { id: "o_today", total: 1500, created_at: new Date(MIDNIGHT + 3_600_000).toISOString(), canceled_at: null, is_draft_order: false },
+    { id: "o_y1", total: 1000, created_at: day(1, 2), canceled_at: null, is_draft_order: false },
+    { id: "o_y2", total: 800, created_at: day(1, 3), canceled_at: null, is_draft_order: false },
+    { id: "o_d3", total: 900, created_at: day(3, 9), canceled_at: null, is_draft_order: false },
+  ]
+  const w = liveWorld({ orders, ops: new Map(), watermark: floorMinute(NOW - 30_000) })
+  const c = container(w)
+  const first = await live.computeLive(c)
+  assert.equal(first.yesterday_same_time.orders_all, 2)
+  assert.equal(first.yesterday_same_time.revenue_all, 1800)
+  assert.equal(w.orderReads.length, 2)
+
+  time.advance(20_000)
+  await live.computeLive(c)
+  assert.deepEqual(w.orderReads.map((r) => r.from), [MIDNIGHT, MIDNIGHT - 7 * DAY, MIDNIGHT], "only today is read again")
+  assert.equal(w.cancelReads.length, 0)
+
+  // Yesterday's order is cancelled in the order manager; the history shows it within 5 minutes.
+  w.ops.set("o_y2", { source: null, workflow_status: "cancelled" })
+  time.advance(5 * MINUTE)
+  const patched = await live.computeLive(c)
+  assert.equal(w.orderReads.filter((r) => r.from !== MIDNIGHT).length, 1, "the history is not read again")
+  assert.deepEqual([...w.cancelReads.at(-1)].sort(), ["o_d3", "o_y1", "o_y2"], "its cancellations are read by id")
+  assert.equal(patched.yesterday_same_time.orders_cancelled, 1)
+  assert.equal(patched.yesterday_same_time.revenue_all, 1000)
+  w.ops.delete("o_y2")
+  time.advance(5 * MINUTE)
+  assert.equal((await live.computeLive(c)).yesterday_same_time.orders_cancelled, 0, "an undone cancellation too")
+
+  // After Dhaka midnight the history is a new 7 days.
+  time.set(MIDNIGHT + DAY + 60_000)
+  await live.computeLive(c)
+  assert.deepEqual(w.orderReads.slice(-2), [{ from: MIDNIGHT + DAY, to: Infinity }, { from: MIDNIGHT - 6 * DAY, to: MIDNIGHT + DAY }])
+})
+
+test("the outbox counts are shared for 60 s and today's unknown content ids too", async () => {
+  const time = clock()
+  const asked = []
+  const { live } = loadLive(time, { "./health": { outboxHealth: async (_, options) => { asked.push(options); return [] } } })
+  const w = liveWorld({ watermark: floorMinute(NOW - 30_000) })
+  const c = container(w)
+  const unknownReads = () => w.queries.filter((q) => q.sql.includes("(flags & 64) <> 0")).length
+  await live.computeLive(c)
+  assert.ok(asked[0].maxAgeMs >= 60_000, "outboxHealth may answer from its 60 s cache")
+  assert.equal(unknownReads(), 1)
+  time.advance(20_000)
+  await live.computeLive(c)
+  assert.equal(unknownReads(), 1, "the day's unknown ids are not recounted on every poll")
+  time.advance(45_000)
+  await live.computeLive(c)
+  assert.equal(unknownReads(), 2)
 })
 
 test("renders with an empty database, and a missing table blanks only its part", async () => {

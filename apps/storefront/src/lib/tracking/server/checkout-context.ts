@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers"
 
-import { getTrackingConfig } from "./config"
+import { checkoutConsent, getTrackingConfig } from "./config"
 import { decodeSource, isNewVisitor, isSessionId, isVisitorId, vendorIds } from "./cookies"
 import { assertServer } from "./guard"
 import { derivedIngestKey } from "./keys"
@@ -107,7 +107,10 @@ export async function checkoutTrackingHeaders(): Promise<Record<string, string> 
       new: Boolean(vid && sid && isNewVisitor(vid, sid)),
       staff: request.staff,
       optout: request.optout,
-      consent_version: config.privacy.consent_version,
+      // Only when the consent line is shown under Place order (the same rule
+      // as the checkout page): the backend hashes an order's contact details
+      // only when its stored context carries a version (C7).
+      consent_version: checkoutConsent(config)?.version ?? null,
     }
     return { "x-florayn-ingest-key": key, "x-florayn-tracking": encodeTrackingHeader(context) }
   } catch {

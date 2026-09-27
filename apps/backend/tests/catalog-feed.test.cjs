@@ -632,14 +632,22 @@ test("with sharp absent, convertPending records sharp_missing and returns withou
 
 test("convertPending makes paced 1200 px JPEG copies in R2 and records them; image links follow the mode", async () => {
   const operations = []
+  let inFlight = 0
+  let most = 0
   const sharp = (input) => {
     const chain = {
       resize(width, height, options) { operations.push(["resize", width, height, plain(options)]); return chain },
       jpeg(options) { operations.push(["jpeg", plain(options)]); return chain },
-      async toBuffer() { return Buffer.from(`jpg:${input.toString()}`) },
+      async toBuffer() {
+        most = Math.max(most, ++inFlight)
+        await tick(1)
+        inFlight -= 1
+        return Buffer.from(`jpg:${input.toString()}`)
+      },
     }
     return chain
   }
+  sharp.concurrency = (threads) => { operations.push(["concurrency", threads]); return threads }
   const { images, s3calls } = loadModules({
     sharp,
     s3: (command) => command.type === "get"
@@ -667,7 +675,10 @@ test("convertPending makes paced 1200 px JPEG copies in R2 and records them; ima
   assert.equal(put.input.CacheControl, "public, max-age=31536000, immutable")
   const get = s3calls.find((c) => c.type === "get")
   assert.match(get.input.Key, /^[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/\d\.webp$|^site\//, "sources are read from the bucket by key")
-  assert.deepEqual(operations.slice(0, 2), [["resize", 1200, 1200, { fit: "inside" }], ["jpeg", { quality: 82, mozjpeg: true }]])
+  assert.deepEqual(operations.slice(0, 3), [["concurrency", 1], ["resize", 1200, 1200, { fit: "inside" }], ["jpeg", { quality: 82 }]],
+    "libvips gets one thread and the JPEG is plain quality 82 (no mozjpeg)")
+  assert.equal(operations.filter(([name]) => name === "concurrency").length, 1, "set once per process")
+  assert.equal(most, 1, "one image at a time even when a caller asks for 2")
   const row = container.db.images.get(needed[0])
   assert.equal(row.jpg_url, `${IMG}/feed-jpg/${sha1(needed[0])}.jpg`)
 
@@ -683,6 +694,33 @@ test("convertPending makes paced 1200 px JPEG copies in R2 and records them; ima
   assert.equal(second.pending, 0)
   const again = await images.convertPending(container, { limit: 1000, concurrency: 2 })
   assert.equal(again.converted, 0, "ready copies are not made twice")
+})
+
+test("a run stops at its time budget and the next run carries on; the budget is larger at night", async () => {
+  const { images, s3calls } = loadModules({
+    sharp: () => ({ resize() { return this }, jpeg() { return this }, async toBuffer() {
+      await new Promise((resolve) => setTimeout(resolve, 15))
+      return Buffer.from("x")
+    } }),
+    s3: (command) => command.type === "get" ? { Body: { transformToByteArray: async () => new Uint8Array(Buffer.from("webp")) } } : {},
+  })
+  const container = world({ config: config({ enabled: true }) })
+  const needed = (await images.neededImageSources(container, container.config.catalog)).length
+  const spent = await images.convertPending(container, { limit: 1000, budget: { convertMs: 1, runMs: 60_000 } })
+  assert.equal(spent.converted, 1, "the first conversion used up the sharp budget")
+  assert.equal(spent.budget_hit, true)
+  assert.equal(spent.pending, needed - 1)
+  assert.equal(container.db.state.get("catalog:images").budget_hit, true)
+  const none = await images.convertPending(container, { limit: 1000, budget: { convertMs: 60_000, runMs: 0 } })
+  assert.equal(none.converted, 0, "no time left for the run")
+  assert.equal(s3calls.filter((c) => c.type === "put").length, 1)
+  const rest = await images.convertPending(container, { limit: 1000, budget: { convertMs: 60_000, runMs: 60_000 } })
+  assert.equal(rest.converted, needed - 1)
+  assert.equal(rest.budget_hit, undefined)
+  assert.equal(rest.pending, 0)
+
+  assert.deepEqual(plain(images.imageRunBudget(new Date("2026-09-27T06:00:00Z"))), { convertMs: 20_000, runMs: 120_000 }, "12:00 Dhaka")
+  assert.deepEqual(plain(images.imageRunBudget(new Date("2026-09-26T20:00:00Z"))), { convertMs: 120_000, runMs: 600_000 }, "02:00 Dhaka")
 })
 
 test("a failed source is recorded and retried only after a day; the batch size is paced by Dhaka time", async () => {
@@ -816,7 +854,7 @@ test("the catalog job registers itself and keeps the variant index fresh even wh
   await job.runCatalogJob(container)
   assert.equal(calls[0][0], "convert")
   assert.ok([150, 600].includes(calls[0][1].limit))
-  assert.equal(calls[0][1].concurrency, 2)
+  assert.equal(calls[0][1].concurrency, undefined, "one image at a time (sharp.concurrency(1)); no worker count is passed")
   assert.equal(calls[1], "publish", "no build yet, so the feed is built")
 
   calls.length = 0

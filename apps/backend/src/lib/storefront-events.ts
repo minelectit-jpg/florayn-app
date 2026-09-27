@@ -49,6 +49,8 @@ type Batch = {
   options: Set<string>
   tags: Set<string>
   rebuildAll: boolean
+  /** A product, variant, option or collection/category change; a stock-only batch leaves the ad catalog alone. */
+  catalog: boolean
 }
 let pending: Batch | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -106,7 +108,9 @@ async function flush() {
     if (batch.rebuildAll) await rebuildCards(batch.container)
     else if (batch.products.size) await rebuildCards(batch.container, { productIds: [...batch.products] })
     // The ad catalog job rebuilds its variant index and feed; never throws.
-    void markCatalogStale(batch.container)
+    // Every order reserves stock and changes nothing the index holds, so a
+    // stock-only batch waits for the daily rebuild (TRACKING.md 8.1, 8.5).
+    if (batch.catalog) void markCatalogStale(batch.container)
     const delivered = await queueStorefrontRevalidation({ tags: [...batch.tags] })
     if (!delivered) throw new Error("Storefront event refresh could not be delivered")
   } catch {
@@ -119,6 +123,7 @@ async function flush() {
         for (const value of newer[key]) batch[key].add(value)
       }
       batch.rebuildAll ||= newer.rebuildAll
+      batch.catalog ||= newer.catalog
     }
     boundIds(batch)
     pending = batch
@@ -136,12 +141,13 @@ export function queueStorefrontEvent(container: any, name: string, data: unknown
   if (!kind) return
   const batch = pending ??= {
     container, products: new Set(), variants: new Set(), options: new Set(), tags: new Set(),
-    rebuildAll: false,
+    rebuildAll: false, catalog: false,
   }
   if (kind === "stock") {
     // Blank inventory is a separate fetch; orders need not expire the catalogue.
     batch.tags.add("stock")
   } else {
+    batch.catalog = true
     batch.tags.add("products")
     batch.tags.add("catalog")
     if (!batch.rebuildAll && kind !== "catalog" && !(kind === "product" && name.endsWith(".deleted"))) {

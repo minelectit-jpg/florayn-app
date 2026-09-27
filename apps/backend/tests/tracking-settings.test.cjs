@@ -225,6 +225,15 @@ test("every 3.2 rule rejects an invalid value", () => {
   for (const body of [null, [], "x", 5]) assert.equal(patch(s, body).ok, false)
 })
 
+test("spa_off_confirmed also stands for TikTok's automatic advanced matching being off", () => {
+  const s = loadSettings()
+  // One confirmation, no new key: it gates the TikTok pixel, which would otherwise read the checkout's phone and email fields.
+  assert.match(patch(s, { tiktok: { spa_off_confirmed: "true" } }).errors.join(" "), /SPA page views and automatic advanced matching OFF in TikTok/)
+  assert.equal(patch(s, { tiktok: { aam_off_confirmed: true } }).ok, false, "no separate TikTok key")
+  const source = fs.readFileSync(path.join(__dirname, "../src/admin/routes/tracking/page.tsx"), "utf8")
+  assert.ok(source.includes("SPA page views, automatic events and automatic advanced matching are OFF in both pixels"))
+})
+
 test("share ON needs a consent text AND a published Privacy page", () => {
   const s = loadSettings()
   const text = s.SUGGESTED_CONSENT_TEXT

@@ -123,8 +123,10 @@ export async function insertOutbox(db: Db, rows: OutboxInsert[]): Promise<number
 
 /**
  * Records dashboard hits; a repeated (event_name, event_id) is skipped, so a
- * resent batch counts once. Varchar columns are cut to their size instead of
- * failing the whole transaction. Returns how many rows were inserted.
+ * resent batch counts once (ingest keys an InitiateCheckout hit by its
+ * per-cart id and the session, so each session's checkout counts). Varchar
+ * columns are cut to their size instead of failing the whole transaction.
+ * Returns how many rows were inserted.
  */
 export async function insertHits(db: Db, rows: HitInsert[]): Promise<number> {
   if (!rows.length) return 0
