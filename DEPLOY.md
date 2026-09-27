@@ -456,6 +456,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   `TRACKING_EDGE_SECRET` = the second value.
 - Both are runtime variables (leave "Build variable" unticked) and never
   `NEXT_PUBLIC_`. A variable reaches the container only on the next deploy.
+  Through the Coolify API (4.3.x) that is `POST /applications/<uuid>/envs` with
+  `is_buildtime: false, is_runtime: true` (Coolify adds a preview copy too).
 - Rotating `TRACKING_INGEST_SECRET` invalidates the staff links and cookies:
   staff open the new links from Admin > Live afterwards.
 
@@ -567,7 +569,9 @@ PowerShell use `$env:DATABASE_URL = "..."` and `Remove-Item Env:DATABASE_URL`.
 ### 6. Deploy
 
 1. Commit and push the branch Coolify builds (check the app's Git settings).
-   Coolify builds the pushed commit, never local files.
+   Coolify builds the pushed commit, never local files. A push does not start
+   a build by itself (2026-09-27): trigger each app with the Coolify API,
+   `POST /api/v1/deploy?uuid=<app uuid>`, or its Deploy button.
 2. Deploy the backend in Coolify and wait until it is healthy.
 3. Deploy the storefront.
 4. Purge and warm (the storefront speed rules): in Cloudflare, Caching >
@@ -612,9 +616,11 @@ done
 curl -sS -o /dev/null -D - -A "$UA" "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
 curl -sS -o /dev/null -D - -A "$UA" -H 'If-None-Match: "<etag from above>"' "https://api.new.florayn.com/feeds/<feed token>/meta.tsv"
 
-# Last, the rate-limit rule: 100 calls, 10 at a time, from your address; about 60 give 204 and the
-# rest 429 (Cloudflare's count is approximate). Your address then gets 429 on /api/t/ for 10 seconds.
-seq 1 100 | xargs -P 10 -I{} curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" \
+# Last, the rate-limit rule: 300 calls, 10 at a time, from your address; some give 204 and the
+# rest 429. Cloudflare's count lags, so the first ~100 of a burst can all pass (2026-09-27: 100
+# calls gave 100 x 204; 300 gave 133 x 204 and 167 x 429). Your address then gets 429 on /api/t/
+# for 10 seconds.
+seq 1 300 | xargs -P 10 -I{} curl -s -o /dev/null -w "%{http_code}\n" -A "$UA" \
   -H "origin: https://new.florayn.com" -H "content-type: text/plain" \
   -d '{"v":1,"sent_at":1,"events":[]}' https://new.florayn.com/api/t/e/ | sort | uniq -c
 ```
