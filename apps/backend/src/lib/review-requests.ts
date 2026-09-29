@@ -134,19 +134,50 @@ async function sentToday(container: any): Promise<number> {
   return count
 }
 
+/** One batch at a time in this process: scheduled jobs run side by side, and a slow batch can outlast the hour. */
+let batchRunning = false
+
+/**
+ * Takes the order out of the queue before sending, so two batches (the hourly
+ * job and Admin's "send one batch", or two backend processes) never both send
+ * it. True when this call claimed it. sendReviewRequest then records the result.
+ */
+async function claimOrder(container: any, opId: string): Promise<boolean> {
+  const db = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  const result = await db.raw(
+    "update order_op set review_request_sent_at = now() where id = ? and review_request_sent_at is null and deleted_at is null returning id",
+    [opId]
+  )
+  return (result?.rows ?? []).length > 0
+}
+
+/** Puts a claimed order back in the queue (the send threw, or the order was not found), as before claiming. */
+async function releaseOrder(container: any, opId: string): Promise<void> {
+  const db = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+  await db.raw("update order_op set review_request_sent_at = null where id = ? and review_request_note is null and review_request_channel is null", [opId])
+}
+
 /** One run: send what is due, within the day's limit. */
 export async function runReviewRequests(container: any, settings: ReviewProgram, { ignoreDisabled = false } = {}): Promise<{ sent: number; failed: number }> {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   if (!settings.requests.enabled && !ignoreDisabled) return { sent: 0, failed: 0 }
-  const room = Math.max(0, settings.requests.batch - (await sentToday(container)))
-  if (!room) return { sent: 0, failed: 0 }
-  let sent = 0
-  let failed = 0
-  for (const op of await dueOrders(container, settings, room)) {
-    const result = await sendReviewRequest(container, op.order_id, settings).catch((error) => ({ ok: false, note: String(error?.message ?? error) }))
-    if (result.ok) sent++
-    else failed++
+  if (batchRunning) return { sent: 0, failed: 0 }
+  batchRunning = true
+  try {
+    const room = Math.max(0, settings.requests.batch - (await sentToday(container)))
+    if (!room) return { sent: 0, failed: 0 }
+    let sent = 0
+    let failed = 0
+    for (const op of await dueOrders(container, settings, room)) {
+      if (!(await claimOrder(container, op.id))) continue
+      const result = await sendReviewRequest(container, op.order_id, settings).catch((error) => ({ ok: false, note: String(error?.message ?? error), thrown: true }))
+      if ((result as { thrown?: boolean }).thrown || result.note === "order not found") await releaseOrder(container, op.id).catch(() => {})
+      if (result.ok) sent++
+      else failed++
+    }
+    if (sent || failed) logger.info(`[review-requests] ${sent} sent, ${failed} not sent`)
+    return { sent, failed }
+  } finally {
+    batchRunning = false
   }
-  if (sent || failed) logger.info(`[review-requests] ${sent} sent, ${failed} not sent`)
-  return { sent, failed }
 }

@@ -25,7 +25,16 @@ const redisModules = redisUrl
       },
       {
         resolve: "@medusajs/medusa/workflow-engine-redis",
-        options: { redis: { url: redisUrl } },
+        // Scheduled jobs share one BullMQ worker, which runs one job at a time
+        // by default: the up-to-18-minute storefront warm pass then held the
+        // one-minute tracking jobs back 8-19 minutes of every 20. With 4 slots
+        // a job can also overlap its own next run, and workflow-engine-redis
+        // ignores the scheduler's concurrency "forbid", so every job must guard
+        // itself: tracking jobs via runTrackingJob, warm-storefront and
+        // review-requests with a running flag (review-requests also claims each
+        // order before sending). 4 = the long jobs (warm, catalog at night,
+        // review batches) + 1, so the minute jobs always get a slot.
+        options: { redis: { url: redisUrl, jobWorkerOptions: { concurrency: 4 } } },
       },
       {
         resolve: "@medusajs/medusa/locking",
