@@ -3039,6 +3039,23 @@ QA run 1 (2026-09-28, deployed 403c9d8, Meta on, TEST dataset, share OFF):
   `system_generated` events even with every filter ticked, so check them in
   the dataset stats (Overview, or the ads dataset stats tool), not Test Events.
 - TEST ORDERs: #1109 (Claude), #1110 and #1111 (owner); all to be cancelled.
+- Step 16 (2026-09-29, owner published Privacy with an Advertising Partners
+  section, consent v2, share ON): the consent line and its Privacy link show
+  under Place order. TEST ORDER #1112 (email qa-test@example.com): the browser
+  Purchase block carries ph = sha256("8801700000000"), fn "test", ln "order",
+  ct "dhaka", country "bd", em, external_id, all normalized as Meta expects.
+  With seven hashes the tr URL passes 2048 characters, so fbevents sends the
+  Purchase as a hidden form POST, which Resource Timing does not list; confirm
+  it from the dataset stats (WEB_ONLY Purchase for that hour) and Purchase EMQ.
+- fbevents logs "Parameter 'currency' is invalid for event 'Purchase'": BDT is
+  not in its client-side VALID_CURRENCY_CODES (49 codes). It is a console
+  warning only; Meta processed BDT Purchases from both browser and server
+  (Test Events, #1111).
+- Meta's own config for the TEST pixel (signals/config, `openbridge`) makes
+  fbevents also POST every event to a Meta Conversions API Gateway endpoint
+  (`xd-...ecs.us-east-1.on.aws/events?cee=no`, fallback on run.app). That is
+  the extra server Purchase with 7 parameters; it is deduplicated. Check the
+  live pixel's config at cutover.
 - Open: steps 7, 8,
   9, 10, 11 (need DevTools throttling, a network cut, a review token, an ad
   blocker or an admin session in the same browser); step 12 on #1109 by the
