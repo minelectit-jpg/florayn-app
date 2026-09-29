@@ -3056,6 +3056,13 @@ QA run 1 (2026-09-28, deployed 403c9d8, Meta on, TEST dataset, share OFF):
   (`xd-...ecs.us-east-1.on.aws/events?cee=no`, fallback on run.app). That is
   the extra server Purchase with 7 parameters; it is deduplicated. Check the
   live pixel's config at cutover.
+- Result (dataset stats and quality, 2026-09-29 08:00-09:00 UTC): #1112's
+  browser Purchase arrived (WEB_ONLY Purchase 1; server 2 = ours + the
+  gateway mirror; every event type shows the same browser 1 / server 2
+  pattern). Purchase EMQ 9.3 (live baseline 8.6) with email, phone, fn, ln,
+  ct, country, external_id, ip, user agent and fbp at 100%. #1109-#1112
+  cancelled by the owner. Meta QA on the TEST dataset is complete; TikTok
+  (step 17) waits for a TikTok test pixel and token, Google Ads for cutover.
 - Open: steps 7, 8,
   9, 10, 11 (need DevTools throttling, a network cut, a review token, an ad
   blocker or an admin session in the same browser); step 12 on #1109 by the
