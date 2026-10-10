@@ -133,6 +133,11 @@ module, the Live dashboard, the Privacy page or the catalog feed. Nothing
 reaches an ad platform without the Cloudflare edge header, and no contact data
 leaves while share is off.
 
+Read `BACKUP.md` before changing the backup job, `/backup-pull/*`, Admin >
+Backups or the backend Dockerfile's PostgreSQL client. Backups are encrypted to
+the owner's public key only, and the server must never hold a Google credential
+or the private key.
+
 Single test — pass a path/pattern through to Jest, keeping `TEST_TYPE`:
 
 ```bash
