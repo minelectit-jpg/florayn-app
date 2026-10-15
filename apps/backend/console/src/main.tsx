@@ -1,12 +1,12 @@
 // Florayn Console (CONSOLE.md): our own admin on the same Medusa backend.
 // Pages are addressed after the # (e.g. /console#/mockup-studio) because the
 // backend serves the console from a single /console route.
-import { StrictMode, useEffect, useState, type FormEvent } from "react"
+import { Component, StrictMode, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 
 import "./styles.css"
 import { login, logout, me, type User } from "./api"
-import { Button, Field, Icon, Toaster } from "./ui"
+import { Button, confirmLeave, Field, Icon, Toaster } from "./ui"
 import Home from "./pages/home"
 import MockupStudio from "./pages/mockup-studio"
 import Devices from "./pages/devices"
@@ -17,15 +17,39 @@ const PAGES = [
   { path: "/models", label: "Models", icon: Icon.phone, render: () => <Devices /> },
 ]
 
+// set when a sidebar link has already asked (or had nothing to ask), so the hashchange after it does not ask twice
+let asked = false
+
 function useHashPath() {
   const read = () => window.location.hash.replace(/^#/, "") || "/"
   const [path, setPath] = useState(read)
+  const current = useRef(path)
   useEffect(() => {
-    const on = () => setPath(read())
+    const on = () => {
+      const next = read()
+      if (next === current.current) return
+      // a page with work in progress (useLeaveGuard) can keep the console where it is; links ask before they
+      // navigate (no history entry on Cancel), Back/Forward and typed addresses are asked here
+      const ok = asked || confirmLeave()
+      asked = false
+      if (!ok) { history.replaceState(null, "", "#" + current.current); return }
+      current.current = next
+      setPath(next)
+    }
     window.addEventListener("hashchange", on)
     return () => window.removeEventListener("hashchange", on)
   }, [])
   return path
+}
+
+/** One page that throws while rendering shows this card instead of blanking the whole console. */
+class PageBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (!this.state.failed) return this.props.children
+    return <div className="card stack"><p className="note error">Something went wrong on this page.</p><div><Button onClick={() => location.reload()}>Reload</Button></div></div>
+  }
 }
 
 function Login({ onDone }: { onDone: () => void }) {
@@ -65,14 +89,19 @@ function App() {
   return <div className="shell">
     <aside className={`side${menu ? " open" : ""}`}>
       <div className="brand"><b>Florayn</b><span>Console</span></div>
-      {PAGES.map((p) => <a key={p.path} className="nav" href={`#${p.path}`} aria-current={p === page ? "page" : undefined}>{p.icon}{p.label}</a>)}
+      {PAGES.map((p) => <a key={p.path} className="nav" href={`#${p.path}`} aria-current={p === page ? "page" : undefined} onClick={(e) => {
+        setMenu(false)
+        if (p === page || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+        if (confirmLeave()) asked = true
+        else e.preventDefault()
+      }}>{p.icon}{p.label}</a>)}
       <div className="grow" />
       <a className="nav" href="/app" target="_blank" rel="noreferrer">{Icon.external}Classic admin</a>
-      <div className="who"><span>{user.email}</span><Button size="small" variant="ghost" onClick={async () => { await logout(); setUser(null) }}>Sign out</Button></div>
+      <div className="who"><span>{user.email}</span><Button size="small" variant="ghost" onClick={async () => { if (!confirmLeave()) return; await logout(); setUser(null) }}>Sign out</Button></div>
     </aside>
     <div>
       <div className="topbar"><Button size="small" variant="ghost" aria-label="Menu" onClick={() => setMenu(!menu)}>{Icon.menu}</Button><div className="brand" style={{ padding: 0 }}><b>Florayn</b><span>Console</span></div></div>
-      <main className="main">{page.render()}</main>
+      <main className="main"><PageBoundary key={page.path}>{page.render()}</PageBoundary></main>
     </div>
     <Toaster />
   </div>

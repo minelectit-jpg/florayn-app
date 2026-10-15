@@ -1,5 +1,6 @@
 // Puts a design on a pre-rendered Blender shot, no Blender needed (MOCKUP_STUDIO.md).
-// Validated against the Blender finals: print-area difference ~2/255 at 2400 px.
+// Validated against the Blender finals (validate.mjs, iPhone 18 Pro Max Black, 2400 px, 2026-10-16):
+// print-area mean difference 1.24-2.84 of 255 per shot (1.66 on average; 1.98 before SHARPNESS and the blur median).
 //
 // Layers per shot (8-bit PNGs, decoded to byte arrays):
 //   static  RGB  B render (print surface black), premultiplied linear, enc(v) = sqrt(v / (1 + v))
@@ -113,8 +114,63 @@ function bilinear(lv: Level, u: number, v: number, out: number[], k: number) {
   }
 }
 
-/** Returns RGBA bytes, straight alpha, sRGB (like the Blender PNG). */
-export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDesign, blurScale = 2.5): Uint8ClampedArray {
+/** How the depth-of-field spread and the pixel footprint pick the mip level. */
+export type Sharpness = { blurScale: number; lodBias: number }
+/** Best match to the Blender finals (quality study 2026-10-16): mean |Lap| ratio 0.996, mean abs diff 1.03 (was 1.30). */
+export const SHARPNESS: Sharpness = { blurScale: 1.5, lodBias: -0.5 }
+
+/**
+ * 5x5 median of the blur layer over print pixels; run once per layer load. In-focus blur values are mostly float32
+ * noise from E[uv^2] - E[uv]^2, which makes the mip level jump from pixel to pixel (a sparkly halo at hard edges).
+ * The median removes the speckle (shot 12 lapCorr 0.64 -> 0.74).
+ * For each pixel with coverage > 0: the lower median of the window's pixels with coverage >= 128 (kept when there are
+ * none). Pixels outside the print keep their value. A sliding histogram per row gives the same bytes as sorting each
+ * 5x5 window (tests/mockup-studio.test.cjs keeps that version as the reference) about 4x faster: 2400 px 0.15-0.23 s.
+ */
+export function denoiseBlur(blur: Uint8Array, aux: Uint8Array, w: number, h: number): Uint8Array {
+  const out = new Uint8Array(blur) // a copy (Buffer.slice would share memory)
+  const hist = new Int32Array(256)
+  for (let y = 0; y < h; y++) {
+    let any = false // rows without a print pixel need nothing
+    for (let k = y * w * 3 + 2, end = (y + 1) * w * 3; k < end; k += 3) if (aux[k] !== 0) { any = true; break }
+    if (!any) continue
+    const y0 = Math.max(0, y - 2), y1 = Math.min(h - 1, y + 2)
+    hist.fill(0)
+    let n = 0, m = 0, below = 0 // samples in the window, median candidate, samples below it
+    for (let x = -2; x < w; x++) {
+      const add = x + 2, drop = x - 3
+      if (add < w) {
+        for (let yy = y0; yy <= y1; yy++) {
+          const k = yy * w + add
+          if (aux[k * 3 + 2] < 128) continue
+          const v = blur[k]
+          hist[v]++; n++
+          if (v < m) below++
+        }
+      }
+      if (drop >= 0) {
+        for (let yy = y0; yy <= y1; yy++) {
+          const k = yy * w + drop
+          if (aux[k * 3 + 2] < 128) continue
+          const v = blur[k]
+          hist[v]--; n--
+          if (v < m) below--
+        }
+      }
+      if (x < 0) continue
+      const i = y * w + x
+      if (aux[i * 3 + 2] === 0 || n === 0) continue
+      const t = (n - 1) >> 1 // the lower median is the t-th smallest
+      while (below > t) { m--; below -= hist[m] }
+      while (below + hist[m] <= t) { below += hist[m]; m++ }
+      out[i] = m
+    }
+  }
+  return out
+}
+
+/** Returns RGBA bytes, straight alpha, sRGB (like the Blender PNG). Expects the blur layer already through denoiseBlur. */
+export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDesign, { blurScale, lodBias }: Sharpness = SHARPNESS): Uint8ClampedArray {
   const { w, h } = layers
   const n = w * h
   const U = new Float32Array(n), V = new Float32Array(n), M = new Uint8Array(n)
@@ -147,7 +203,9 @@ export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDe
         if (!isFinite(fx)) fx = isFinite(fy) ? fy : 1
         if (!isFinite(fy)) fy = fx
         const sigmaMm = (2 ** (layers.blur[i] / 24) - 1) / 64
-        const lod = Math.min(Math.log2(Math.max(1, fx, fy, sigmaMm * pxPerMm * blurScale)), maxLod)
+        const foot = Math.max(1, fx, fy, sigmaMm * pxPerMm * blurScale)
+        // a negative bias would ask for a level sharper than the design itself: clamp to 0..maxLod
+        const lod = Math.min(Math.max(Math.log2(foot) + lodBias, 0), maxLod)
         const l0 = Math.floor(lod), f = lod - l0
         col[0] = col[1] = col[2] = 0
         bilinear(design.levels[l0], U[i], V[i], col, 1)

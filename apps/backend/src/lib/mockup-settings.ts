@@ -23,8 +23,12 @@ export type MockupSettings = {
   case_type: string
   /** Shot numbers that go into the product gallery, in gallery order. */
   shots: number[]
+  /** Shop images only (downloads are lossless 2400 px PNGs). */
   image_size: number
+  /** WebP quality of the shop images, 50-100. */
   quality: number
+  /** Make shop images from the 2400 px renders, then shrink them (sharper, about 4x slower to publish). */
+  supersample: boolean
   sets: MockupSet[]
 }
 
@@ -33,7 +37,8 @@ export const MOCKUP_DEFAULTS: MockupSettings = {
   case_type: "signature",
   shots: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
   image_size: 1200,
-  quality: 85,
+  quality: 92,
+  supersample: true,
   sets: [],
 }
 
@@ -64,6 +69,7 @@ export function mockupSettings(value: unknown): MockupSettings {
     shots: shots.length ? [...new Set(shots)] : [...MOCKUP_DEFAULTS.shots],
     image_size: IMAGE_SIZES.includes(saved.image_size as number) ? saved.image_size as number : MOCKUP_DEFAULTS.image_size,
     quality: Number.isInteger(saved.quality) && (saved.quality as number) >= 50 && (saved.quality as number) <= 100 ? saved.quality as number : MOCKUP_DEFAULTS.quality,
+    supersample: typeof saved.supersample === "boolean" ? saved.supersample : MOCKUP_DEFAULTS.supersample,
     sets: Array.isArray(saved.sets) ? saved.sets.map(cleanSet).filter((s): s is MockupSet => s !== null) : [],
   }
 }
@@ -84,6 +90,8 @@ export function validateMockupSettings(body: unknown, caseTypes: { slug: string 
   }
   if (!IMAGE_SIZES.includes(body.image_size as number)) throw new Error(`Image size must be one of ${IMAGE_SIZES.join(", ")}.`)
   if (!Number.isInteger(body.quality) || (body.quality as number) < 50 || (body.quality as number) > 100) throw new Error("Image quality must be a whole number from 50 to 100.")
+  if (body.supersample !== undefined && typeof body.supersample !== "boolean") throw new Error("Say whether shop images are made from the 2400 px renders.")
+  const supersample = body.supersample === undefined ? true : body.supersample
   if (!Array.isArray(body.sets) || body.sets.length > MAX_SETS) throw new Error(`Provide up to ${MAX_SETS} mockup sets.`)
   const seen = new Set<string>()
   const sets = body.sets.map((raw, i) => {
@@ -105,5 +113,5 @@ export function validateMockupSettings(body: unknown, caseTypes: { slug: string 
     if (typeof raw.enabled !== "boolean") throw new Error(`${label}: say whether it is on.`)
     return { device: raw.device, base_url: String(raw.base_url).replace(/\/+$/, ""), colours: colours as string[], default_colour: raw.default_colour, enabled: raw.enabled }
   })
-  return { case_type: body.case_type, shots: shots as number[], image_size: body.image_size as number, quality: body.quality as number, sets }
+  return { case_type: body.case_type, shots: shots as number[], image_size: body.image_size as number, quality: body.quality as number, supersample, sets }
 }

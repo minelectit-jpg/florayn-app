@@ -1,10 +1,10 @@
 // Mockup Studio > Settings: the case type the mockups sell, the gallery shots in
-// order, and the image size/quality (MOCKUP_STUDIO.md).
+// order, and the shop images' size, quality and sharpness (MOCKUP_STUDIO.md).
 import { useEffect, useState } from "react"
 
 import { post } from "../../api"
 import { loadMeta, type Settings } from "../../mockup/layers"
-import { Button, Chip, Field, toast, useUnsaved } from "../../ui"
+import { Button, Chip, Field, toast, Toggle, useUnsaved } from "../../ui"
 
 type CaseType = { slug: string; name: string; price: number }
 
@@ -28,22 +28,30 @@ export default function StudioSettings({ settings, caseTypes, onSaved }: { setti
     setSaving(true)
     try {
       const result = await post<{ settings: Settings }>("/admin/mockups", { ...draft, shots: shots.filter((n) => draft.shots.includes(n)), quality: Number(quality) })
-      setDraft(result.settings); onSaved(result.settings)
+      setDraft(result.settings); setQuality(String(result.settings.quality)); onSaved(result.settings)
       toast("Settings saved.", "success")
     } catch (error: any) { toast(error.message, "error") } finally { setSaving(false) }
   }
 
+  const q = Number(quality)
   const toggle = (n: number) => setDraft((d) => ({ ...d, shots: d.shots.includes(n) ? d.shots.filter((x) => x !== n) : [...d.shots, n] }))
   return <div className="card stack">
     <h2>Settings</h2>
     <div className="grid2">
       <Field label="Case type the mockups show" hint="New products are sold in this case type. The price comes from Case Types.">
         <select className="select" value={draft.case_type} onChange={(e) => setDraft((d) => ({ ...d, case_type: e.target.value }))}>{caseTypes.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</select></Field>
-      <Field label="Product image size" hint="The shop's images are 1200 px.">
+      <Field label="Product image size" hint="Shop images only. Downloads are always 2400 px and not compressed.">
         <select className="select" value={draft.image_size} onChange={(e) => setDraft((d) => ({ ...d, image_size: Number(e.target.value) }))}>{[600, 1200, 2400].map((s) => <option key={s} value={s}>{s} x {s} px</option>)}</select></Field>
-      <Field label="WebP quality (50-100)" hint="Lower is smaller and loads faster."><input className="input" type="number" min={50} max={100} step={1} value={quality} onChange={(e) => setQuality(e.target.value)} /></Field>
+      <div className="stack" style={{ gap: 8 }}>
+        <Field label="WebP quality (50-100)" hint="92 keeps fine detail. Lower loads a little faster."><input className="input" type="number" min={50} max={100} step={1} value={quality} onChange={(e) => setQuality(e.target.value)} /></Field>
+        {Number.isFinite(q) && q < 90 && <p className="note warn row between">Quality {q} loses fine detail. <Button size="small" onClick={() => setQuality("92")}>Use 92</Button></p>}
+      </div>
+      <div className="row between" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+        <div className="stack" style={{ gap: 4 }}><strong>Sharper shop images</strong><small className="muted ms-small">Make shop images from the 2400 px renders, then shrink them. About 4× slower to publish.</small></div>
+        <Toggle checked={draft.supersample !== false} onChange={(supersample) => setDraft((d) => ({ ...d, supersample }))} label="Sharper shop images" />
+      </div>
     </div>
-    <div className="stack" style={{ gap: 8 }}><strong>Gallery images</strong><p className="faint">In this order on the product page; the first is the main picture.</p>
+    <div className="stack" style={{ gap: 8 }}><strong>Gallery images</strong><p className="muted ms-small">In this order on the product page; the first is the main picture.</p>
       <div className="row">{shots.map((n) => <Chip key={n} on={draft.shots.includes(n)} onClick={() => toggle(n)}>{names[n] ?? `Shot ${n}`}</Chip>)}</div></div>
     <div><Button variant="primary" onClick={save} loading={saving} disabled={!dirty || !draft.shots.length}>Save settings</Button></div>
   </div>
