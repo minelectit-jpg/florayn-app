@@ -127,9 +127,9 @@ export default function MockupSets({ settings, devices, onSaved }: { settings: S
     </div>
 
     <div className="card stack">
-      <div><h2>Upload a model's layers</h2><p className="faint">Choose the model, then its folder from the Blender pipeline (one folder per phone colour inside). Uploading again replaces that model's set.</p></div>
+      <div><h2>Upload a model's layers</h2><p className="faint">Choose the model, then its folder from the Blender pipeline (one folder per phone colour inside). Uploading again replaces that model's set. A model that is not listed yet is added under <a href="#/models">Models</a>.</p></div>
       <fieldset disabled={Boolean(progress)} className="grid2" style={{ border: 0, padding: 0, margin: 0 }}>
-        <Field label="Model"><select className="select" value={device} onChange={(e) => { setDevice(e.target.value); setPlan(null) }}><option value="">Choose model</option>{devices.filter((d) => d.is_active).map((d) => <option key={d.slug} value={d.slug}>{d.name}</option>)}</select></Field>
+        <Field label="Model"><select className="select" value={device} onChange={(e) => { setDevice(e.target.value); setPlan(null) }}><option value="">Choose model</option>{devices.map((d) => <option key={d.slug} value={d.slug}>{d.name}{d.is_active ? "" : " (hidden in store)"}</option>)}</select></Field>
         <Field label="Layer folder"><input className="input" type="file" multiple {...({ webkitdirectory: "", directory: "" } as any)} onChange={(e) => choose(e.target.files)} /></Field>
       </fieldset>
       {plan && <div className="stack">

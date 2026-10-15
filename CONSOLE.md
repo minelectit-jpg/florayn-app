@@ -6,8 +6,11 @@ backend: **https://api.new.florayn.com/console** (after the cutover,
 api.florayn.com/console). The classic Medusa admin at `/app` stays for
 everything that has not moved yet and for rare settings.
 
-Pages so far: Home, Mockup Studio (MOCKUP_STUDIO.md). Orders and products move
-in next, one page at a time.
+Pages so far: Home, Mockup Studio (MOCKUP_STUDIO.md) and Models (add a model,
+show/hide it in the store, badges; the classic Devices page cannot add one).
+A new model is added hidden by default (`POST /admin/devices` with
+`is_active: false`), so the menu never lists a model with nothing to buy.
+Orders and products move in next, one page at a time.
 
 ## How it works
 

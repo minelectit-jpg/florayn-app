@@ -9,10 +9,12 @@ import { login, logout, me, type User } from "./api"
 import { Button, Field, Icon, Toaster } from "./ui"
 import Home from "./pages/home"
 import MockupStudio from "./pages/mockup-studio"
+import Devices from "./pages/devices"
 
 const PAGES = [
   { path: "/", label: "Home", icon: Icon.home, render: () => <Home /> },
   { path: "/mockup-studio", label: "Mockup Studio", icon: Icon.sparkles, render: () => <MockupStudio /> },
+  { path: "/models", label: "Models", icon: Icon.phone, render: () => <Devices /> },
 ]
 
 function useHashPath() {

@@ -24,10 +24,12 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
 /**
  * POST /admin/devices - add a new model. `family` (iphone / samsung / airpods /
  * watch / wallet) decides which product form its cases sell under and how it is
- * grouped in the pickers. Created active so it is immediately usable.
+ * grouped in the pickers. Created active so it is immediately usable, unless
+ * is_active: false is sent (Florayn Console adds new models hidden until they
+ * have products, so the menu never lists a model with nothing to buy).
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
-  const body = (req.body ?? {}) as { name?: unknown; family?: unknown; brand?: unknown; sku_code?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; family?: unknown; brand?: unknown; sku_code?: unknown; is_active?: unknown }
   const name = typeof body.name === "string" ? body.name.trim() : ""
   const family = typeof body.family === "string" ? body.family.trim() : ""
   if (!name) return res.status(400).json({ message: "A model name is required." })
@@ -36,6 +38,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   }
   const slug = slugify(name)
   if (!slug) return res.status(400).json({ message: "Could not derive a slug from the name." })
+  if (body.is_active !== undefined && typeof body.is_active !== "boolean") return res.status(400).json({ message: "is_active must be true or false." })
+  const is_active = body.is_active !== false
   const sku_code = ((typeof body.sku_code === "string" && body.sku_code.trim()) || skuCodeFromSlug(slug)).toUpperCase()
   const brand = (typeof body.brand === "string" && body.brand.trim()) || DEFAULT_BRAND[family] || ""
 
@@ -45,7 +49,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const all = await catalog.listDevices({})
   try {
     const [created] = await catalog.createDevices([
-      { slug, name, family, brand, sku_code, sort_order: all.length, is_active: true },
+      { slug, name, family, brand, sku_code, sort_order: all.length, is_active },
     ])
     res.json({ ok: true, device: created })
   } catch (error: any) {
