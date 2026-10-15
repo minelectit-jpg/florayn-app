@@ -128,6 +128,13 @@ Read `PRODUCT_MANAGER.md` before changing product creation/editing, variants,
 shared stock or case pricing. Preserve existing IDs and the single storefront
 layout; verify real commerce changes using the isolated Medusa integration CI.
 
+Read `CONSOLE.md` before changing Florayn Console (`apps/backend/console`,
+served at /console). It is a front end only: everything goes through /admin/*.
+
+Read `MOCKUP_STUDIO.md` before changing Mockup Studio, its compositor or the
+mockup layer encoding. It only makes images and calls the Product Manager
+endpoints; run the Blender-finals comparison after compositor changes.
+
 Read `TRACKING.md` before changing ad tracking, `/api/t/*`, the tracking
 module, the Live dashboard, the Privacy page or the catalog feed. Nothing
 reaches an ad platform without the Cloudflare edge header, and no contact data

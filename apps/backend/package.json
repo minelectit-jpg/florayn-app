@@ -5,9 +5,12 @@
   "author": "Florayn",
   "license": "MIT",
   "scripts": {
-    "build": "medusa build",
+    "build": "medusa build && npm run build:console",
+    "build:console": "vite build --config console/vite.config.mts",
     "start": "medusa start",
     "dev": "medusa develop",
+    "dev:console": "vite --config console/vite.config.mts",
+    "typecheck:console": "tsc -p console/tsconfig.json",
     "lint": "medusa lint",
     "test": "node --test tests/*.test.cjs",
     "test:integration:http": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",

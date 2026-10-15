@@ -24,3 +24,8 @@ build
 !.yarn/versions
 
 .medusa
+# Florayn Console build output (npm run build:console)
+/console-dist
+
+# Local file provider uploads (no R2 configured)
+/static

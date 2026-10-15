@@ -1,0 +1,165 @@
+// Puts a design on a pre-rendered Blender shot, no Blender needed (MOCKUP_STUDIO.md).
+// Validated against the Blender finals: print-area difference ~2/255 at 2400 px.
+//
+// Layers per shot (8-bit PNGs, decoded to byte arrays):
+//   static  RGB  B render (print surface black), premultiplied linear, enc(v) = sqrt(v / (1 + v))
+//   light   RGB  W - B (light reaching the print), same encoding
+//   uv      RGB  u high, u low, v high (16-bit artwork coordinate, 0..1 = the print template)
+//   aux     RGB  v low, alpha, print coverage
+//   blur    1 ch spread of the artwork seen in the pixel (depth of field), mm: (2^(b/24) - 1) / 64
+// Shot (linear) = static + design(uv) * light, then Khronos PBR Neutral and sRGB, like the .blend.
+
+export type ShotMeta = { template_mm: [number, number]; ink_saturation: number }
+export type ShotLayers = { w: number; h: number; static: Uint8Array; light: Uint8Array; uv: Uint8Array; aux: Uint8Array; blur: Uint8Array }
+type Level = { w: number; h: number; data: Uint8Array }
+export type PreparedDesign = { levels: Level[]; mean: [number, number, number] }
+
+const DEC = new Float32Array(256)
+for (let b = 0; b < 256; b++) {
+  const t = Math.min((b / 255) ** 2, 0.9961)
+  DEC[b] = t / (1 - t)
+}
+const S2L = new Float32Array(256)
+for (let b = 0; b < 256; b++) {
+  const c = b / 255
+  S2L[b] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+const L2S_N = 4096
+const L2S = new Uint8Array(L2S_N + 1)
+for (let i = 0; i <= L2S_N; i++) {
+  const x = i / L2S_N
+  L2S[i] = Math.round((x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055) * 255)
+}
+const toByte = (x: number) => L2S[Math.round(Math.min(Math.max(x, 0), 1) * L2S_N)]
+
+/** Blender's Hue/Saturation/Value node on linear colour (hue unchanged, value 1). */
+function saturate(r: number, g: number, b: number, sat: number): [number, number, number] {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min
+  if (max <= 0 || d <= 0) return [r, g, b]
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  h /= 6
+  if (h < 0) h += 1
+  const s = Math.min((d / max) * sat, 1), v = max
+  const i = Math.floor(h * 6), f = h * 6 - i
+  const p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f))
+  switch (i % 6) {
+    case 0: return [v, t, p]
+    case 1: return [q, v, p]
+    case 2: return [p, v, t]
+    case 3: return [p, q, v]
+    case 4: return [t, p, v]
+    default: return [v, p, q]
+  }
+}
+
+/** Khronos PBR Neutral tone mapping, in place. */
+function pbrNeutral(c: number[]) {
+  const start = 0.8 - 0.04, desat = 0.15
+  const x = Math.min(c[0], c[1], c[2])
+  const off = x < 0.08 ? x - 6.25 * x * x : 0.04
+  c[0] -= off; c[1] -= off; c[2] -= off
+  const peak = Math.max(c[0], c[1], c[2])
+  if (peak < start) return
+  const d = 1 - start
+  const np = 1 - (d * d) / (peak + d - start)
+  const k = np / peak
+  c[0] *= k; c[1] *= k; c[2] *= k
+  const g = 1 - 1 / (desat * (peak - np) + 1)
+  c[0] += (np - c[0]) * g; c[1] += (np - c[1]) * g; c[2] += (np - c[2]) * g
+}
+
+/** Ink saturation as in the Blender material, then a mip chain. pixels: sRGB bytes, 3 or 4 channels. */
+export function prepareDesign(pixels: ArrayLike<number>, w: number, h: number, channels: number, saturation = 1.06): PreparedDesign {
+  const base = new Uint8Array(w * h * 3)
+  let sr = 0, sg = 0, sb = 0
+  for (let i = 0, j = 0; i < w * h; i++, j += channels) {
+    const [r, g, b] = saturate(S2L[pixels[j]], S2L[pixels[j + 1]], S2L[pixels[j + 2]], saturation)
+    base[i * 3] = toByte(r); base[i * 3 + 1] = toByte(g); base[i * 3 + 2] = toByte(b)
+    sr += r; sg += g; sb += b
+  }
+  const levels: Level[] = [{ w, h, data: base }]
+  while (levels[levels.length - 1].w > 1 || levels[levels.length - 1].h > 1) {
+    const p = levels[levels.length - 1]
+    const nw = Math.max(1, p.w >> 1), nh = Math.max(1, p.h >> 1)
+    const d = new Uint8Array(nw * nh * 3)
+    for (let y = 0; y < nh; y++) {
+      const y0 = Math.min(y * 2, p.h - 1), y1 = Math.min(y * 2 + 1, p.h - 1)
+      for (let x = 0; x < nw; x++) {
+        const x0 = Math.min(x * 2, p.w - 1), x1 = Math.min(x * 2 + 1, p.w - 1)
+        for (let c = 0; c < 3; c++) {
+          const v = S2L[p.data[(y0 * p.w + x0) * 3 + c]] + S2L[p.data[(y0 * p.w + x1) * 3 + c]] +
+            S2L[p.data[(y1 * p.w + x0) * 3 + c]] + S2L[p.data[(y1 * p.w + x1) * 3 + c]]
+          d[(y * nw + x) * 3 + c] = toByte(v / 4)
+        }
+      }
+    }
+    levels.push({ w: nw, h: nh, data: d })
+  }
+  const n = w * h
+  return { levels, mean: [sr / n, sg / n, sb / n] }
+}
+
+// Bilinear sample of one mip level in Blender image coordinates (v = 0 at the bottom), EXTEND at the edges.
+function bilinear(lv: Level, u: number, v: number, out: number[], k: number) {
+  const x = Math.min(Math.max(u * lv.w - 0.5, 0), lv.w - 1)
+  const y = Math.min(Math.max((1 - v) * lv.h - 0.5, 0), lv.h - 1)
+  const x0 = x | 0, y0 = y | 0, x1 = Math.min(x0 + 1, lv.w - 1), y1 = Math.min(y0 + 1, lv.h - 1)
+  const fx = x - x0, fy = y - y0, d = lv.data
+  const a = (y0 * lv.w + x0) * 3, b = (y0 * lv.w + x1) * 3, c = (y1 * lv.w + x0) * 3, e = (y1 * lv.w + x1) * 3
+  for (let ch = 0; ch < 3; ch++) {
+    const top = S2L[d[a + ch]] + (S2L[d[b + ch]] - S2L[d[a + ch]]) * fx
+    const bot = S2L[d[c + ch]] + (S2L[d[e + ch]] - S2L[d[c + ch]]) * fx
+    out[ch] = out[ch] * (1 - k) + (top + (bot - top) * fy) * k
+  }
+}
+
+/** Returns RGBA bytes, straight alpha, sRGB (like the Blender PNG). */
+export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDesign, blurScale = 2.5): Uint8ClampedArray {
+  const { w, h } = layers
+  const n = w * h
+  const U = new Float32Array(n), V = new Float32Array(n), M = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    const j = i * 3
+    M[i] = layers.aux[j + 2]
+    U[i] = (layers.uv[j] * 256 + layers.uv[j + 1]) / 65535
+    V[i] = (layers.uv[j + 2] * 256 + layers.aux[j]) / 65535
+  }
+  const L0 = design.levels[0]
+  const pxPerMm = L0.w / meta.template_mm[0]
+  const tw = L0.w, th = L0.h
+  const maxLod = design.levels.length - 1
+  const out = new Uint8ClampedArray(n * 4)
+  const col = [0, 0, 0], c = [0, 0, 0]
+  // distance in design pixels to a neighbour, or Infinity when it is not print (seams, holes)
+  const dist = (i: number, k: number) => {
+    if (k < 0 || k >= n || M[k] < 128) return Infinity
+    return Math.hypot((U[k] - U[i]) * tw, (V[k] - V[i]) * th)
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, j = i * 3, o = i * 4
+      const a = layers.aux[j + 1] / 255
+      if (a <= 0) continue
+      if (M[i] > 0) {
+        // the pixel's footprint on the artwork: the smaller step to a neighbour per axis (robust at seams)
+        let fx = Math.min(x > 0 ? dist(i, i - 1) : Infinity, x < w - 1 ? dist(i, i + 1) : Infinity)
+        let fy = Math.min(y > 0 ? dist(i, i - w) : Infinity, y < h - 1 ? dist(i, i + w) : Infinity)
+        if (!isFinite(fx)) fx = isFinite(fy) ? fy : 1
+        if (!isFinite(fy)) fy = fx
+        const sigmaMm = (2 ** (layers.blur[i] / 24) - 1) / 64
+        const lod = Math.min(Math.log2(Math.max(1, fx, fy, sigmaMm * pxPerMm * blurScale)), maxLod)
+        const l0 = Math.floor(lod), f = lod - l0
+        col[0] = col[1] = col[2] = 0
+        bilinear(design.levels[l0], U[i], V[i], col, 1)
+        if (f > 0 && l0 < maxLod) bilinear(design.levels[l0 + 1], U[i], V[i], col, f)
+      } else {
+        col[0] = design.mean[0]; col[1] = design.mean[1]; col[2] = design.mean[2]
+      }
+      for (let ch = 0; ch < 3; ch++) c[ch] = (DEC[layers.static[j + ch]] + col[ch] * DEC[layers.light[j + ch]]) / a
+      pbrNeutral(c)
+      out[o] = toByte(c[0]); out[o + 1] = toByte(c[1]); out[o + 2] = toByte(c[2])
+      out[o + 3] = Math.round(a * 255)
+    }
+  }
+  return out
+}

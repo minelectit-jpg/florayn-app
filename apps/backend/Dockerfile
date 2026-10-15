@@ -48,6 +48,8 @@ COPY --from=build /app/apps/backend/.medusa/server ./
 # .medusa/server by `medusa build`, so bring it in explicitly and point the
 # wiring script at it.
 COPY --from=build /app/apps/backend/data ./data
+# Florayn Console (CONSOLE.md), built by npm run build alongside the admin; served at /console.
+COPY --from=build /app/apps/backend/console-dist ./console-dist
 ENV IMAGE_MANIFEST_DEVICE=/app/server/data/images-device-manifest.json
 
 EXPOSE 9000
