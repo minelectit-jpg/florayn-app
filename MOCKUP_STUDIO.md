@@ -45,11 +45,9 @@ exact, not a resized image.
 
 ## Console screens
 
-- **Mockup sets**: choose a model and its layer folder. The browser uploads the
-  smallest size (live previews) and the product image size through
-  `/admin/r2/upload` to `mockups/<device>/<version>/...` (a new version folder
-  every time, because R2 serves them as immutable), then saves the set.
-  "Check" confirms the browser can read every colour.
+- **Mockup sets**: the models that have mockups, each on/off, its default
+  phone colour, and "Check" (the browser can read every colour). Nothing is
+  uploaded here (the owner: designs are the only upload).
 - **New product**: design image, models (or all) with the phone colour for the
   pictures, placement (zoom and move, live), name/URL, collection (existing or
   new), starting stock, a preview of every model, then Create draft / Publish.
@@ -69,10 +67,28 @@ Browser code: `apps/backend/console/src/mockup/` (`compositor.ts`, `layers.ts`,
 and `worker.ts` + `client.ts`, which composite in Web Workers) and
 `console/src/pages/mockup-studio/`.
 
-## The R2 CORS rule (required once)
+## Adding a model's mockups
 
-The browser must read the layer pixels, so the R2 bucket needs a CORS rule.
-Cloudflare dashboard > R2 > the public bucket > Settings > CORS policy:
+1. Render and pack the layers with `run_layers.ps1` (see above), and check them
+   with `validate.mjs`.
+2. Upload the 600 and 1200 px sizes and `meta.json` with
+   `node upload-layers.mjs "<D:Florayn mockup layersModel>" <device-slug> <cloudflare token file>`
+   (Cloudflare R2 API, bucket `florayn-images`). It writes
+   `mockups/<device>/<version>/<colour>/...`, a new version folder every time
+   because the files are served as immutable, and prints the `base_url` on
+   `https://img.florayn.com`.
+3. The model must exist (Console > Models; add it hidden until it has products).
+4. Save the set with `POST /admin/mockups` (signed in): device, base_url,
+   colours, default_colour, enabled.
+
+iPhone 18 Pro Max (2026-10-15): `https://img.florayn.com/mockups/iphone-18-pro-max/v20261015T1657Z`.
+
+## The R2 CORS rule
+
+The browser must read the layer pixels, so the bucket `florayn-images` has
+this CORS rule (set 2026-10-15 through the Cloudflare API; the same in the
+dashboard under R2 > bucket > Settings > CORS policy). Cloudflare caches a copy
+per site (`Vary: Origin`), so every listed site gets its own header:
 
 ```json
 [
