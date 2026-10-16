@@ -125,7 +125,7 @@ test("exports the budgets and page keys of TRACKING.md section 11", () => {
   assert.equal(BUDGETS.layout, 1200)
   assert.equal(BUDGETS.runtime, 6000)
   assert.deepEqual({ ...BUDGETS.pages }, {
-    "/page": 32, "/shop/page": 32, "/collection/[slug]/page": 32, "/product/[slug]/page": 300, "/checkout/page": 800,
+    "/page": 32, "/shop/page": 32, "/collection/[slug]/page": 32, "/product/[slug]/page": 900, "/checkout/page": 800,
   })
 })
 
@@ -213,23 +213,23 @@ test("home, shop and collection first loads get 32 B over the webpack and layout
   }
 })
 
-test("product gets 300 B and checkout 800 B over the webpack and layout deltas", (t) => {
+test("product gets 900 B (raised for phone colours) and checkout 800 B over the webpack and layout deltas", (t) => {
   const changes = { "static/chunks/webpack-a1.js": 40, "static/chunks/app/layout-a1.js": 700 }
   const product = OWN_CHUNK["/product/[slug]/page"]
   const checkout = OWN_CHUNK["/checkout/page"]
-  const at = compare(t, baseSpec(), grown({ ...changes, [product]: 300, [checkout]: 800 }))
+  const at = compare(t, baseSpec(), grown({ ...changes, [product]: 900, [checkout]: 800 }))
   assert.deepEqual(at.failures, [])
-  assert.equal(rowFor(at, "/product/[slug]/page").delta, 1040)
-  assert.equal(rowFor(at, "/product/[slug]/page").limit, 1040)
+  assert.equal(rowFor(at, "/product/[slug]/page").delta, 1640)
+  assert.equal(rowFor(at, "/product/[slug]/page").limit, 1640)
   assert.equal(rowFor(at, "/checkout/page").delta, 1540)
   assert.equal(rowFor(at, "/checkout/page").limit, 1540)
-  const over = compare(t, baseSpec(), grown({ ...changes, [product]: 301, [checkout]: 801 }))
+  const over = compare(t, baseSpec(), grown({ ...changes, [product]: 901, [checkout]: 801 }))
   assert.equal(over.failures.length, 2)
-  assert.match(over.failures[0], /"\/product\/\[slug\]\/page" first load grew by \+1041 B gz \(budget \+1040 B = webpack \+40 \+ layout \+700 \+ 300\)/)
+  assert.match(over.failures[0], /"\/product\/\[slug\]\/page" first load grew by \+1641 B gz \(budget \+1640 B = webpack \+40 \+ layout \+700 \+ 900\)/)
   assert.match(over.failures[1], /"\/checkout\/page" first load grew by \+1541 B gz \(budget \+1540 B = webpack \+40 \+ layout \+700 \+ 800\)/)
   // A shrinking layout lowers the allowance too.
-  const shrunk = compare(t, baseSpec(), grown({ "static/chunks/app/layout-a1.js": -500, [product]: 301 }))
-  assert.equal(rowFor(shrunk, "/product/[slug]/page").limit, -200)
+  const shrunk = compare(t, baseSpec(), grown({ "static/chunks/app/layout-a1.js": -500, [product]: 901 }))
+  assert.equal(rowFor(shrunk, "/product/[slug]/page").limit, 400)
   assert.equal(rowFor(shrunk, "/product/[slug]/page").ok, false)
 })
 

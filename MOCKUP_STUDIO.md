@@ -24,29 +24,64 @@ Checked against the Blender finals of the iPhone 18 Pro Max (all 13 shots,
 2400 px, the original marble artwork): the print area differs by 1.3-3.5 out
 of 255 on average, about the noise between two Blender renders.
 
-### Sharpness (quality study 2026-10-16)
+### Sharpness (quality study 2026-10-17)
 
-The `blur` layer is the spread of the artwork seen in each pixel (depth of
-field). In focus its true value is below float32 resolution, so the packed layer
-is mostly noise there; multiplied up, that noise picked a random mip level per
-pixel and drew a fuzzy, sparkly halo round every hard edge. Two fixes, in
-`console/src/mockup/compositor.ts` and `web\compositor.mjs` alike:
+The `blur` layer is the spread of the artwork seen in each pixel (the pixel
+filter's and the depth of field's), in template mm. The mip level is
+`log2(max(1, footprint, sigma * px/mm * blurScale)) + lodBias`, clamped to
+0..last level. In `console/src/mockup/compositor.ts` and `web\compositor.mjs`
+alike (same bytes), the chosen setting is blurScale 2, lodBias -0.5, the
+rounding floor and the median:
 
-- `SHARPNESS = { blurScale: 1.5, lodBias: -0.5 }` (was 2.5 and 0). The mip level
-  is `log2(max(1, footprint, sigma * px/mm * blurScale)) + lodBias`, clamped to
-  0..last level, which matches Blender's pixel filter (about 0.21 px) instead
-  of blurring about 0.5 px.
+- `SHARPNESS = { blurScale: 2, lodBias: -0.5 }`. The 2026-10-16 setting (1.5
+  and -0.5) was tuned on blur maps that were still transposed; on the
+  corrected maps it left the depth-of-field shots 05 and 06 too sharp. In focus
+  the level is `log2(footprint) - 0.5` as before; out of focus the level is
+  1.41 x the spread wide (was 1.06), the box filter whose spread matches the
+  lens blur.
+- `BLUR_NOISE = 4e-4`: the pack computes the spread as `E[uv^2] - E[uv]^2` from
+  float32 passes, which is off by about `sqrt(2 x 2^-24) x |uv|`: 0.03-0.08 mm,
+  as large as the real in-focus spread (about 0.6 x the footprint, which the
+  footprint term already covers). The corrected layers show it: at a constant
+  footprint the in-focus values spread wider as `|uv|` grows, and on the macro
+  shot 12, 27% of the print pixels read 0 (a negative variance, clamped). The
+  compositor takes `BLUR_NOISE x |uv in mm|` off in quadrature; real depth of
+  field (0.1-0.7 mm) stays.
 - `denoiseBlur`: a 5 x 5 median of the blur layer over print pixels, applied
   once when a shot's layers load (`loadLayers`; `validate.mjs` and `worker.mjs`
-  do the same). It gives the same bytes as sorting every window, about 4x faster.
+  do the same). The rounding is not a steady offset (from 0 to well above the
+  floor between neighbouring pixels), so even with the floor the mip level
+  would jump from pixel to pixel; with the median the mean difference is 3.73
+  instead of 3.95 and the print-area Laplacian correlation 0.74 instead of
+  0.65. (The older figure, shot 12 0.64 -> 0.74 on 2026-10-16, was measured on
+  the transposed maps.) It gives the same bytes as sorting every window, about
+  4x faster.
 
-`validate.mjs`, iPhone 18 Pro Max Black, 2400 px: the print area's mean
-difference went from 1.98 to 1.66 of 255 on average, lower on 12 of 13 shots
-(shot 06 flat); shot 12's p99 went from 13 to 6. On `_quality\haze_test_design.png`
-(mean / p95 over the print) shot 1 went from 5.82 / 26 to 4.14 / 20, shot 3 from
-5.64 / 23 to 4.14 / 17 and shot 12 from 7.09 / 36 to 3.25 / 15; the halo is
-gone. The haze left on shot 3 is real Blender lighting (the clear coat reflects
-the studio light): fix it in Blender and re-render shot 3 if it matters.
+Measured against Blender renders of `_quality\haze_test_design.png` (2 mm grid,
+labels) and a marble on shots 01, 03, 05, 06, 08, 11 and 12 (iPhone 18 Pro Max
+Black part file, new wall mapping, 2400 px, 128 spp; scripts and results in
+`D:\Florayn mockup layers\_quality\final\tune\`). Print area, mean / p95 of the
+largest channel difference (of 255), averaged over the 14 pictures:
+
+| | 2400 px | shop, 1200 px from 2400 |
+|---|---|---|
+| 2026-10-16 (1.5, -0.5) | 3.97 / 14.4 | 3.37 / 10.5 |
+| now (2, -0.5, floor, median) | 3.73 / 13.4 | 3.10 / 9.4 |
+
+Shot 05 (depth of field) went from 11.6 to 9.9 on the grid, shot 12 (macro)
+from 4.25 to 3.39 with the sparkly halo round its grid lines gone; the in-focus
+shots are unchanged. Without the floor no single setting fits both: depth of
+field wants the larger blurScale, which then turns shot 12's rounding into blur
+(2, -0.5 alone: shot 12 5.9). Re-checked on held-out shots (02, 04, 07, 09, 10,
+13) and two more test designs (a zone plate, and gratings, checkers and text;
+`final\verify\`, `final\refute\`): at 2400 px no other setting was more than
+0.5% closer, and leaving out the floor or the median was 4-5% further off.
+Still left: for the shop images made from 2400 px a sharper lodBias (-0.75 to
+-1) measured 4-8% closer; the far out-of-focus areas of shot 05 are a little
+crisper than Blender's round lens blur (a box-filtered mip keeps thin lines
+visible), and on shot 12 Blender's cubic texture filter is a bit softer than
+bilinear. The haze on shot 3 is real Blender lighting (the clear coat reflects
+the studio light).
 
 ## The layers
 
@@ -69,31 +104,55 @@ exact, not a resized image.
 
 ## Console screens
 
-- **Mockup sets**: the models that have mockups, each on/off, its default
-  phone colour, and "Check" (the browser can read every colour). Nothing is
-  uploaded here (the owner: designs are the only upload).
+- **Mockup sets**: the models that have mockups, each on/off, its "Default
+  phone colour (shop and main picture)", its phone colours as chips (a colour
+  picker plus the hex, a "suggested" tag while the dot is the console's SWATCH
+  suggestion, and Remove, which asks first when `colour_usage` says designs'
+  pictures use that colour; the default colour and a model's last colour
+  cannot be removed), and "Check" (the browser can read every colour). The
+  colours are the shop's phone colour palette (PHONE_COLOURS.md), so saving
+  refreshes the storefront. Nothing is uploaded here (the owner: designs are
+  the only upload).
 - **New product**: a five-step wizard with a sticky stepper and a sticky
   Back / Continue footer:
   1. **Design**: one flat image (PNG, JPG or WebP, up to 60 MB and 12,000 px;
      also drop or paste). The stage shows the real case at once, with a
      placeholder design until the upload.
-  2. **Models**: one, several or all, each with the phone colour for its
-     pictures (the colour only changes the pictures, not what is sold).
+  2. **Models**: one, several or all, each with the phone colours to make
+     pictures in (the colour only changes the pictures, not what is sold).
+     A model's chips are checkboxes: a ring when ticked, a "Main" pip on the
+     main colour (the model's default when ticked, else the first ticked in
+     palette order; that is what `variant.metadata.images` shows), and the
+     last ticked chip is disabled. A newly ticked model gets **every** colour
+     (the owner's default); the toolbar's "Phone colours: Main only | All
+     colours" re-applies to every chosen model and sets what newly ticked
+     models start with. Under it, a live estimate: "39 models · 117 colour
+     sets · 1,521 pictures · about 71 MB · about 25 min" (about 47 KB and one
+     second per 1200 px shop picture). The stage's chip row on the other steps
+     only switches the colour shown, it ticks nothing.
   3. **Placement**: drag on the phone on any angle (the shot's `uv` layer says
      which artwork point is under the pointer), scroll or pinch to zoom, or
-     use the sliders and the flat print preview. One position for every model;
-     the design always covers the whole print.
+     use the sliders and the flat print preview. One position for every model
+     and colour; the design always covers the whole print.
   4. **Details**: title (= design name), URL (checked as you type), collection
-     (existing or new), starting stock, description.
+     (existing or new), starting stock, description. When the URL is taken:
+     "This design already exists. Update its pictures instead" (below).
   5. **Review & publish**: every picture of every model, full-size view,
-     downloads, then Create draft / Publish product.
+     downloads, then Create draft / Publish product (Update pictures). A
+     model with several colours has colour tabs (main first, badged); only the
+     shown tab's tiles are made. Every colour of a model uses the gallery
+     shots they all have (`sharedShots`); when one colour lacks a shot the
+     section says so ("Glacier has 12 of the 13 gallery shots, so every
+     colour of this model uses those 12."). Above 500 pictures the publish
+     card adds "Publishing takes a while; keep this tab open."
 
   New product stays mounted while Mockup sets or Settings is open, so nothing
   is lost by switching tabs; leaving the page or reloading asks first.
 
   **Downloads are lossless and made in the browser**: a single picture or a
   ZIP per model or for all models, PNG at 2400 x 2400 px on white or
-  transparent. Where a colour's 2400 px layers are not uploaded, the worker
+  transparent. A ZIP has one `<device>_<colour>/` folder per ticked colour
+  (a one-model ZIP in one colour stays flat). Where a colour's 2400 px layers are not uploaded, the worker
   falls back to 1200 px, says so, and names the file `_1200` (once a HEAD check
   has found them missing, the page asks for 1200 px straight away). The ZIP is
   written by `console/src/mockup/zip.ts` (stored entries, no dependency). On
@@ -110,6 +169,47 @@ exact, not a resized image.
   "Sharper shop images" on (and an image size of 1200 or less, not on a phone)
   each shop image is made from the 2400 px renders and shrunk: mean
   difference 0.76 vs 0.91 against Blender, about 4x slower to publish.
+
+  **Phone colours** (PHONE_COLOURS.md; `wizard/export.ts` `publishProduct`):
+  the plan is every (model, ticked colour, shared shot), main colour first,
+  then palette order ("Making iPhone 18 Pro Max · Silver · picture 3 of 13").
+  Every upload carries `colourSlug` (the colour's web name, `slugify`), so its
+  key is `designs/<design>/<case-type>/<device>/<colour>/<n>.<ext>`. The
+  `/custom` body is unchanged: the main colour's URLs only. Then one
+  `POST /admin/designs/<slug>/colours` per model, single-colour models included
+  (they send only the main marker):
+  `{ source: "mockup_studio", variants: [{ caseType, device, main, galleries, replace: true }] }`
+  ("Saving phone colours 12 of 39…"). A colours call that fails, or Stop in
+  that phase (it stops after the current model), never undoes the product:
+  the done screen says "Product created. Phone colour pictures for 3 models
+  couldn't be saved" with Retry, which sends only the calls not confirmed
+  (the URLs stay in memory), and Make another asks first, because it drops
+  that Retry. Until then the product shows its main pictures. A refused call
+  (a 4xx for that model) does not stop the next models' calls. Calls with no
+  answer or a 5xx are tried once more; every call is idempotent.
+
+  **Update pictures** (re-upload an existing design): on Details, "Update its
+  pictures instead" switches the wizard to update mode. Title, collection,
+  description, status and stock become the design's own (read from
+  `GET /admin/designs/<slug>`, shown read-only, never sent); changing the URL
+  goes back to a new product. Publishing makes and uploads the pictures as
+  above, then sends only Product Manager endpoints: `manager-variants`
+  (`{ variants: [{ id, images }] }`, at most 20 models a call) for the models
+  whose `settings.case_type` variant exists, which keeps every ID and rebuilds
+  `product.images`, the cover and the cards; `/admin/designs/<slug>/pairs`
+  (`blankStock: 0`, at most 20 models a call) for the missing models, which
+  reuses the shared blank and never resets stock; then the colours calls with
+  `replace: true`. Never `/custom`, never delete and recreate. A failed or
+  stopped save shows which one and how many are done; Retry (Continue) sends
+  only the ones not confirmed, without uploading again, as long as nothing
+  that made the pictures changed (design, placement, models, colours, and
+  the case type, gallery shots, image size, quality and supersampling in
+  Settings; a dot colour or another model's change in Mockup sets keeps the
+  resume); otherwise it publishes again from the start, which is idempotent
+  too. One model's refused colours call (a 4xx other than 401 or 404) never
+  holds back the other models' calls; no answer, a server error, a lost
+  session or a design that is gone stops there. Between the main pictures and the colours call of a model,
+  its old colour rows can show the previous pictures for minutes (accepted).
 
   Quality levels (desktop timings):
 
@@ -153,7 +253,10 @@ Browser code: `apps/backend/console/src/mockup/` (`compositor.ts`, `layers.ts`,
 maths and file names, unit-tested in `tests/mockup-studio.test.cjs`;
 `engine.ts`: render scheduling; `preview.tsx`, `steps.tsx`, `review.tsx`,
 `lightbox.tsx`; `export.ts`: ZIP and publish, whose server path (URL check
-first, upload bodies, the `/custom` body, Stop) is unit-tested in the same file).
+first, upload bodies with `colourSlug`, the `/custom` body, one `/colours` call
+per model, Stop and Retry, Update pictures' batches, ZIP folders) is unit-tested
+in the same file; the multi-colour picks, `mainColourOf`, `sharedShots` and the
+estimate too).
 
 ## Adding a model's mockups
 
@@ -169,7 +272,10 @@ first, upload bodies, the `/custom` body, Stop) is unit-tested in the same file)
    `https://img.florayn.com`.
 3. The model must exist (Console > Models; add it hidden until it has products).
 4. Save the set with `POST /admin/mockups` (signed in): device, base_url,
-   colours, default_colour, enabled.
+   colours, default_colour, enabled and optional swatches (colour name ->
+   `#rrggbb`). The colours are the shop's phone colour palette, so two names
+   may not make the same web name and each must start with a letter
+   (PHONE_COLOURS.md); saving refreshes the storefront's catalog.
 
 iPhone 18 Pro Max (2026-10-15): `https://img.florayn.com/mockups/iphone-18-pro-max/v20261015T1657Z`.
 

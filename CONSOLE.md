@@ -54,8 +54,10 @@ npm run dev:console   # Vite on :5173, proxying /admin and /auth to a local back
    component under `console/src/pages/`. Settings still follow "every feature
    gets an admin screen": the screen can live here instead of in `/app`.
 3. No secrets, keys or tokens in the console source or bundle.
-4. Keep it light: the whole console is ~88 KB of script and ~8.4 KB of styles
-   gzipped (2026-10-16, measured with `npm run build:console`). The Mockup
+4. Keep it light: the whole console is ~94 KB of script and ~8.7 KB of styles
+   gzipped (2026-10-16, measured with `npm run build:console`; phone colours,
+   i.e. multi-colour picks, Update pictures and the Mockup sets colour dots,
+   added ~6.7 KB and ~0.35 KB to the 87.6 KB / 8.4 KB before them). The Mockup
    Studio v2 wizard added ~30 KB of script and ~6 KB of styles over the 57 KB /
    2.6 KB build before it, more than its ~20 KB target: the wizard is ~2,800
    lines (plus ~1,100 in the mockup engine) against the ~1,850 planned. It is

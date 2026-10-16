@@ -34,6 +34,8 @@ const STOREFRONT_WRITE_PREFIXES = [
   "products", "product-variants", "product-collections", "product-categories",
   "price-lists", "price-preferences", "prices", "inventory-items",
   "media", "wire-images", "rebuild-cards",
+  // Mockup sets carry the phone colour palette the shop shows (PHONE_COLOURS.md).
+  "mockups",
 ]
 
 export default defineMiddlewares({

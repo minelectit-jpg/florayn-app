@@ -1,13 +1,15 @@
 // Puts a design on a pre-rendered Blender shot, no Blender needed (MOCKUP_STUDIO.md).
-// Validated against the Blender finals (validate.mjs, iPhone 18 Pro Max Black, 2400 px, 2026-10-16):
-// print-area mean difference 1.24-2.84 of 255 per shot (1.66 on average; 1.98 before SHARPNESS and the blur median).
+// Validated against Blender renders of the same designs (iPhone 18 Pro Max Black, 2400 px, 2026-10-17: shots 1, 3, 5, 6,
+// 8, 11 and 12, a 2 mm test grid and a marble): print-area mean difference 3.73 of 255 on average (3.97 with the
+// 2026-10-16 settings), 3.10 at the shop size, 1200 px made from 2400 (3.37 before).
 //
 // Layers per shot (8-bit PNGs, decoded to byte arrays):
 //   static  RGB  B render (print surface black), premultiplied linear, enc(v) = sqrt(v / (1 + v))
 //   light   RGB  W - B (light reaching the print), same encoding
 //   uv      RGB  u high, u low, v high (16-bit artwork coordinate, 0..1 = the print template)
 //   aux     RGB  v low, alpha, print coverage
-//   blur    1 ch spread of the artwork seen in the pixel (depth of field), mm: (2^(b/24) - 1) / 64
+//   blur    1 ch spread of the artwork seen in the pixel (pixel filter and depth of field), mm: (2^(b/24) - 1) / 64,
+//           with the pack's float32 rounding on top, which composite() takes off (BLUR_NOISE)
 // Shot (linear) = static + design(uv) * light, then Khronos PBR Neutral and sRGB, like the .blend.
 
 export type ShotMeta = { template_mm: [number, number]; ink_saturation: number }
@@ -116,13 +118,31 @@ function bilinear(lv: Level, u: number, v: number, out: number[], k: number) {
 
 /** How the depth-of-field spread and the pixel footprint pick the mip level. */
 export type Sharpness = { blurScale: number; lodBias: number }
-/** Best match to the Blender finals (quality study 2026-10-16): mean |Lap| ratio 0.996, mean abs diff 1.03 (was 1.30). */
-export const SHARPNESS: Sharpness = { blurScale: 1.5, lodBias: -0.5 }
+/**
+ * Best match to Blender with the corrected (no longer transposed) blur layers: quality study 2026-10-17, re-checked on
+ * held-out shots and two more test designs (MOCKUP_STUDIO.md). Used with BLUR_NOISE and with denoiseBlur at load. In
+ * focus the level is log2(footprint) - 0.5; out of focus the level is 2 x 2^-0.5 = 1.41 x the spread wide, which matches
+ * the lens blur. The 2026-10-16 value, blurScale 1.5 (1.06 x), was tuned on blur maps that were still transposed and
+ * left the depth-of-field shots 05 and 06 too sharp.
+ */
+export const SHARPNESS: Sharpness = { blurScale: 2, lodBias: -0.5 }
+/**
+ * Float32 rounding in the blur layer, per template mm of artwork coordinate. The pack computes the spread as
+ * E[uv^2] - E[uv]^2 from float32 passes, which is off by about sqrt(2 x 2^-24) x |uv|: 0.03-0.08 mm, as large as the
+ * real in-focus spread (the pixel filter's, about 0.6 x the footprint, which the footprint term already covers). Seen
+ * in the corrected layers: at a constant footprint the in-focus values spread wider as |uv| grows, and on the macro
+ * shot 12, whose real in-focus spread is far smaller, 27% of the print pixels read 0 (a negative variance, clamped).
+ * composite() takes BLUR_NOISE x |uv in mm| off in quadrature, so in-focus pixels keep the footprint's level and real
+ * depth of field (0.1-0.7 mm) stays. 4e-4 fitted best (3e-4..6e-4 within 1%).
+ */
+export const BLUR_NOISE = 4e-4
 
 /**
- * 5x5 median of the blur layer over print pixels; run once per layer load. In-focus blur values are mostly float32
- * noise from E[uv^2] - E[uv]^2, which makes the mip level jump from pixel to pixel (a sparkly halo at hard edges).
- * The median removes the speckle (shot 12 lapCorr 0.64 -> 0.74).
+ * 5x5 median of the blur layer over print pixels; run once per layer load (loadLayers in layers.ts). The rounding is
+ * not a steady offset: between neighbouring pixels it ranges from 0 to well above BLUR_NOISE's floor, so the mip level
+ * would still jump from pixel to pixel (a sparkly halo at hard edges); the median evens it out. Measured on the corrected
+ * layers with the floor (2026-10-17): print-area Laplacian correlation 0.65 -> 0.74, mean difference 3.95 -> 3.73. The
+ * older figure (2026-10-16, shot 12 0.64 -> 0.74) was measured on blur maps that were still transposed.
  * For each pixel with coverage > 0: the lower median of the window's pixels with coverage >= 128 (kept when there are
  * none). Pixels outside the print keep their value. A sliding histogram per row gives the same bytes as sorting each
  * 5x5 window (tests/mockup-studio.test.cjs keeps that version as the reference) about 4x faster: 2400 px 0.15-0.23 s.
@@ -183,6 +203,8 @@ export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDe
   const L0 = design.levels[0]
   const pxPerMm = L0.w / meta.template_mm[0]
   const tw = L0.w, th = L0.h
+  const [mmX, mmY] = meta.template_mm
+  const noise2 = BLUR_NOISE * BLUR_NOISE
   const maxLod = design.levels.length - 1
   const out = new Uint8ClampedArray(n * 4)
   const col = [0, 0, 0], c = [0, 0, 0]
@@ -202,7 +224,10 @@ export function composite(layers: ShotLayers, meta: ShotMeta, design: PreparedDe
         let fy = Math.min(y > 0 ? dist(i, i - w) : Infinity, y < h - 1 ? dist(i, i + w) : Infinity)
         if (!isFinite(fx)) fx = isFinite(fy) ? fy : 1
         if (!isFinite(fy)) fy = fx
-        const sigmaMm = (2 ** (layers.blur[i] / 24) - 1) / 64
+        // the spread without the pack's float32 rounding (BLUR_NOISE)
+        const s = (2 ** (layers.blur[i] / 24) - 1) / 64, mu = U[i] * mmX, mv = V[i] * mmY
+        const s2 = s * s - noise2 * (mu * mu + mv * mv)
+        const sigmaMm = s2 > 0 ? Math.sqrt(s2) : 0
         const foot = Math.max(1, fx, fy, sigmaMm * pxPerMm * blurScale)
         // a negative bias would ask for a level sharper than the design itself: clamp to 0..maxLod
         const lod = Math.min(Math.max(Math.log2(foot) + lodBias, 0), maxLod)

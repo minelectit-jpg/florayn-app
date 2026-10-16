@@ -2,6 +2,7 @@ import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
 import { slugify } from "../../../../lib/create-uploaded-design"
+import { COLOUR_SLUG } from "../../../../lib/mockup-settings"
 
 /**
  * POST /admin/designs/upload - store ONE uploaded mockup on R2 under a tidy,
@@ -11,6 +12,8 @@ import { slugify } from "../../../../lib/create-uploaded-design"
  *
  * The key mirrors the folder layout the owner uploads:
  *   designs/<design>/<case-type>/<device>/<n>.<ext>
+ * or, for an extra phone colour's pictures (optional colourSlug, PHONE_COLOURS.md):
+ *   designs/<design>/<case-type>/<device>/<colour>/<n>.<ext>
  * The S3 provider keeps that path and only appends a ULID to the file name, so
  * the bucket stays browsable while every object is still unique.
  */
@@ -34,6 +37,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     designSlug?: string
     caseTypeSlug?: string
     deviceSlug?: string
+    colourSlug?: unknown
     index?: number
     filename?: string
     mimeType?: string
@@ -52,6 +56,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     })
     return
   }
+  const colourSlug = body.colourSlug === undefined || body.colourSlug === null || body.colourSlug === "" ? null : body.colourSlug
+  if (colourSlug !== null && (typeof colourSlug !== "string" || !COLOUR_SLUG.test(colourSlug))) {
+    res.status(400).json({ message: "colourSlug must be a phone colour web name such as silver or deep-blue." })
+    return
+  }
   if (!content) {
     res.status(400).json({ message: "contentBase64 is required." })
     return
@@ -59,7 +68,8 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
   const index = Number.isFinite(body.index) ? Number(body.index) : 1
   const ext = extFor(body.filename, mimeType)
-  const key = `designs/${designSlug}/${caseTypeSlug}/${deviceSlug}/${index}${ext}`
+  const folder = `designs/${designSlug}/${caseTypeSlug}/${deviceSlug}${colourSlug ? `/${colourSlug}` : ""}`
+  const key = `${folder}/${index}${ext}`
 
   const fileModule = req.scope.resolve(Modules.FILE)
   try {

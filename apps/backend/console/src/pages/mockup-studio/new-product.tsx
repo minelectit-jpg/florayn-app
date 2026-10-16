@@ -4,26 +4,35 @@
 // the shop images are compressed, when they are uploaded.
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react"
 
-import { api } from "../../api"
+import { api, ApiError } from "../../api"
 import { designScale, rendererOptions, type Renderer } from "../../mockup/client"
 import { A_DEFAULT, downscale, isLowMemory, loadMeta, MAX_CANVAS_PX, shotTitle, type MockupSet, type Placement, type Settings } from "../../mockup/layers"
 import { canShareFiles, saveBlob } from "../../mockup/zip"
 import { Button, Icon, slugify, toast, useLeaveGuard } from "../../ui"
 import { cellKey, useBoxOut, useDevicePx, useMetas, useRenderers, useShots, useSlugCheck, useStage, useUvPick, type ShotItem } from "./wizard/engine"
-import { downloadShots, publishProduct, Stopped, Taken, type JobState, type ZipItem } from "./wizard/export"
+import {
+  downloadShots, existingVariant, publishProduct, saveSteps, Stopped, Taken, zipItems,
+  type ExistingDesign, type JobState, type PublishModel, type ServerStep, type StepFailure, type ZipModel,
+} from "./wizard/export"
 import { Lightbox, type LightboxTarget } from "./wizard/lightbox"
 import { Preview, type Placer, type PreviewProps } from "./wizard/preview"
-import { anglesOf, DoneScreen, DownloadCard, PublishCard, ReviewSheet, SummaryCard, type Done, type PngStats, type PublishError, type ReviewModel } from "./wizard/review"
+import { DoneScreen, DownloadCard, modelShots, PublishCard, ReviewSheet, shopPictures, SummaryCard, type Done, type PngStats, type PublishError, type ReviewModel } from "./wizard/review"
 import {
-  across, allZipName, baseName, blockedBy, clampPlacement, entryName, fieldErrors, initialState, modelZipName, NEW_COLLECTION,
-  placementKey, plural, pngName, reducer, slugValid, STEPS, stepErrors, stepIndex, type StepId,
+  across, allZipName, anglesOf, baseName, blockedBy, clampPlacement, colourOrder, fieldErrors, initialState, modelZipName, NEW_COLLECTION,
+  pickOf, placementKey, plural, pngName, publishEstimate, reducer, slugValid, STEPS, stepErrors, stepIndex, type StepId,
 } from "./wizard/state"
-import { DesignPanel, DetailsForm, EmptyModels, MiniSummary, ModelsStep, PlacementPanel, StepHead, way, type Collections } from "./wizard/steps"
+import { DesignPanel, DetailsForm, EmptyModels, MiniSummary, ModelsStep, PlacementPanel, StepHead, way, type Collections, type ExistingState } from "./wizard/steps"
 
 export type Device = { slug: string; name: string; family: string; is_active: boolean }
 
 const DIRTY_MSG = "Leave New product? Your design and choices will be lost."
 const JOB_MSG = "Pictures are still being made. If you leave now, nothing will be finished. Leave anyway?"
+const COLOURS_NOTE = "Some phone colour pictures are not saved yet; the product shows its main pictures only."
+const COLOURS_MSG = `${COLOURS_NOTE} Leave anyway?`
+const AGAIN_MSG = `${COLOURS_NOTE} Press Retry first to save them. Make another anyway?`
+// the product exists in these phases: leaving does not lose it, only the saves still to come
+const COLOURS_JOB_MSG = "The product is created; its phone colour pictures are still saving. If you leave now, it shows its main pictures only. Leave anyway?"
+const SAVING_MSG = "The new pictures are being saved. If you leave now, some models may keep their old pictures. Leave anyway?"
 const STAGE_STEPS: StepId[] = ["design", "placement", "details"]
 const MAX_BYTES = 60e6
 const MAX_SIDE = 12000
@@ -67,9 +76,12 @@ function Stepper({ step, reached, errors, busy, onGo }: { step: StepId; reached:
   </ol></nav>
 }
 
-type Props = { settings: Settings; devices: Device[]; active: boolean; onOpenSets: () => void; onOpenSettings: () => void }
+type Props = { settings: Settings; devices: Device[]; caseTypeName: string; active: boolean; onOpenSets: () => void; onOpenSettings: () => void }
 
-export default function NewProduct({ settings, devices, active, onOpenSets, onOpenSettings }: Props) {
+/** Update pictures that got part of the way: the steps keep their picture URLs, valid while sig (what was made) holds. */
+type Resume = { sig: string; slug: string; steps: ServerStep[]; perModel: number; pictures: number }
+
+export default function NewProduct({ settings, devices, caseTypeName, active, onOpenSets, onOpenSettings }: Props) {
   const lowMemory = useMemo(isLowMemory, [])
   const coarse = useMedia("(pointer: coarse)")
   const phone = useMedia("(max-width: 860px)")
@@ -78,13 +90,13 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
   const sets = useMemo(() => settings.sets.filter((x) => x.enabled), [settings.sets])
   const names = useMemo(() => new Map(devices.map((d) => [d.slug, d.name])), [devices])
   const deviceName = useCallback((slug: string) => names.get(slug) ?? slug, [names])
-  const pickOf = (x: MockupSet) => {
-    const p = s.picks[x.device]
-    return { on: p?.on ?? false, colour: p && x.colours.includes(p.colour) ? p.colour : x.default_colour }
-  }
-  const colourOf = (x: MockupSet) => pickOf(x).colour
-  const chosen = sets.filter((x) => pickOf(x).on)
-  const [metas, retryMetas] = useMetas(sets, colourOf, active)
+  const pickFor = (x: MockupSet) => pickOf(s, x)
+  // the colour a model's card and the stage show
+  const colourOf = (x: MockupSet) => pickFor(x).stage
+  const chosen = sets.filter((x) => pickFor(x).on)
+  // layer info: the shown colour of every model, and every ticked colour of a chosen one
+  const neededColours = (x: MockupSet) => { const p = pickFor(x); return p.on ? [p.stage, ...p.colours.filter((c) => c !== p.stage)] : [p.stage] }
+  const [metas, retryMetas] = useMetas(sets, neededColours, active)
   const metaOf = (x: MockupSet) => metas[`${x.device}|${colourOf(x)}`]
   const readyMeta = (x: MockupSet) => { const m = metaOf(x); return m?.status === "ready" ? m.meta : null }
   // whether a set colour's 2400 px layers are uploaded (false: ask for 1200 straight away; null: not known yet)
@@ -112,6 +124,11 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
   const [announceText, setAnnounceText] = useState("")
   const [collections, setCollections] = useState<Collections>({ status: "loading", items: [] })
   const [hintSeen, setHintSeen] = useState(false)
+  // Update pictures: the existing design (GET /admin/designs/:slug), and a save that got part of the way
+  const [existing, setExisting] = useState<ExistingState>({ status: "idle" })
+  const resume = useRef<Resume | null>(null)
+  // a new product's phone colour calls, kept (with their URLs) for the done screen's Retry
+  const colourSteps = useRef<ServerStep[]>([])
   const lock = useRef(false)
   const stop = useRef(false)
   const zipAbort = useRef<AbortController | null>(null)
@@ -150,9 +167,48 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
 
   const slugOk = slugValid(s.details.slug)
   const slugState = useSlugCheck(s.details.slug, slugOk, active && !done && (s.step === "details" || s.step === "review"))
-  const errors = stepErrors(s, { chosen, metas, colourOf, slugState, deviceName })
+  const update = s.details.mode === "update"
+
+  // Update pictures reads the design it replaces: its variants decide manager-variants or /pairs per model
+  const existingSeq = useRef(0)
+  const loadExisting = useCallback((slug: string) => {
+    const seq = ++existingSeq.current
+    setExisting({ status: "loading" })
+    api<{ design?: ExistingDesign }>(`/admin/designs/${encodeURIComponent(slug)}`).then((d) => {
+      if (seq !== existingSeq.current) return
+      if (d.design?.kind !== "design") setExisting({ status: "error", message: "This URL belongs to a product Mockup Studio can't update. Make a new product instead." })
+      else setExisting({ status: "ready", design: d.design })
+    }, (error: any) => {
+      if (seq !== existingSeq.current) return
+      setExisting({ status: "error", message: error instanceof ApiError && error.status === 404 ? "No design uses this URL. Make a new product instead." : `Couldn't load the design: ${error?.message ?? error}` })
+    })
+  }, [])
+  useEffect(() => {
+    if (update && slugOk) loadExisting(s.details.slug)
+    else { existingSeq.current++; setExisting({ status: "idle" }) }
+  }, [update, s.details.slug, slugOk, loadExisting])
+  const existingDesign = existing.status === "ready" ? existing.design : null
+  const existingError = existing.status === "ready" ? undefined : existing.status === "error" ? existing.message : "Loading the design…"
+
+  const errors = stepErrors(s, { chosen, metas, slugState, deviceName, existingError })
   const dirty = Boolean(s.design || s.details.name.trim()) && !done
-  useLeaveGuard(job ? JOB_MSG : dirty ? DIRTY_MSG : null)
+  const jobMsg = job?.kind === "publish" && job.phase === "colours" ? COLOURS_JOB_MSG : job?.kind === "publish" && job.phase === "saving" ? SAVING_MSG : JOB_MSG
+  useLeaveGuard(job ? jobMsg : dirty ? DIRTY_MSG : done?.colours ? COLOURS_MSG : null)
+
+  // --- what publishing makes -------------------------------------------------------------------------------
+  const reviewModels: ReviewModel[] = chosen.map((x) => {
+    const colours = colourOrder(x, pickFor(x))
+    return { set: x, model: deviceName(x.device), colours, main: colours[0], metas: Object.fromEntries(colours.map((c) => [c, metas[`${x.device}|${c}`]])) }
+  })
+  const colourSets = reviewModels.reduce((n, m) => n + m.colours.length, 0)
+  const pictures = shopPictures(reviewModels, settings.shots)
+  const estimate = publishEstimate({ models: chosen.length, colourSets, pictures, imageSize: settings.image_size })
+  const picturesOf = (x: MockupSet) => reviewModels.find((m) => m.set === x) ? shopPictures(reviewModels.filter((m) => m.set === x), settings.shots) : 0
+  const replace = { replaced: existingDesign ? chosen.filter((x) => existingVariant(existingDesign, settings.case_type, x.device)).length : chosen.length, added: 0 }
+  replace.added = chosen.length - replace.replaced
+  const publishModels = (): PublishModel[] => reviewModels.map((m) => ({
+    set: m.set, model: m.model, colours: m.colours.map((c) => ({ name: c, slug: slugify(c), main: c === m.main, full: fullOf(m.set.device, c) })),
+  }))
 
   // --- pictures -------------------------------------------------------------------------------------
   const stageStep = STAGE_STEPS.includes(s.step)
@@ -238,7 +294,7 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
       if (seq !== readSeq.current) return
       const acr = across({ w, h }, A_DEFAULT)
       const scale = designScale(w, h, rendererOptions("detail", lowMemory))
-      const firstDevice = chosen.length || !sets[0] ? null : { device: sets[0].device, colour: colourOf(sets[0]) }
+      const firstDevice = chosen.length || !sets[0] ? null : sets[0]
       committed.current = f
       dispatch({
         type: "design/ready", firstDevice,
@@ -342,7 +398,7 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     let id = step === "design" ? "ms-choose" : step === "models" ? "ms-all" : ""
     if (step === "details") {
       const f = fieldErrors(s, slugState)
-      id = f.name ? "ms-f-name" : f.slug ? "ms-f-slug" : f.newCollection ? "ms-f-newcol" : f.stock ? "ms-f-stock" : ""
+      id = update ? "ms-h" : f.name ? "ms-f-name" : f.slug ? "ms-f-slug" : f.newCollection ? "ms-f-newcol" : f.stock ? "ms-f-stock" : ""
     }
     if (id) requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.focus()))
   }
@@ -395,15 +451,17 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
       return !a || a === document.body || !a.isConnected || a.disabled || a.id === "ms-pub-stop" || a.id === "ms-job-cancel"
     }
     if (jobKind) {
-      if (lost()) document.getElementById(jobKind === "publish" ? "ms-pub-stop" : "ms-job-cancel")?.focus()
+      // the done screen's phone colour Retry shows its progress with a Stop of its own
+      if (lost()) (document.getElementById(jobKind === "publish" ? "ms-pub-stop" : "ms-job-cancel") ?? document.getElementById("ms-job-cancel"))?.focus()
       return
     }
     const from = jobFrom.current
     jobFrom.current = null
     if (!from || !lost()) return // the user moved on meanwhile: leave focus alone
     if (ended === "publish") {
-      // success: the done screen's heading takes focus (above); otherwise Try again, Change URL or Publish again
+      // success: the done screen's heading takes focus (above); otherwise Try again, Change URL, Retry or Publish again
       if (!done) document.getElementById("ms-pub-retry")?.focus()
+      else (document.getElementById("ms-colours-retry") ?? document.getElementById("ms-h"))?.focus()
       return
     }
     // a ZIP finished or was cancelled: back to the button that started it, else Download all, else the heading
@@ -499,14 +557,15 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     const base = baseName(s.details, s.design.file.name)
     try {
       const list = only ? [only] : [...chosen].sort((a, b) => (a === focusSet ? -1 : b === focusSet ? 1 : 0))
-      const items: ZipItem[] = []
+      // every ticked colour, main first; several colours or models get one <device>_<colour>/ folder each
+      const models: ZipModel[] = []
       for (const set of list) {
-        const c = colourOf(set), m = await loadMeta(set.base_url, c), model = deviceName(set.device), full = fullOf(set.device, c)
-        for (const n of anglesOf(m, settings.shots)) {
-          const shotName = m.shots.find((x) => x.n === n)?.name ?? String(n)
-          items.push({ set, colour: c, shot: n, shotName, model, full, entry: (size) => (only ? "" : `${set.device}_${slugify(c)}/`) + entryName(n, shotName, size) })
-        }
+        const colours = colourOrder(set, pickFor(set))
+        const loaded = await Promise.all(colours.map(async (c) => ({ name: c, meta: await loadMeta(set.base_url, c), full: fullOf(set.device, c) })))
+        models.push({ set, model: deviceName(set.device), colours: loaded })
       }
+      const items = zipItems(models, settings.shots, Boolean(only))
+      const onlyColours = only ? colourOrder(only, pickFor(only)) : []
       setJob({ kind: "zip", phase: "making", done: 0, total: items.length, label: "Starting…", eta: "" })
       // cancelled (or the page left) while the layer info loaded: no export worker for nothing
       if (ctl.signal.aborted) { toast("Download cancelled."); return }
@@ -514,7 +573,7 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
       zipEx.current = ex
       if (ctl.signal.aborted) { toast("Download cancelled."); return }
       await downloadShots({
-        items, zipName: only ? modelZipName(base, only.device, colourOf(only)) : allZipName(base), ex, hq: R.hq,
+        items, zipName: only ? modelZipName(base, only.device, onlyColours.length === 1 ? onlyColours[0] : null) : allZipName(base), ex, hq: R.hq,
         placement: s.placement, background: s.background, signal: ctl.signal, onJob: setJob, epoch: R.epoch, onPng: notePng,
       })
     } catch (error: any) {
@@ -529,6 +588,21 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
   }
   const cancelZip = () => { zipAbort.current?.abort(); zipEx.current?.bump("zip") }
 
+  // what the pictures were made from: a resumed Update pictures is only valid while this holds (a dot colour or
+  // another model's set in Mockup sets does not count; each model's device, folder and ticked colours do)
+  const publishSig = () => JSON.stringify([s.details.slug, version, placementKey(s.placement), [settings.case_type, settings.shots, settings.image_size, settings.quality, settings.supersample], publishModels().map((m) => [m.set.device, m.set.base_url, m.colours.map((c) => c.name)])])
+  const partialOf = (steps: ServerStep[], failure: StepFailure): PublishError => ({
+    message: failure.message, stopped: failure.stopped, partial: { done: steps.filter((x) => x.done).length, total: steps.length, label: failure.label },
+  })
+  const doneMessage = (mode: "new" | "update", status: "draft" | "published") => (mode === "update" ? "Pictures updated." : status === "draft" ? "Draft created." : "Product published.")
+  const finishUpdate = (slug: string, perModel: number) => {
+    resume.current = null
+    const published = existingDesign?.products.some((p) => p.status === "published") ?? false
+    setDone({ slug, status: published ? "published" : "draft", mode: "update", models: chosen.length, colourSets, perModel, title: existingDesign?.name ?? s.details.slug, colours: null })
+    toast("Pictures updated.", "success")
+    announce("Pictures updated")
+  }
+
   async function publish() {
     if (lock.current || job || !R) return
     const blocked = blockedBy(errors, stepIndex("review"))
@@ -537,18 +611,42 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     stop.current = false
     jobFrom.current = document.activeElement as HTMLElement | null
     setPublishError(null)
-    setUploaded(new Set())
     const design = s.design, details = s.details
+    const sig = publishSig()
     try {
+      // Update pictures that got part of the way: send only the saves not done, nothing is made again
+      const part = resume.current
+      if (details.mode === "update" && part && part.sig === sig) {
+        const failure = await saveSteps(part.steps, "saving", { stopped: () => stop.current, onJob: setJob })
+        if (failure) { setPublishError(partialOf(part.steps, failure)); if (!failure.stopped) toast(`Couldn't save ${failure.label}.`, "error") }
+        else finishUpdate(part.slug, part.perModel)
+        return
+      }
+      resume.current = null
+      setUploaded(new Set())
       const result = await publishProduct({
-        settings, models: chosen.map((x) => ({ set: x, colour: colourOf(x), model: deviceName(x.device), full: fullOf(x.device, colourOf(x)) })), details, placement: s.placement, version,
+        settings, models: publishModels(), details, placement: s.placement, version,
         hq: R.hq, lowMemory, exporter: () => R.exporter(design.file), stopped: () => stop.current,
         onJob: setJob, onUploaded: (cell) => setUploaded((u) => new Set(u).add(cell)),
         onMilestone: (pct) => announce(`${pct} percent of the pictures are made and uploaded.`),
       })
-      const message = details.status === "draft" ? "Draft created." : "Product published."
-      setDone({ slug: result.slug, status: details.status, models: chosen.length, perModel: result.perModel, title: details.name.trim() })
-      toast(message, "success")
+      if (details.mode === "update") {
+        if (result.failure) {
+          resume.current = { sig, slug: result.slug, steps: result.steps, perModel: result.perModel, pictures: result.pictures }
+          setPublishError(partialOf(result.steps, result.failure))
+          if (!result.failure.stopped) toast(`Couldn't save ${result.failure.label}.`, "error")
+        } else finishUpdate(result.slug, result.perModel)
+        return
+      }
+      // the product exists: phone colours that did not save get a Retry on the done screen
+      colourSteps.current = result.steps
+      const left = result.steps.filter((x) => !x.done).length
+      const message = doneMessage("new", details.status)
+      setDone({
+        slug: result.slug, status: details.status, mode: "new", models: chosen.length, colourSets, perModel: result.perModel, title: details.name.trim(),
+        colours: result.failure ? { left, failure: result.failure } : null,
+      })
+      toast(result.failure ? `${message.slice(0, -1)}, but phone colour pictures for ${plural(left, "model")} weren't saved.` : message, result.failure ? "info" : "success")
       announce(message.slice(0, -1))
       if (details.collection === NEW_COLLECTION) loadCollections()
     } catch (error: any) {
@@ -566,27 +664,63 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     }
   }
 
+  /** The done screen's Retry: the phone colour calls of a new product that are not saved yet. */
+  async function retryColours() {
+    if (lock.current || job || !done?.colours) return
+    lock.current = true
+    stop.current = false
+    jobFrom.current = document.activeElement as HTMLElement | null
+    try {
+      const steps = colourSteps.current
+      const failure = await saveSteps(steps, "colours", { stopped: () => stop.current, onJob: setJob })
+      const left = steps.filter((x) => !x.done).length
+      setDone((d) => (d ? { ...d, colours: failure ? { left, failure } : null } : d))
+      if (!failure) { toast("Phone colour pictures saved.", "success"); announce("Phone colour pictures saved") } else if (!failure.stopped) toast(`Couldn't save ${failure.label}.`, "error")
+    } finally {
+      lock.current = false
+      setJob(null)
+    }
+  }
+
   async function again() {
     if (job || lock.current || clearing.current) return
+    // the unsaved colour calls live only here: Make another would drop their Retry
+    if (done?.colours && !window.confirm(AGAIN_MSG)) return
     const title = s.details.collection === NEW_COLLECTION ? s.details.newCollection.trim() : undefined
     await clearDesign()
     setDone(null)
     setUploaded(new Set())
     setPublishError(null)
+    resume.current = null
+    colourSteps.current = []
     dispatch({ type: "again", collectionTitle: title })
+  }
+
+  /** The URL is taken: update that design's pictures instead (its details are read, not sent). */
+  const toUpdateMode = () => {
+    resume.current = null
+    setPublishError(null)
+    dispatch({ type: "details", patch: { mode: "update", slugTouched: true, slugOpen: false } })
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(s.step === "review" ? "ms-primary" : "ms-h")?.focus()))
+  }
+  const toNewMode = () => {
+    resume.current = null
+    setPublishError(null)
+    dispatch({ type: "details", patch: { mode: "new", slugOpen: true } })
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById("ms-f-slug")?.focus()))
   }
 
   // --- render ------------------------------------------------------------------------------------------
   if (!sets.length) return <div className="ms"><EmptyModels onOpenSets={onOpenSets} /></div>
 
   const busy = Boolean(job)
-  const publishing = job?.kind === "publish"
-  const reviewModels: ReviewModel[] = chosen.map((x) => ({ set: x, colour: colourOf(x), model: deviceName(x.device), meta: metaOf(x) }))
-  const pictures = chosen.reduce((sum, x) => { const m = readyMeta(x); return sum + (m ? settings.shots.filter((n) => m.shots.some((y) => y.n === n)).length : settings.shots.length) }, 0)
+  const publishing = job?.kind === "publish" && !done
+  const focusPick = focusSet ? pickFor(focusSet) : null
   const previewCommon: Omit<PreviewProps, "mode"> = {
-    step: s.step, list: chosen.length ? chosen : sets, focusSet, colour, deviceName, meta, metaState, angles, gallery: settings.shots, shotNow, stage,
+    step: s.step, list: chosen.length ? chosen : sets, focusSet, colour, stageColours: focusSet && focusPick ? (focusPick.on ? focusPick.colours : focusSet.colours) : [],
+    deviceName, meta, metaState, angles, gallery: settings.shots, shotNow, stage,
     film, onFilmRetry: retryFilm, uvPick, placement: s.placement, placer, hasDesign, coarse, hintSeen, onHintSeen: () => setHintSeen(true),
-    onFocus, onColour: (device, c) => dispatch({ type: "pick/colour", device, colour: c }),
+    onFocus, onColour: (device, c) => { const x = sets.find((y) => y.device === device); if (x) dispatch({ type: "pick/stage", set: x, colour: c }) },
     onOpenFull: openStageFull, onDownload: downloadStage,
     downloading: focusSet ? pngBusy.has(cellKey(focusSet.device, colour, shotNow, version)) : false,
     onChooseFile: chooseClick, onDropFile: (f) => { void chooseFile(f) }, onRetryMeta: retryMetas, stageRef,
@@ -606,11 +740,13 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     </div>
   } else if (s.step === "models") {
     body = <>
-      <StepHead step="models" title="Choose the models" sub="Every model you choose gets its own pictures in this one product. The phone colour only changes the pictures, not what is sold." />
-      <ModelsStep sets={sets} pickOf={pickOf} metas={metas} cards={cards} cardRef={cardRef} deviceName={deviceName} disabled={busy}
-        onToggle={(x) => dispatch({ type: "pick/toggle", device: x.device, colour: colourOf(x) })}
-        onAll={(on) => dispatch({ type: "pick/all", on, devices: sets.map((x) => ({ device: x.device, colour: colourOf(x) })) })}
-        onColour={(x, c) => dispatch({ type: "pick/colour", device: x.device, colour: c })} onRetryMeta={retryMetas} onCardRetry={retryCard} />
+      <StepHead step="models" title="Choose the models" sub="Tick every phone colour you want pictures for. The colour only changes the pictures, not what is sold. The main colour (the model's default when ticked) is what the shop grid, bag and ads show." />
+      <ModelsStep sets={sets} pickOf={pickFor} metas={metas} cards={cards} cardRef={cardRef} deviceName={deviceName} disabled={busy}
+        colourMode={s.colourMode} estimate={estimate} picturesOf={picturesOf}
+        onToggle={(x) => dispatch({ type: "pick/toggle", set: x })}
+        onAll={(on) => dispatch({ type: "pick/all", on, sets })}
+        onColour={(x, c) => dispatch({ type: "pick/colour", set: x, colour: c })}
+        onAllColours={(on) => dispatch({ type: "pick/all-colours", on, sets: chosen })} onRetryMeta={retryMetas} onCardRetry={retryCard} />
     </>
   } else if (s.step === "placement" && s.design) {
     body = <div className="ms-split" data-step="placement">
@@ -624,35 +760,36 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     const firstShot = angles.find((n) => settings.shots.includes(n))
     const mini = firstShot !== undefined ? film[String(firstShot)] : undefined
     body = <div className="ms-split" data-step="details">
-      <StepHead step="details" title="Product details" sub="The title is the design name customers see." />
+      <StepHead step="details" title={update ? "Update pictures" : "Product details"} sub={update ? "The design keeps its title, URL and everything else; only its pictures are replaced." : "The title is the design name customers see."} />
       <Preview {...previewCommon} mode="static" />
-      <MiniSummary bitmap={mini && "bitmap" in mini ? mini.bitmap : null} title={s.details.name.trim() || s.design?.file.name || ""} models={chosen.length} colour={colour} />
-      <DetailsForm s={s} slugState={slugState} collections={collections} onRetryCollections={loadCollections} onSubmit={next}
-        onPatch={(patch) => dispatch({ type: "details", patch })} />
+      <MiniSummary bitmap={mini && "bitmap" in mini ? mini.bitmap : null} title={(update ? existingDesign?.name : s.details.name.trim()) || s.design?.file.name || ""} models={chosen.length} colour={colourSets > chosen.length ? plural(colourSets, "colour set") : colour} />
+      <DetailsForm s={s} slugState={slugState} collections={collections} existing={existing} caseTypeName={caseTypeName} onRetryCollections={loadCollections} onSubmit={next}
+        onPatch={(patch) => dispatch({ type: "details", patch })} onUpdateMode={toUpdateMode} onNewMode={toNewMode} onRetryExisting={() => loadExisting(s.details.slug)} />
     </div>
   } else if (s.step === "review") {
+    const action = update ? "Update pictures" : s.details.status === "draft" ? "Create draft" : "Publish product"
     body = <>
       <StepHead step="review" title="Review & publish" sub="Check every picture. Downloads are full quality; shop images are compressed only when they are uploaded." />
       {/* every tile is two tab stops: one stop straight to the footer's primary action */}
-      {!busy && <button type="button" className="ms-skip" onClick={() => document.getElementById("ms-primary")?.focus()}>
-        {s.details.status === "draft" ? "Skip to Create draft" : "Skip to Publish product"}</button>}
+      {!busy && <button type="button" className="ms-skip" onClick={() => document.getElementById("ms-primary")?.focus()}>Skip to {action}</button>}
       <div className="ms-review">
         <fieldset className="ms-fs" disabled={publishing}>
           <ReviewSheet r={R} ready={ready} active={active} models={reviewModels} settings={settings} placement={s.placement} version={version} uploaded={uploaded} pngBusy={pngBusy} disabled={busy}
-            onOpen={(m, shots, i) => openFull(m.set, m.colour, shots, i)} onDownloadOne={(m, n) => { void downloadOne(m.set, m.colour, n) }} onZip={(m) => { void runZip(m.set) }} />
+            onOpen={(m, c, shots, i) => openFull(m.set, c, shots, i)} onDownloadOne={(m, c, n) => { void downloadOne(m.set, c, n) }} onZip={(m) => { void runZip(m.set) }} />
         </fieldset>
         <aside className="ms-aside">
           {/* no Edit while any job runs (Remove on low-memory devices would change the design mid-ZIP) */}
           <fieldset className="ms-fs" disabled={busy}>
-            <SummaryCard design={s.design} models={reviewModels} details={s.details} placement={s.placement} slugState={slugState} onEdit={(step) => go(step, true)} />
+            <SummaryCard design={s.design} models={reviewModels} details={s.details} placement={s.placement} slugState={slugState} existing={existingDesign} onEdit={(step) => go(step, true)} />
           </fieldset>
           <fieldset className="ms-fs" disabled={publishing}>
             <DownloadCard models={reviewModels} background={s.background} onBackground={(value) => dispatch({ type: "background", value })} job={job} publishing={publishing} phone={phone}
               stats={pngStats} onZip={() => { void runZip(null) }} onCancel={cancelZip} />
           </fieldset>
-          <PublishCard status={s.details.status} onStatus={(status) => dispatch({ type: "details", patch: { status } })} settings={settings} pictures={pictures}
+          <PublishCard status={s.details.status} onStatus={(status) => dispatch({ type: "details", patch: { status } })} settings={settings}
+            mode={s.details.mode} caseTypeName={caseTypeName} replace={replace} pictures={pictures} estimate={estimate}
             job={job} error={publishError} slug={s.details.slug} onStop={() => { if (job?.phase !== "creating") stop.current = true }}
-            onRetry={() => { void publish() }} onOpenSettings={onOpenSettings}
+            onRetry={() => { void publish() }} onOpenSettings={onOpenSettings} onUpdateMode={toUpdateMode}
             onChangeUrl={() => {
               dispatch({ type: "details", patch: { slugOpen: true } })
               go("details", true)
@@ -663,30 +800,38 @@ export default function NewProduct({ settings, devices, active, onOpenSets, onOp
     </>
   }
 
+  // "3 models × 4 colours × 13 pictures = 156 pictures · about 3 min" when every model is alike, else the totals
+  const shotCounts = new Set(reviewModels.map((m) => modelShots(m, settings.shots)?.length ?? settings.shots.length))
+  const colourCounts = new Set(reviewModels.map((m) => m.colours.length))
+  const minutes = estimate.replace(/^.* · /, "")
+  const reviewHint = reviewModels.length && shotCounts.size === 1 && colourCounts.size === 1
+    ? `${plural(chosen.length, "model")} × ${plural([...colourCounts][0], "colour")} × ${plural([...shotCounts][0], "picture")} = ${plural(pictures, "picture")} · ${minutes}`
+    : `${plural(chosen.length, "model")} · ${plural(colourSets, "colour set")} · ${plural(pictures, "picture")} · ${minutes}`
   const hint = s.step === "design"
     ? (s.showErrors && errors.design) || (s.design ? `${s.design.w} × ${s.design.h} px` : "PNG, JPG or WebP")
     : s.step === "models" ? (s.showErrors && errors.models) || `${chosen.length} of ${sets.length} models chosen`
       : s.step === "placement" ? "One position is used for every model."
-        : s.step === "details" ? (s.showErrors && errors.details ? "Fill in the highlighted fields." : slugState === "checking" ? "Checking the URL…" : "")
-          : `${plural(chosen.length, "model")} × ${settings.shots.length} pictures`
+        : s.step === "details" ? (s.showErrors && errors.details ? (update ? errors.details : "Fill in the highlighted fields.") : slugState === "checking" ? "Checking the URL…" : "")
+          : reviewHint
   const hintError = s.showErrors && Boolean(errors[s.step])
 
   let primary: ReactNode
-  if (publishing) primary = <Button variant="primary" loading>{s.details.status === "draft" ? "Creating draft…" : "Publishing…"}</Button>
-  else if (s.step === "review") primary = <Button id="ms-primary" variant="primary" disabled={busy} onClick={next}>{s.details.status === "draft" ? "Create draft" : "Publish product"}</Button>
+  if (publishing) primary = <Button variant="primary" loading>{update ? "Updating…" : s.details.status === "draft" ? "Creating draft…" : "Publishing…"}</Button>
+  else if (s.step === "review") primary = <Button id="ms-primary" variant="primary" disabled={busy} onClick={next}>{update ? "Update pictures" : s.details.status === "draft" ? "Create draft" : "Publish product"}</Button>
   else primary = <Button variant="primary" disabled={Boolean(s.reading) || busy} onClick={next}>{s.fromReview ? "Back to review" : <>Continue{Icon.arrowRight}</>}</Button>
 
   const lbSet = lightbox ? sets.find((x) => x.device === lightbox.device) ?? null : null
   const lbMeta = lightbox ? metas[`${lightbox.device}|${lightbox.colour}`] : undefined
   const lbReady = lbMeta?.status === "ready" ? lbMeta : null
-  const firstModel = chosen[0]
-  const firstMeta = firstModel ? readyMeta(firstModel) : null
+  const firstModel = reviewModels[0]
+  const firstMeta = firstModel?.metas[firstModel.main]
 
   return <div className="ms" data-step={s.step}>
     {!done && <Stepper step={s.step} reached={s.reached} errors={errors} busy={busy} onGo={(step) => go(step)} />}
     {done
       ? <DoneScreen done={done} version={version} placement={s.placement} job={job} onZip={() => { void runZip(null) }} onCancel={cancelZip} onAgain={() => { void again() }}
-        first={firstModel && firstMeta ? { set: firstModel, colour: colourOf(firstModel), shots: anglesOf(firstMeta, settings.shots).slice(0, 4) } : null} />
+        onRetryColours={() => { void retryColours() }} onStopColours={() => { stop.current = true }}
+        first={firstModel && firstMeta?.status === "ready" ? { set: firstModel.set, colour: firstModel.main, shots: anglesOf(firstMeta.meta, settings.shots).slice(0, 4) } : null} />
       : <section className="ms-frame" key={s.step} data-dir={s.dir}>{body}</section>}
     {!done && <footer className="ms-foot">
       <Button variant="ghost" className={`back${s.step === "design" ? " is-hidden" : ""}`} icon={Icon.arrowLeft} disabled={busy} aria-hidden={s.step === "design" || undefined} tabIndex={s.step === "design" ? -1 : undefined} onClick={back}>Back</Button>

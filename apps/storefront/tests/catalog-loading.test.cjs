@@ -178,6 +178,7 @@ test("shop Quick Add resolves the chosen device and construction without invokin
       getCaseTypes: async () => [caseType],
       getShopCatalog: async () => [{ slug: "example", name: "Example", forms: ["phone"], caseTypes: ["signature"] }],
       shopCardImage: () => "https://images.invalid/selected.webp",
+      getShopPhoneColours: async () => null,
       getShopCards: async () => null,
     },
     "@/lib/medusa": { listProducts: async (query, options) => {
@@ -212,6 +213,7 @@ test("shop uses uploaded exact-pair renders without changing variant selection, 
       getDeviceCatalog: async () => [device], getCaseTypes: async () => cases,
       getShopCatalog: async () => ["uploaded", "legacy"].map((slug) => ({ slug, name: slug, forms: ["phone"], caseTypes: cases.map((c) => c.slug) })),
       shopCardImage: (slug, caseSlug) => `https://images.invalid/${slug}/${caseSlug}/legacy.webp`,
+      getShopPhoneColours: async () => null,
       getShopCards: async (handles, name, caseName) => {
         assert.deepEqual(Array.from(handles), ["uploaded", "legacy"])
         assert.equal(name, device.name)
@@ -262,6 +264,7 @@ test("compact shop card reads have stable URLs, short invalidation tags and a sa
   let ok = true
   const { getShopCards, getShopCatalog } = loadSource("lib/catalog.ts", {
     "./medusa": { MEDUSA_BACKEND_URL: "http://fixture.invalid", MEDUSA_PUBLISHABLE_KEY: "fixture-only" },
+    "./phone-colours": loadSource("lib/phone-colours.ts", {}),
   }, {
     fetch: async (url, options) => {
       requests.push({ url, options })
@@ -312,6 +315,7 @@ test("shop narrows model and case compatibility before counts and pagination", a
         assert.equal(slug, device.slug)
         return selectedCatalog
       },
+      getShopPhoneColours: async () => null,
       getShopCards: async (handles) => {
         requestedHandles = Array.from(handles)
         return handles.map((handle) => ({ handle, variantId: `variant-${handle}`, image: "https://images.invalid/upload.webp", imagesByCaseType: {} }))
@@ -344,6 +348,7 @@ test("the Men shop lists men's and shared designs and hides women-only ones; Wom
     "@/lib/catalog": {
       getDeviceCatalog: async () => [device], getCaseTypes: async () => [{ name: "Signature", slug: "signature", price: 1400 }],
       getShopCatalog: async () => catalog,
+      getShopPhoneColours: async () => null,
       getShopCards: async (handles) => handles.map((handle) => ({ handle, variantId: `v-${handle}`, image: null, imagesByCaseType: {} })),
       shopCardImage: () => "x.webp",
     },
@@ -380,6 +385,7 @@ test("shop scopes case types by form: Signature Earbuds shows only on AirPods, a
           : slug === phone.slug
             ? [{ slug: "bloom", name: "Bloom", forms: ["phone"], caseTypes: ["signature"] }]
             : catalog,
+      getShopPhoneColours: async () => null,
       getShopCards: async (handles) =>
         handles.map((handle) => ({ handle, variantId: `variant-${handle}`, image: "https://images.invalid/x.webp", imagesByCaseType: {} })),
       shopCardImage: () => "https://images.invalid/legacy.webp",

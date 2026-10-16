@@ -385,16 +385,19 @@ export function useBoxOut(fallback: number): [number, (el: HTMLElement | null) =
   return [out, setEl]
 }
 
-/** Every enabled set's layer info in its picked colour, and whether its 2400 px layers are uploaded. */
-export function useMetas(sets: MockupSet[], colourOf: (s: MockupSet) => string, active: boolean) {
+/**
+ * Layer info of every enabled set in the colours it needs (its stage colour, and every ticked colour of a chosen
+ * model), keyed `${device}|${colour}`, and whether each colour's 2400 px layers are uploaded.
+ */
+export function useMetas(sets: MockupSet[], coloursOf: (s: MockupSet) => string[], active: boolean) {
   const [metas, setMetas] = useState<Record<string, MetaState>>({})
   const [nonce, setNonce] = useState(0)
   const started = useRef(new Set<string>())
-  const wanted = sets.map((s) => `${s.device}|${colourOf(s)}|${s.base_url}`).join(",")
+  const wanted = sets.map((s) => `${s.device}|${coloursOf(s).join("+")}|${s.base_url}`).join(",")
   useEffect(() => {
     if (!active) return
-    for (const s of sets) {
-      const c = colourOf(s), k = `${s.device}|${c}`, sk = `${k}|${s.base_url}`
+    for (const s of sets) for (const c of coloursOf(s)) {
+      const k = `${s.device}|${c}`, sk = `${k}|${s.base_url}`
       if (started.current.has(sk)) continue
       started.current.add(sk)
       setMetas((m) => (m[k]?.status === "ready" ? m : { ...m, [k]: { status: "loading" } }))

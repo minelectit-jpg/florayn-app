@@ -46,13 +46,20 @@ export default function ShopGrid({
   currentPage = 1,
   totalPages = 1,
   routePath,
+  pageBase,
   selectors,
+  colourQuery,
+  colourRow,
 }: {
   products: StoreProduct[]
   device?: string | null
   deviceSlug?: string | null
   caseType?: string | null
   caseTypeSlug?: string | null
+  /** A shop phone colour page's "&color=<slug>" for the cards' product links (built on the server). */
+  colourQuery?: string
+  /** The server-rendered Phone color row, shown under the toolbar. */
+  colourRow?: ReactNode
   /** Total designs across all pages, for the "N designs" count. */
   totalCount?: number
   currentPage?: number
@@ -60,6 +67,8 @@ export default function ShopGrid({
   /** Server-rendered route identity for opt-in image-readiness diagnostics. */
   selectors?: ReactNode
   routePath: string
+  /** The page links' base, built on the server: /shop/<device>/<case type>/[<colour>/]. */
+  pageBase: string
 }) {
   const [sort, setSort] = useState<SortKey>("featured")
   const [open, setOpen] = useState(false)
@@ -95,12 +104,7 @@ export default function ShopGrid({
   const activeLabel = SORTS.find((s) => s.key === sort)?.label ?? "Featured"
   const count = totalCount ?? products.length
 
-  const base = !deviceSlug
-    ? "/shop/"
-    : caseTypeSlug
-      ? `/shop/${deviceSlug}/${caseTypeSlug}/`
-      : `/shop/${deviceSlug}/`
-  const hrefFor = (p: number) => (p > 1 ? `${base}${p}/` : base)
+  const hrefFor = (p: number) => (p > 1 ? pageBase + p + "/" : pageBase)
 
   return (
     <div className="space-y-5">
@@ -176,6 +180,8 @@ export default function ShopGrid({
         ) : null}
       </div>
 
+      {colourRow}
+
       {!selectors ? <p className="text-[12px] text-ink-muted sm:text-sm">{count} {count === 1 ? "design" : "designs"}</p> : null}
 
       <div ref={gridRef} className="fl-grid" data-shop-path={routePath}>
@@ -187,6 +193,7 @@ export default function ShopGrid({
             deviceSlug={deviceSlug ?? null}
             caseType={caseType ?? null}
             caseTypeSlug={caseTypeSlug ?? null}
+            colourQuery={colourQuery}
             // Two desktop rows (four columns) get early requests. Keep this
             // bounded on mobile too, without waiting for viewport hydration.
             priority={i < SHOP_PRIORITY_IMAGES}

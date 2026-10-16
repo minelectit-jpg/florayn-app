@@ -2,10 +2,14 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react"
 
 import { CENTERED, shotLabel, type MockupSet, type Placement, type SetMeta } from "../../../mockup/layers"
-import { Button, Icon, IconButton, slugify } from "../../../ui"
+import { Button, Icon, IconButton, Segmented, slugify } from "../../../ui"
 import type { ShotResult } from "./engine"
-import { leaveDrop, ShotCanvas, Swatches, Thumb, type Placer } from "./preview"
-import { fieldErrors, limits, NEW_COLLECTION, plural, sharpness, STEPS, type DesignFile, type Details, type MetaState, type SlugState, type State, type StepId } from "./state"
+import type { ExistingDesign } from "./export"
+import { ColourChecks, leaveDrop, ShotCanvas, Thumb, type Placer } from "./preview"
+import {
+  colourList, colourOrder, fieldErrors, limits, mainColourOf, NEW_COLLECTION, plural, sharpness, STEPS,
+  type ColourMode, type DesignFile, type Details, type MetaState, type Pick, type SlugState, type State, type StepId,
+} from "./state"
 
 export function StepHead({ step, title, sub }: { step: StepId; title: string; sub: ReactNode }) {
   const i = STEPS.findIndex((s) => s.id === step) + 1
@@ -108,16 +112,21 @@ export function EmptyModels({ onOpenSets }: { onOpenSets: () => void }) {
   </div>
 }
 
-export function ModelsStep({ sets, pickOf, metas, cards, cardRef, deviceName, disabled, onToggle, onAll, onColour, onRetryMeta, onCardRetry }: {
-  sets: MockupSet[]; pickOf: (s: MockupSet) => { on: boolean; colour: string }; metas: Record<string, MetaState>
+export function ModelsStep({ sets, pickOf, metas, cards, cardRef, deviceName, disabled, colourMode, estimate, picturesOf, onToggle, onAll, onColour, onAllColours, onRetryMeta, onCardRetry }: {
+  sets: MockupSet[]; pickOf: (s: MockupSet) => Pick; metas: Record<string, MetaState>
   cards: Record<string, ShotResult>; cardRef: (el: HTMLElement | null) => void; deviceName: (slug: string) => string; disabled?: boolean
-  onToggle: (s: MockupSet) => void; onAll: (on: boolean) => void; onColour: (s: MockupSet, colour: string) => void
+  /** the toolbar's Main only | All colours, and the live estimate of what publishing makes */
+  colourMode: ColourMode; estimate: string
+  /** a chosen model's shop pictures: ticked colours x the shots they share */
+  picturesOf: (s: MockupSet) => number
+  onToggle: (s: MockupSet) => void; onAll: (on: boolean) => void; onColour: (s: MockupSet, colour: string) => void; onAllColours: (on: boolean) => void
   onRetryMeta: () => void; onCardRetry: (slot: string) => void
 }) {
   const [q, setQ] = useState("")
   const allRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const count = sets.filter((s) => pickOf(s).on).length
+  const multi = sets.some((s) => s.colours.length > 1)
   useEffect(() => { if (allRef.current) allRef.current.indeterminate = count > 0 && count < sets.length }, [count, sets.length])
   const needle = q.trim().toLowerCase()
   const shown = needle ? sets.filter((s) => deviceName(s.device).toLowerCase().includes(needle)) : sets
@@ -125,10 +134,13 @@ export function ModelsStep({ sets, pickOf, metas, cards, cardRef, deviceName, di
     <div className="ms-mtools">
       <label className="row ms-all"><input id="ms-all" ref={allRef} type="checkbox" className="check" checked={count === sets.length && count > 0} disabled={disabled} onChange={(e) => onAll(e.target.checked)} /><strong>All models</strong></label>
       <span className="muted ms-num">{count} of {sets.length} chosen</span>
+      {multi && <span className="row ms-cmode"><span className="muted ms-small" aria-hidden>Phone colours</span>
+        <Segmented<ColourMode> label="Phone colours" value={colourMode} disabled={disabled} onChange={(v) => onAllColours(v === "all")} options={[["main", "Main only"], ["all", "All colours"]]} /></span>}
       {sets.length > 8 && <input ref={searchRef} className="input" type="search" placeholder="Search models" aria-label="Search models" value={q} onChange={(e) => setQ(e.target.value)} />}
     </div>
+    <p className="muted ms-small ms-num ms-estimate">{count ? estimate : "Choose a model to see how many pictures are made."}</p>
     {shown.length
-      ? <ul className="ms-mgrid">{shown.map((s, i) => <ModelCard key={s.device} set={s} pick={pickOf(s)} meta={metas[`${s.device}|${pickOf(s).colour}`]} card={cards[s.device]}
+      ? <ul className="ms-mgrid">{shown.map((s, i) => <ModelCard key={s.device} set={s} pick={pickOf(s)} metas={metas} card={cards[s.device]} pictures={picturesOf(s)}
         model={deviceName(s.device)} thumbRef={i === 0 ? cardRef : undefined} disabled={disabled}
         onToggle={() => onToggle(s)} onColour={(c) => onColour(s, c)} onRetry={onRetryMeta} onCardRetry={() => onCardRetry(s.device)} />)}</ul>
       : <div className="ms-empty"><p>No models match “{q.trim()}”.</p><Button onClick={() => { setQ(""); searchRef.current?.focus() }}>Clear search</Button></div>}
@@ -136,33 +148,38 @@ export function ModelsStep({ sets, pickOf, metas, cards, cardRef, deviceName, di
   </>
 }
 
-function ModelCard({ set, pick, meta, card, model, thumbRef, disabled, onToggle, onColour, onRetry, onCardRetry }: {
-  set: MockupSet; pick: { on: boolean; colour: string }; meta: MetaState | undefined; card: ShotResult | undefined; model: string
+function ModelCard({ set, pick, metas, card, pictures, model, thumbRef, disabled, onToggle, onColour, onRetry, onCardRetry }: {
+  set: MockupSet; pick: Pick; metas: Record<string, MetaState>; card: ShotResult | undefined; pictures: number; model: string
   thumbRef?: (el: HTMLElement | null) => void; disabled?: boolean
   onToggle: () => void; onColour: (c: string) => void; onRetry: () => void; onCardRetry: () => void
 }) {
+  const meta = metas[`${set.device}|${pick.stage}`]
   const failed = meta?.status === "error"
+  // a ticked colour whose layer info failed blocks Continue: say which
+  const badColour = pick.on ? pick.colours.find((c) => metas[`${set.device}|${c}`]?.status === "error") : failed ? pick.stage : undefined
   const cardFailed = !failed && Boolean(card && "error" in card)
   const sid = useId()
+  const main = mainColourOf(set, pick)
   // only the words describe the checkbox; a Retry button stays out of its description
   let status: ReactNode = "", cls = ""
-  if (!meta || meta.status === "loading") status = <span id={sid}>Loading mockups…</span>
-  else if (failed) { cls = " is-error"; status = <><span id={sid}>Couldn't load the mockups.</span> <button type="button" className="linkbtn" onClick={onRetry}>Retry</button></> }
+  if (badColour) { cls = " is-error"; status = <><span id={sid}>{set.colours.length > 1 ? `${badColour}: couldn't load the mockups.` : "Couldn't load the mockups."}</span> <button type="button" className="linkbtn" onClick={onRetry}>Retry</button></> }
+  else if (!meta || meta.status === "loading") status = <span id={sid}>Loading mockups…</span>
   else if (cardFailed) { cls = " is-error"; status = <><span id={sid}>Couldn't make the picture.</span> <button type="button" className="linkbtn" onClick={onCardRetry}>Retry</button></> }
-  else if (meta.full === true) { cls = " is-ok"; status = <span id={sid}>Full quality ready</span> }
-  else if (meta.full === false) status = <span id={sid}>Downloads at 1200 px</span>
+  else if (meta.status === "ready" && meta.full === true) { cls = " is-ok"; status = <span id={sid}>Full quality ready</span> }
+  else if (meta.status === "ready" && meta.full === false) status = <span id={sid}>Downloads at 1200 px</span>
+  const line = pick.on ? `${colourList(colourOrder(set, pick))} — ${plural(pictures, "picture")}` : pick.stage
   return <li className={`ms-mcard${pick.on ? " is-on" : ""}`}>
     <label className="ms-mcard-toggle">
       <input type="checkbox" className="sr-only" checked={pick.on} disabled={disabled || (failed && !pick.on)} aria-label={model} aria-describedby={status ? sid : undefined} onChange={onToggle} />
       <span className="ms-mcard-thumb" ref={thumbRef}>
-        {failed ? <span className="ms-thumb-error" title={meta.message}>{Icon.alert}</span> : <Thumb result={card} onRetry={onCardRetry} />}
+        {failed && meta?.status === "error" ? <span className="ms-thumb-error" title={meta.message}>{Icon.alert}</span> : <Thumb result={card} onRetry={onCardRetry} />}
         <span className="ms-mcard-check" aria-hidden>{Icon.check}</span>
       </span>
       <span className="ms-mcard-name" title={model}>{model}</span>
     </label>
     <div className="ms-mcard-foot">
-      <Swatches set={set} value={pick.colour} model={model} disabled={disabled} onChange={onColour} />
-      <span className="ms-mcard-colour">{pick.colour}</span>
+      <ColourChecks set={set} on={pick.on} colours={pick.colours} main={main} model={model} disabled={disabled} onToggle={onColour} />
+      <span className="ms-mcard-colour" title={line}>{line}</span>
     </div>
     <p className={`ms-mcard-status${cls}`}>{status}</p>
   </li>
@@ -306,12 +323,47 @@ const SLUG_TEXT: Record<SlugState, string> = {
   invalid: "Use lowercase letters, numbers and dashes.", unknown: "Couldn't check right now. It is checked again when you publish.",
 }
 
-export function DetailsForm({ s, slugState, collections, onPatch, onRetryCollections, onSubmit }: {
-  s: State; slugState: SlugState; collections: Collections
+/** "Published", "Draft" or "Published and draft" across a design's products. */
+export function designStatus(d: ExistingDesign) {
+  const all = new Set(d.products.map((p) => p.status))
+  return all.size > 1 ? "Published and draft" : all.has("published") ? "Published" : "Draft"
+}
+
+/** Update pictures: the existing design's own details, read-only; only its pictures change. */
+function UpdateDetails({ s, existing, caseTypeName, onNewMode, onRetryExisting, onSubmit }: {
+  s: State; existing: ExistingState; caseTypeName: string; onNewMode: () => void; onRetryExisting: () => void; onSubmit: () => void
+}) {
+  const d = s.details
+  const ex = existing.status === "ready" ? existing.design : null
+  const rows: [string, ReactNode][] = ex ? [
+    ["Title", ex.name], ["URL", `/product/${d.slug}/`], ["Collection", ex.collection?.title ?? "None"], ["Status", designStatus(ex)],
+  ] : []
+  return <form className="ms-panel" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit() }}>
+    <div className="note ms-update-note" role="status">
+      <p><strong>Update pictures</strong> of {ex ? `“${ex.name}”` : `/product/${d.slug}/`}.</p>
+      <p className="ms-small">Only its {caseTypeName} pictures change, for the models you chose. Title, collection, description, status, stock, prices and variant IDs stay as they are.</p>
+      <button type="button" className="linkbtn" onClick={onNewMode}>Make a new product instead</button>
+    </div>
+    {existing.status === "loading" && <p className="row muted ms-small"><span className="spin" aria-hidden />Loading the design…</p>}
+    {existing.status === "error" && <div className="note error row" role="alert"><span>{existing.message}</span>
+      <button type="button" className="linkbtn" onClick={onRetryExisting}>Try again</button></div>}
+    {ex && <dl className="ms-sum">{rows.map(([label, value]) => <div key={label} className="ms-sum-row"><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
+    <button type="submit" className="sr-only" tabIndex={-1}>Continue</button>
+  </form>
+}
+
+/** Update pictures' existing design: GET /admin/designs/:slug. */
+export type ExistingState = { status: "idle" } | { status: "loading" } | { status: "ready"; design: ExistingDesign } | { status: "error"; message: string }
+
+export function DetailsForm({ s, slugState, collections, existing, caseTypeName, onPatch, onRetryCollections, onSubmit, onUpdateMode, onNewMode, onRetryExisting }: {
+  s: State; slugState: SlugState; collections: Collections; existing: ExistingState; caseTypeName: string
   onPatch: (patch: Partial<Details>) => void; onRetryCollections: () => void; onSubmit: () => void
+  /** the URL is taken: switch to updating that design's pictures; and back */
+  onUpdateMode: () => void; onNewMode: () => void; onRetryExisting: () => void
 }) {
   const d = s.details
   const [touched, setTouched] = useState<Record<string, boolean>>({})
+  if (d.mode === "update") return <UpdateDetails s={s} existing={existing} caseTypeName={caseTypeName} onNewMode={onNewMode} onRetryExisting={onRetryExisting} onSubmit={onSubmit} />
   const errs = fieldErrors(s, slugState)
   const show = (k: keyof typeof errs) => (s.showErrors || touched[k] ? errs[k] : undefined)
   const blur = (k: string) => () => setTouched((t) => ({ ...t, [k]: true }))
@@ -341,6 +393,8 @@ export function DetailsForm({ s, slugState, collections, onPatch, onRetryCollect
         {slugState === "free" && !slugError && Icon.check}
         {slugError && slugState !== "taken" && slugState !== "invalid" ? slugError : SLUG_TEXT[slugState]}
       </p>
+      {slugState === "taken" && <div className="note row ms-update-offer"><span>This design already exists.</span>
+        <button type="button" id="ms-update-mode" className="linkbtn" onClick={onUpdateMode}>Update its pictures instead</button></div>}
     </div>
 
     <FieldBox id={isNew ? "ms-f-newcol" : "ms-f-collection"} label={isNew ? "New collection name" : "Collection"} error={isNew ? show("newCollection") : undefined}

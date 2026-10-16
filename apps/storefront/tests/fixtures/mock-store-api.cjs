@@ -15,6 +15,10 @@ function loadTs(file, dependencies = {}) {
 const { DEFAULT_PRESENTATION } = loadTs("../../src/lib/storefront-presentation.ts")
 // The backend's own index builder, so /store/search-index has the real shape.
 const { buildSearchIndex } = loadTs("../../../backend/src/lib/search-index.ts", { "./audience": loadTs("../../../backend/src/lib/audience.ts") })
+// The backend's own phone colour projections, so /store/phone-colours* have the real shape.
+const phoneColourLib = loadTs("../../../backend/src/lib/phone-colours.ts", {
+  "./mockup-settings": loadTs("../../../backend/src/lib/mockup-settings.ts", { "@medusajs/framework/utils": { Modules: {} } }),
+})
 
 // Local, disposable fixtures only. No request is forwarded to a real service.
 const image = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="540"><rect width="540" height="540" fill="#eee6fa"/><rect x="165" y="60" width="210" height="420" rx="36" fill="#8d66b1"/><text x="270" y="285" text-anchor="middle" fill="white" font-size="26">Test case</text></svg>')
@@ -61,6 +65,42 @@ function makeProduct(slug, title, form = "phone") {
   return { id: `prod_${handle}`, title, handle, description: "Local test product only.", subtitle: form === "phone" ? "Phone Case" : "AirPods Case", thumbnail: image, images: [{ id: `img_${handle}`, url: image }], collection, categories: [], options, variants, metadata: { design_name: title, design_slug: slug, form, card, ...(FIXTURE_AUDIENCE[slug] ? { audience: FIXTURE_AUDIENCE[slug] } : {}) } }
 }
 const products = [makeProduct("audit-bloom", "Audit Bloom"), makeProduct("audit-midnight", "Audit Midnight"), makeProduct("audit-bloom", "Audit Bloom", "airpods"), makeProduct("audit-midnight", "Audit Midnight", "airpods")]
+/*
+ * Phone colour pictures (PHONE_COLOURS.md), opt-in with PHONE_COLOUR_FIXTURE=1
+ * so the default catalogue stays four products. "Audit Colours" has real-format
+ * Medusa IDs (the store routes refuse others) and Signature pictures in three
+ * colours on the iPhone 17 Pro Max and two on the 16 Pro Max. Its colour
+ * pictures are on an allowed image host that never resolves (cards fall back).
+ */
+const colourFixture = process.env.PHONE_COLOUR_FIXTURE === "1"
+const mockupSets = colourFixture ? [
+  { device: "iphone-17-pro-max", base_url: "https://fixture-images.r2.dev/mockups/17", colours: ["Deep Blue", "Cosmic Orange", "Silver"], default_colour: "Deep Blue", enabled: true, swatches: { "Deep Blue": "#34405a" } },
+  { device: "iphone-16-pro-max", base_url: "https://fixture-images.r2.dev/mockups/16", colours: ["Black Titanium", "White Titanium", "Desert Titanium"], default_colour: "Black Titanium", enabled: false },
+] : []
+const colourRows = []
+if (colourFixture) {
+  const fixtureId = (prefix, n) => `${prefix}_01JZPC${String(n).padStart(20, "0")}`
+  const product = makeProduct("audit-colours", "Audit Colours")
+  product.id = fixtureId("prod", 1)
+  product.variants.forEach((variant, i) => { variant.id = fixtureId("variant", i + 1) })
+  product.metadata.card = { pairs: Object.fromEntries(product.variants.map((v) => [`${v.options[1].value}|${v.options[0].value}`, { variantId: v.id, price: v.calculated_price.calculated_amount, image }])) }
+  products.push(product)
+  const extras = { "iphone-17-pro-max": ["deep-blue", ["cosmic-orange", "silver"]], "iphone-16-pro-max": ["black-titanium", ["white-titanium"]] }
+  for (const variant of product.variants) {
+    const [caseName, deviceName] = variant.options.map((o) => o.value)
+    const device = devices.find((d) => d.name === deviceName)
+    const caseSlug = caseTypes.find((c) => c.name === caseName).slug
+    const plan = caseSlug === "signature" ? extras[device.slug] : null
+    if (!plan) continue
+    const row = { product_id: product.id, variant_id: variant.id, device_slug: device.slug, case_type_slug: caseSlug }
+    colourRows.push({ ...row, colour_slug: plan[0], is_main: true, images: null })
+    for (const colour of plan[1]) {
+      colourRows.push({ ...row, colour_slug: colour, is_main: false, images: [1, 2, 3].map((n) => `https://fixture-images.r2.dev/designs/audit-colours/signature/${device.slug}/${colour}/${n}-01JZPC${colour.length}${n}.webp`) })
+    }
+  }
+}
+const publishedIds = () => new Set(products.map((p) => p.id))
+const liveVariantIds = () => new Set(products.flatMap((p) => p.variants.map((v) => v.id)))
 /**
  * A header menu shaped like the live ones after header-navigation-2026-09-27:
  * the Collections row (phone menu only), Phone Case and Earbuds as device
@@ -452,14 +492,32 @@ const server = http.createServer(async (req, res) => {
       const handles = (url.searchParams.get("handles") || "").split(",")
       const prefix = `${url.searchParams.get("device")}|`
       const caseType = url.searchParams.get("case_type")
+      // ?colour= adds colourImage from that colour's extra row, never filters.
+      const colour = url.searchParams.get("colour")
+      if (colour !== null && !/^[a-z](?:[a-z0-9]|-(?=[a-z0-9])){0,39}$/.test(colour)) return send(res, { message: "colour must be a phone colour web name." }, 400)
       return send(res, { cards: products.filter((p) => handles.includes(p.handle)).map((p) => {
         const pairs = p.metadata.card.pairs
         const selected = pairs[`${prefix}${caseType}`]
+        const colourImage = colour && selected ? colourRows.find((r) => r.variant_id === selected.variantId && r.colour_slug === colour && !r.is_main)?.images[0] : undefined
         return {
           handle: p.handle, variantId: selected?.variantId ?? null, image: selected?.image ?? null,
           imagesByCaseType: Object.fromEntries(Object.entries(pairs).filter(([key]) => key.startsWith(prefix)).map(([key, pair]) => [key.slice(prefix.length), pair.image])),
+          ...(colourImage ? { colourImage } : {}),
         }
       }) })
+    }
+    case "/store/phone-colours": {
+      const device = url.searchParams.get("device"), caseType = url.searchParams.get("case_type")
+      if (!device || !caseType) return send(res, { message: "Provide device and case_type as web names." }, 400)
+      const rows = colourRows.filter((r) => r.device_slug === device && r.case_type_slug === caseType)
+      return send(res, phoneColourLib.shopPalette({ settings: { sets: mockupSets }, device, caseType, rows, publishedProductIds: publishedIds(), liveVariantIds: liveVariantIds() }))
+    }
+    case "/store/phone-colours/product": {
+      const productId = url.searchParams.get("product_id"), device = url.searchParams.get("device")
+      if (!/^prod_[0-9A-Z]{26}$/.test(productId ?? "") || !device) return send(res, { message: "Provide product_id and device." }, 400)
+      if (!publishedIds().has(productId)) return send(res, {})
+      const rows = colourRows.filter((r) => r.product_id === productId)
+      return send(res, phoneColourLib.productPhoneColours({ rows, galleryRows: rows.filter((r) => r.device_slug === device && !r.is_main), liveVariantIds: liveVariantIds(), settings: { sets: mockupSets }, device }))
     }
     case "/store/collections": return send(res, { collections: !filters(url, "handle").length || filters(url, "handle").includes(collection.handle) ? [collection] : [] })
     case "/store/product-categories": return send(res, { product_categories: [] })
@@ -493,6 +551,12 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (url.pathname.startsWith("/store/collection-pages/")) return send(res, { page: null })
+  const colourVariant = url.pathname.match(/^\/store\/phone-colours\/variant\/([^/]+)$/)
+  if (colourVariant) {
+    if (!/^variant_[0-9A-Z]{26}$/.test(colourVariant[1])) return send(res, { message: "Provide a variant ID." }, 400)
+    if (!liveVariantIds().has(colourVariant[1])) return send(res, { message: "No published variant with that ID." }, 404)
+    return send(res, phoneColourLib.variantPhoneColours({ rows: colourRows.filter((r) => r.variant_id === colourVariant[1]), variantId: colourVariant[1], settings: { sets: mockupSets } }))
+  }
   // Discount codes: REVFIXTURE is a valid one; anything else is ignored, as Medusa does.
   const promoMatch = url.pathname.match(/^\/store\/carts\/([^/]+)\/promotions$/)
   if (promoMatch) {

@@ -103,7 +103,7 @@ test("regular inventory endpoint uses the selected published product and exact v
   assert.deepEqual(result.stock, { "variant:zero": 0, "variant:ready": 4 })
 })
 test("unified list includes regular products using bounded reads of variant IDs only", async () => {
-  const { listLiveDesigns } = load("lib/design-admin.ts", { "@medusajs/framework/utils": { Modules: {}, ContainerRegistrationKeys: { QUERY: "query" } }, "./audience": load("lib/audience.ts") })
+  const { listLiveDesigns } = load("lib/design-admin.ts", { "@medusajs/framework/utils": { Modules: {}, ContainerRegistrationKeys: { QUERY: "query" } }, "./audience": load("lib/audience.ts"), "../modules/catalog": { CATALOG_MODULE: "catalog" }, "./mockup-settings": {} })
   const result = await listLiveDesigns({ resolve: () => ({ graph: async (q) => {
     assert.equal(q.pagination.take, 100)
     assert.ok(q.fields.includes("variants.id"))

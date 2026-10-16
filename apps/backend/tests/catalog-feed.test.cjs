@@ -266,6 +266,8 @@ function world(options = {}) {
   const catalog = {
     listCaseTypes: async () => CASE_TYPES,
     listDevices: async () => DEVICES,
+    // Phone colour pictures are display-only (PHONE_COLOURS.md): rows exist, but the feed never reads them.
+    listPhoneColourGalleries: async () => { throw new Error("the catalog feed must not read phone colour rows") },
   }
   return container
 }

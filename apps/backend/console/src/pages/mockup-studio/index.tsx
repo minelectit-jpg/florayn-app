@@ -5,11 +5,11 @@ import { useEffect, useState } from "react"
 import { api } from "../../api"
 import type { Settings } from "../../mockup/layers"
 import { Button, Segmented, Skeleton } from "../../ui"
-import MockupSets from "./sets"
+import MockupSets, { type ColourUsage } from "./sets"
 import NewProduct, { type Device } from "./new-product"
 import StudioSettings from "./settings"
 
-type Data = { settings: Settings; devices: Device[]; case_types: { slug: string; name: string; price: number }[] }
+type Data = { settings: Settings; devices: Device[]; case_types: { slug: string; name: string; price: number }[]; colour_usage?: ColourUsage }
 type Tab = "new" | "sets" | "settings"
 
 function StudioSkeleton() {
@@ -29,7 +29,9 @@ export default function MockupStudio() {
   const [tab, setTab] = useState<Tab>("new")
   const load = () => { setError(""); api<Data>("/admin/mockups").then(setData).catch((e) => setError(e.message)) }
   useEffect(load, [])
-  const saved = (settings: Settings) => setData((d) => (d ? { ...d, settings } : d))
+  // a save answers with the settings and, from the sets screen, the colour usage
+  const saved = (settings: Settings, colourUsage?: ColourUsage) => setData((d) => (d ? { ...d, settings, colour_usage: colourUsage ?? d.colour_usage } : d))
+  const caseTypeName = data?.case_types.find((c) => c.slug === data.settings.case_type)?.name ?? data?.settings.case_type ?? ""
 
   return <>
     <div className={`page-head${tab === "new" ? " slim" : ""}`}>
@@ -39,9 +41,9 @@ export default function MockupStudio() {
     {!data && !error && <StudioSkeleton />}
     {error && <div className="card stack"><p className="note error">{error}</p><div><Button onClick={load}>Try again</Button></div></div>}
     {data && <div className="ms-tab" hidden={tab !== "new"}>
-      <NewProduct settings={data.settings} devices={data.devices} active={tab === "new"} onOpenSets={() => setTab("sets")} onOpenSettings={() => setTab("settings")} />
+      <NewProduct settings={data.settings} devices={data.devices} caseTypeName={caseTypeName} active={tab === "new"} onOpenSets={() => setTab("sets")} onOpenSettings={() => setTab("settings")} />
     </div>}
-    {data && tab === "sets" && <MockupSets settings={data.settings} devices={data.devices} onSaved={saved} />}
+    {data && tab === "sets" && <MockupSets settings={data.settings} devices={data.devices} usage={data.colour_usage ?? {}} onSaved={saved} />}
     {data && tab === "settings" && <StudioSettings settings={data.settings} caseTypes={data.case_types} onSaved={saved} />}
   </>
 }

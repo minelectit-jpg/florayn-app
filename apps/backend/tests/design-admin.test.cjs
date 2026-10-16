@@ -32,13 +32,17 @@ function load(file, dependencies = {}) {
 }
 
 const utils = {
-  Modules: { PRODUCT: "product" },
+  Modules: { PRODUCT: "product", STORE: "store" },
   ContainerRegistrationKeys: { QUERY: "query" },
 }
 const { listLiveDesigns, getDesignDetail } = load("lib/design-admin.ts", {
   "@medusajs/framework/utils": utils,
   "./audience": load("lib/audience.ts"),
+  "../modules/catalog": { CATALOG_MODULE: "catalog" },
+  "./mockup-settings": load("lib/mockup-settings.ts", { "@medusajs/framework/utils": utils }),
 })
+const plain = (value) => JSON.parse(JSON.stringify(value))
+const noColours = { catalog: { listPhoneColourGalleries: async () => [] }, store: { listStores: async () => [] } }
 
 test("listLiveDesigns groups products by design, counting forms + variants", async () => {
   const products = [
@@ -106,7 +110,7 @@ test("getDesignDetail returns products + variant case-type/device/image, filtere
       ],
     }),
   }
-  const container = { resolve: (k) => (k === "query" ? query : (() => { throw new Error(k) })()) }
+  const container = { resolve: (k) => (k === "query" ? query : noColours[k] ?? (() => { throw new Error(k) })()) }
 
   const detail = await getDesignDetail(container, "timeless")
   assert.equal(detail.slug, "timeless")
@@ -125,4 +129,37 @@ test("getDesignDetail returns null when no product matches the slug", async () =
   const query = { graph: async () => ({ data: [{ id: "pX", handle: "other", metadata: { design_slug: "other" }, options: [], variants: [] }] }) }
   const container = { resolve: () => query }
   assert.equal(await getDesignDetail(container, "timeless"), null)
+})
+
+test("getDesignDetail adds each variant's phone colours and the palette of its models", async () => {
+  const product = (id, slug, variants) => ({ id, handle: slug, title: slug, status: "draft", metadata: { design_slug: "muse", form: id === "p1" ? "phone" : "airpods" }, options: [], variants })
+  const query = { graph: async () => ({ data: [
+    product("p1", "muse", [
+      { id: "v1", metadata: { images: ["https://img.test/black-1.webp"], device_slug: "iphone-18-pro-max", case_type_slug: "signature" }, options: [] },
+      { id: "v2", metadata: { images: ["https://img.test/16.webp"], device_slug: "iphone-16", case_type_slug: "signature" }, options: [] },
+    ]),
+    product("p2", "muse-airpods", [{ id: "v3", metadata: { images: ["https://img.test/a.webp"], device_slug: "airpods-4", case_type_slug: "signature-earbuds" }, options: [] }]),
+  ] }) }
+  const reads = []
+  const catalog = { listPhoneColourGalleries: async (filter, config) => {
+    reads.push(plain({ filter, config }))
+    return [
+      { variant_id: "v1", colour_slug: "black", is_main: true, images: null },
+      { variant_id: "v1", colour_slug: "silver", is_main: false, images: ["https://img.test/silver-1.webp"] },
+      { variant_id: "gone", colour_slug: "silver", is_main: false, images: ["https://img.test/orphan.webp"] },
+    ]
+  } }
+  const sets = [
+    { device: "iphone-18-pro-max", base_url: "https://img.test/mockups/v1", colours: ["Black", "Silver", "Deep Blue"], default_colour: "Silver", enabled: false, swatches: { "Deep Blue": "#112233" } },
+    { device: "iphone-17", base_url: "https://img.test/mockups/v2", colours: ["Black"], default_colour: "Black", enabled: true },
+  ]
+  const store = { listStores: async () => [{ id: "store", metadata: { florayn_mockups: { sets } } }] }
+  const services = { query, catalog, store }
+  const detail = plain(await getDesignDetail({ resolve: (k) => services[k] }, "muse"))
+  assert.deepEqual(reads, [{ filter: { product_id: ["p1", "p2"] }, config: { select: ["variant_id", "colour_slug", "is_main", "images"], take: 20000 } }], "one bounded read for the design's products")
+  const variants = detail.products.flatMap((p) => p.variants)
+  assert.deepEqual(variants.find((v) => v.id === "v1").phoneColours, { main: "black", extra: { silver: ["https://img.test/silver-1.webp"] } })
+  assert.deepEqual(variants.find((v) => v.id === "v2").phoneColours, { main: null, extra: {} })
+  assert.deepEqual(variants.find((v) => v.id === "v1").images, ["https://img.test/black-1.webp"], "images stays the main gallery")
+  assert.deepEqual(detail.palette, { "iphone-18-pro-max": { default: "silver", colours: [["black", "Black", "#1d1d1f"], ["silver", "Silver", "#e3e4e5"], ["deep-blue", "Deep Blue", "#112233"]] } }, "only this design's models with a set, even one switched off")
 })

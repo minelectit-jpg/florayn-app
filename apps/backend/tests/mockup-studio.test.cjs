@@ -83,7 +83,7 @@ test("unknown, duplicate, insecure and malformed settings are refused", () => {
 
 // --- compositor maths -----------------------------------------------------------------------------
 const compositor = load("console/src/mockup/compositor.ts")
-const { composite, prepareDesign, denoiseBlur, SHARPNESS } = compositor
+const { composite, prepareDesign, denoiseBlur, SHARPNESS, BLUR_NOISE } = compositor
 const enc = (v) => Math.round(Math.sqrt(v / (1 + v)) * 255)
 const srgb = (x) => Math.round((x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055) * 255)
 
@@ -132,13 +132,45 @@ test("ink saturation is applied once, when the design is prepared", () => {
   assert.ok(muted.levels[0].data[1] < 120, "saturation pulls the weaker channels down")
 })
 
-test("the sharpness defaults are the ones matched to the Blender finals", () => {
-  assert.deepEqual({ ...SHARPNESS }, { blurScale: 1.5, lodBias: -0.5 })
+test("the sharpness defaults are the ones matched to the Blender renders (2026-10-17, corrected blur layers)", () => {
+  assert.deepEqual({ ...SHARPNESS }, { blurScale: 2, lodBias: -0.5 })
+  assert.equal(BLUR_NOISE, 4e-4)
+  // out of focus (blur byte 91 = 0.2 mm), where blurScale matters: the defaults are 2 and -0.5, not 2026-10-16's 1.5
+  let seed = 11
+  const noise = Array.from({ length: 1024 * 3 }, () => (seed = (seed * 1103515245 + 12345) >>> 0) >>> 24)
+  const busy = prepareDesign(noise, 1024, 1, 3, 1)
+  const wide = { template_mm: [100, 100], ink_saturation: 1 }
   const L = layersFor([
-    { u: 0.25, v: 0.75, static: 0, light: 0.5, alpha: 1, mask: 1 },
-    { u: 0.25, v: 0.25, static: 0, light: 0.5, alpha: 1, mask: 1 },
+    { u: 0.3, v: 0.5, static: 0, light: 0.5, alpha: 1, mask: 1 },
+    { u: 0.3 + 1 / 1024, v: 0.5, static: 0, light: 0.5, alpha: 1, mask: 1 },
   ])
-  assert.deepEqual([...composite(L, meta, design)], [...composite(L, meta, design, { blurScale: 1.5, lodBias: -0.5 })])
+  L.blur.fill(91)
+  const shipped = [...composite(L, wide, busy)]
+  assert.deepEqual(shipped, [...composite(L, wide, busy, { blurScale: 2, lodBias: -0.5 })])
+  assert.notDeepEqual(shipped, [...composite(L, wide, busy, { blurScale: 1.5, lodBias: -0.5 })])
+})
+
+test("the blur layer's float32 rounding is taken off: in focus stays sharp, depth of field still blurs", () => {
+  // 1 px black and white stripes, 4096 px across a 100 mm template (40.96 px/mm); two print pixels one design pixel apart
+  const W = 4096
+  const stripes = prepareDesign(Array.from({ length: W * 3 }, (_, k) => ((k / 3 | 0) % 2 ? 0 : 255)), W, 1, 3, 1)
+  const wide = { template_mm: [100, 100], ink_saturation: 1 }
+  const pair = (u0, v) => layersFor([
+    { u: (u0 + 0.5) / W, v, static: 0, light: 0.5, alpha: 1, mask: 1 },
+    { u: (u0 + 1.5) / W, v, static: 0, light: 0.5, alpha: 1, mask: 1 },
+  ])
+  const run = (L, b) => { L.blur.fill(b); return [...composite(L, wide, stripes)] }
+  // blur byte 33 = 0.025 mm: under the floor at the template centre (4e-4 x |(50, 50) mm| = 0.028 mm) -> the sharp level
+  const mid = pair(2048, 0.5)
+  const sharpMid = run(mid, 0)
+  assert.ok(sharpMid[0] > 150 && sharpMid[4] < 30, `white and black stripes ${sharpMid}`)
+  assert.deepEqual(run(mid, 33), sharpMid)
+  // the floor grows with |uv|: at the corner (u, v near 0) the same 0.025 mm is kept and blurs the stripes
+  const corner = pair(0, 0)
+  assert.notDeepEqual(run(corner, 33), run(corner, 0))
+  // real depth of field (byte 91 = 0.2 mm) blurs at the centre too: both pixels close to the same grey
+  const dof = run(mid, 91)
+  assert.ok(Math.abs(dof[0] - dof[4]) < 20 && dof[0] > 90 && dof[0] < 160, `grey ${dof}`)
 })
 
 test("the mip level is clamped: a negative bias stays on the design, a large one stops at the last level", () => {
@@ -230,6 +262,39 @@ test("denoiseBlur gives the same bytes as sorting every 5x5 window", () => {
 
 // --- layers helpers ---------------------------------------------------------------------------------
 const layersLib = load("console/src/mockup/layers.ts", (name) => (name === "./compositor" ? compositor : {}))
+
+test("loadLayers puts the blur layer through denoiseBlur once, at load (the 5x5 median stays on)", async () => {
+  const w = 5, h = 5, n = w * h
+  // each layer file decodes to one grey value; all print (aux 255); one speck in the middle of the blur layer
+  const grey = { static: 20, light: 40, uv: 60, aux: 255, blur: 10 }
+  const pixels = (layer) => {
+    const px = new Uint8ClampedArray(n * 4).map((_, k) => (k % 4 === 3 ? 255 : grey[layer]))
+    if (layer === "blur") px[12 * 4] = 200
+    return px
+  }
+  const fetched = []
+  const lib = load("console/src/mockup/layers.ts", (name) => (name === "./compositor" ? compositor : {}), {
+    fetch: async (url) => {
+      fetched.push(url)
+      return { ok: true, status: 200, blob: async () => ({ layer: decodeURIComponent(url.split("/").pop()).replace(/^\d+ |\.png$/g, "") }) }
+    },
+    createImageBitmap: async (blob) => ({ width: w, height: h, px: pixels(blob.layer), close() {} }),
+    OffscreenCanvas: class {
+      constructor(cw, ch) { this.width = cw; this.height = ch }
+      getContext() { const canvas = this; return { drawImage(bmp) { canvas.px = bmp.px }, getImageData() { return { data: canvas.px } } } }
+    },
+  })
+  const L = await lib.loadLayers("https://img.test/set", "Black", 600, 3)
+  assert.equal(fetched.length, 5)
+  assert.ok(fetched.includes("https://img.test/set/Black/600/03%20blur.png"))
+  assert.deepEqual([L.w, L.h, L.static[0], L.light[0], L.uv[0], L.aux[2]], [5, 5, 20, 40, 60, 255])
+  const raw = new Uint8Array(n).fill(10)
+  raw[12] = 200
+  assert.equal(L.blur[12], 10, "the speck is gone")
+  assert.deepEqual([...L.blur], [...denoiseBlur(raw, L.aux, w, h)])
+  assert.equal(await lib.loadLayers("https://img.test/set", "Black", 600, 3), L, "cached: not decoded or filtered again")
+  assert.equal(fetched.length, 5)
+})
 
 test("shot names give short labels, titles and file-name slugs", () => {
   const names = ["01 Front - design", "02 Protection - impact", "03 Layers - dual layer", "04 MagSafe charging", "05 Camera close-up",
@@ -410,11 +475,11 @@ test("the reducer: a new design names the product, picks a model and resets the 
   s = wiz.reducer(s, { type: "design/reading", name: "x.png" })
   assert.equal(s.reading, "x.png")
   s = wiz.reducer(s, { type: "place/apply", p: { zoom: 1.5, ox: 0.1, oy: 0 } })
-  s = wiz.reducer(s, { type: "design/ready", design: design("muse_honey-glow 47.png", 1), firstDevice: { device: "iphone-18-pro-max", colour: "Black" } })
+  s = wiz.reducer(s, { type: "design/ready", design: design("muse_honey-glow 47.png", 1), firstDevice: { device: "iphone-18-pro-max", colours: ["Black", "Silver"], default_colour: "Black" } })
   assert.equal(s.reading, null)
   assert.equal(s.details.name, "Muse Honey Glow 47")
   assert.equal(s.details.slug, "muse-honey-glow-47")
-  assert.deepEqual(plain(s.picks), { "iphone-18-pro-max": { on: true, colour: "Black" } })
+  assert.deepEqual(plain(s.picks), { "iphone-18-pro-max": { on: true, colours: ["Black", "Silver"], stage: "Black" } }, "every colour is pre-selected")
   assert.deepEqual(plain(s.placement), { zoom: 1, ox: 0, oy: 0 })
   assert.equal(s.past.length, 0)
   // a typed title keeps its name on the next design; the slug follows the title until it is typed
@@ -458,12 +523,18 @@ test("the reducer: steps, picks and Make another", () => {
   s = wiz.reducer(s, { type: "errors/show" })
   s = wiz.reducer(s, { type: "go", step: "models", fromReview: true })
   assert.equal(s.dir, -1); assert.equal(s.reached, 3); assert.equal(s.fromReview, true); assert.equal(s.showErrors, false)
-  s = wiz.reducer(s, { type: "pick/toggle", device: "a", colour: "Black" })
-  s = wiz.reducer(s, { type: "pick/colour", device: "b", colour: "Glacier" })
-  assert.deepEqual(plain(s.picks), { a: { on: true, colour: "Black" }, b: { on: true, colour: "Glacier" } })
+  const A = { device: "a", colours: ["Black"], default_colour: "Black" }
+  const B = { device: "b", colours: ["Black", "Silver", "Glacier"], default_colour: "Black" }
+  s = wiz.reducer(s, { type: "pick/toggle", set: A })
+  s = wiz.reducer(s, { type: "pick/all-colours", on: false, sets: [] }) // Main only: newly chosen models start with the main colour
+  s = wiz.reducer(s, { type: "pick/colour", set: B, colour: "Glacier" })
+  assert.deepEqual(plain(s.picks), { a: { on: true, colours: ["Black"], stage: "Black" }, b: { on: true, colours: ["Black", "Glacier"], stage: "Glacier" } })
   assert.equal(s.focus.device, "b")
-  s = wiz.reducer(s, { type: "pick/all", on: false, devices: [{ device: "a", colour: "Black" }, { device: "b", colour: "Black" }] })
-  assert.deepEqual(plain(s.picks), { a: { on: false, colour: "Black" }, b: { on: false, colour: "Glacier" } }, "colours are kept")
+  s = wiz.reducer(s, { type: "pick/all", on: false, sets: [A, B] })
+  assert.deepEqual(plain(s.picks), { a: { on: false, colours: ["Black"], stage: "Black" }, b: { on: false, colours: ["Black", "Glacier"], stage: "Glacier" } }, "colours are kept")
+  s = wiz.reducer(s, { type: "pick/all", on: true, sets: [B] })
+  assert.deepEqual(plain(s.picks.b), { on: true, colours: ["Black", "Glacier"], stage: "Glacier" }, "back on with its colours")
+  s = wiz.reducer(s, { type: "pick/all", on: false, sets: [A, B] })
   s = wiz.reducer(s, { type: "details", patch: { name: "X", stock: "5", status: "published", collection: wiz.NEW_COLLECTION, newCollection: "Spring", description: "d" } })
   s = wiz.reducer(s, { type: "background", value: "transparent" })
   s = wiz.reducer(s, { type: "again", collectionTitle: "Spring" })
@@ -471,12 +542,120 @@ test("the reducer: steps, picks and Make another", () => {
   assert.deepEqual([s.details.name, s.details.slug, s.details.description], ["", "", ""])
   assert.deepEqual([s.details.stock, s.details.status, s.details.collection, s.details.newCollection], ["5", "published", "Spring", ""])
   assert.equal(s.background, "transparent")
-  assert.equal(s.picks.b.colour, "Glacier")
+  assert.deepEqual(plain(s.picks.b.colours), ["Black", "Glacier"])
+  assert.equal(s.colourMode, "main", "Make another keeps the colour mode")
+  assert.equal(s.details.mode, "new")
+})
+
+// --- phone colours: multi-colour picks (PHONE_COLOURS.md) -------------------------------------------------
+const P18 = { device: "iphone-18-pro-max", base_url: "https://x", colours: ["Black", "Silver", "Wine Red", "Glacier"], default_colour: "Black", enabled: true }
+
+test("phone colours: a newly ticked model gets every colour (or the main only), and the last colour cannot be unticked", () => {
+  let s = wiz.initialState()
+  assert.equal(s.colourMode, "all", "Studio pre-selects all colours")
+  s = wiz.reducer(s, { type: "pick/toggle", set: P18 })
+  assert.deepEqual(plain(s.picks[P18.device]), { on: true, colours: ["Black", "Silver", "Wine Red", "Glacier"], stage: "Black" })
+  // tapping a ticked chip unticks it; the staged colour falls back to the main one
+  s = wiz.reducer(s, { type: "pick/stage", set: P18, colour: "Silver" })
+  s = wiz.reducer(s, { type: "pick/colour", set: P18, colour: "Silver" })
+  assert.deepEqual(plain(s.picks[P18.device]), { on: true, colours: ["Black", "Wine Red", "Glacier"], stage: "Black" })
+  s = wiz.reducer(s, { type: "pick/stage", set: P18, colour: "Glacier" })
+  s = wiz.reducer(s, { type: "pick/colour", set: P18, colour: "Black" })
+  assert.equal(s.picks[P18.device].stage, "Glacier", "an untick that is not the staged colour keeps the stage")
+  s = wiz.reducer(s, { type: "pick/colour", set: P18, colour: "Glacier" })
+  assert.deepEqual(plain(s.picks[P18.device]), { on: true, colours: ["Wine Red"], stage: "Wine Red" })
+  const last = wiz.reducer(s, { type: "pick/colour", set: P18, colour: "Wine Red" })
+  assert.equal(last, s, "the last ticked colour stays")
+  // the toolbar: All colours ticks every colour of every chosen model, Main only keeps the main one
+  s = wiz.reducer(s, { type: "pick/all-colours", on: true, sets: [P18] })
+  assert.deepEqual(plain(s.picks[P18.device].colours), P18.colours)
+  assert.equal(s.picks[P18.device].stage, "Wine Red")
+  s = wiz.reducer(s, { type: "pick/all-colours", on: false, sets: [P18] })
+  assert.deepEqual(plain(s.picks[P18.device]), { on: true, colours: ["Black"], stage: "Black" })
+  assert.equal(s.colourMode, "main")
+  // a model chosen now starts with its main colour; toggling off and on keeps the colours
+  const P17 = { ...P18, device: "iphone-17", default_colour: "Silver" }
+  s = wiz.reducer(s, { type: "pick/toggle", set: P17 })
+  assert.deepEqual(plain(s.picks[P17.device]), { on: true, colours: ["Silver"], stage: "Silver" })
+  s = wiz.reducer(wiz.reducer(s, { type: "pick/colour", set: P17, colour: "Glacier" }), { type: "pick/toggle", set: P17 })
+  s = wiz.reducer(s, { type: "pick/toggle", set: P17 })
+  assert.deepEqual(plain(s.picks[P17.device].colours), ["Silver", "Glacier"])
+  // a chip on a model that is not chosen chooses it, with that colour ticked and shown
+  const P16 = { ...P18, device: "iphone-16" }
+  s = wiz.reducer(s, { type: "pick/colour", set: P16, colour: "Glacier" })
+  assert.deepEqual(plain(s.picks[P16.device]), { on: true, colours: ["Black", "Glacier"], stage: "Glacier" })
+  assert.equal(wiz.reducer(s, { type: "pick/colour", set: P16, colour: "Pink" }), s, "a colour the set does not have is ignored")
+})
+
+test("phone colours: the stage shows a colour without ticking it, and pickOf checks a pick against the live set", () => {
+  let s = wiz.initialState()
+  s = wiz.reducer(s, { type: "pick/stage", set: P18, colour: "Silver" })
+  assert.deepEqual(plain(s.picks[P18.device]), { on: false, colours: [], stage: "Silver" })
+  assert.deepEqual(plain(wiz.pickOf(s, P18)), { on: false, colours: P18.colours, stage: "Silver" }, "never chosen: the colour mode's colours")
+  s = wiz.reducer(s, { type: "pick/toggle", set: P18 })
+  assert.equal(s.picks[P18.device].stage, "Black", "first time on: the stage shows the default colour")
+  s = wiz.reducer(s, { type: "pick/stage", set: P18, colour: "Glacier" })
+  assert.deepEqual(plain(s.picks[P18.device].colours), P18.colours, "staging ticks nothing")
+  assert.equal(s.picks[P18.device].stage, "Glacier")
+  // the set loses colours (a new layer version): ticked ones are filtered, the stage falls back to the main colour
+  const fewer = { ...P18, colours: ["Black", "Silver"] }
+  assert.deepEqual(plain(wiz.pickOf(s, fewer)), { on: true, colours: ["Black", "Silver"], stage: "Black" })
+  const none = { ...P18, colours: ["Desert"], default_colour: "Desert" }
+  assert.deepEqual(plain(wiz.pickOf(s, none)), { on: true, colours: ["Desert"], stage: "Desert" }, "never empty: the default colour")
+  // palette order, whatever order they were ticked in
+  const t = { picks: { [P18.device]: { on: true, colours: ["Glacier", "Silver"], stage: "Silver" } }, colourMode: "all" }
+  assert.deepEqual(plain(wiz.pickOf(t, P18).colours), ["Silver", "Glacier"])
+})
+
+test("phone colours: the main colour, publishing order and the shots every colour shares", () => {
+  assert.equal(wiz.mainColourOf(P18, { colours: ["Silver", "Black"] }), "Black", "the default when ticked")
+  assert.equal(wiz.mainColourOf(P18, { colours: ["Glacier", "Silver"] }), "Silver", "else the first ticked in palette order")
+  assert.deepEqual(plain(wiz.colourOrder(P18, { colours: ["Glacier", "Black", "Silver"] })), ["Black", "Silver", "Glacier"])
+  assert.deepEqual(plain(wiz.colourOrder(P18, { colours: ["Glacier", "Silver"] })), ["Silver", "Glacier"])
+  const meta = (ns) => ({ shots: ns.map((n) => ({ n })) })
+  assert.deepEqual(plain(wiz.sharedShots([1, 2, 3, 13], [meta([1, 2, 3, 13, 14]), meta([1, 3, 13])])), [1, 3, 13])
+  assert.deepEqual(plain(wiz.sharedShots([2, 1], [meta([1, 2])])), [2, 1], "gallery order")
+  assert.deepEqual(plain(wiz.sharedShots([1], [meta([1]), meta([2])])), [])
+  assert.deepEqual(plain(wiz.anglesOf(meta([1, 2, 3, 14]), [3, 1])), [3, 1, 2, 14])
+  assert.equal(wiz.colourList(["Black", "Silver", "Glacier"]), "Black (main) · Silver · Glacier")
+})
+
+test("phone colours: the estimate, the swatch hex the shop shows, and the ZIP names", () => {
+  assert.equal(wiz.publishEstimate({ models: 39, colourSets: 117, pictures: 1521, imageSize: 1200 }), "39 models · 117 colour sets · 1,521 pictures · about 71 MB · about 25 min")
+  assert.equal(wiz.publishEstimate({ models: 1, colourSets: 1, pictures: 13, imageSize: 1200 }), "1 model · 1 colour set · 13 pictures · about 1 MB · under a minute")
+  assert.equal(wiz.swatchHex({ ...P18, swatches: { Silver: "#AABBCC" } }, "Silver"), "#aabbcc", "the saved hex, lower-case")
+  assert.equal(wiz.swatchHex(P18, "Silver"), "#e3e4e5", "else the SWATCH suggestion")
+  assert.equal(wiz.swatchHex(P18, "Plasma Teal"), wiz.NEUTRAL_SWATCH, "else the shop's neutral grey")
+  assert.equal(wiz.swatchHex({ ...P18, swatches: { Silver: "red" } }, "Silver"), "#e3e4e5", "an invalid saved value is ignored")
+  assert.equal(wiz.dotColour({ ...P18, swatches: { Glacier: "#112233" } }, "Glacier"), "#112233")
+  assert.equal(wiz.dotColour(P18, "Plasma Teal"), wiz.swatchColour("Plasma Teal"))
+  // own keys only: "constructor" is on every plain object
+  assert.equal(wiz.swatchHex({ ...P18, colours: ["Constructor"] }, "Constructor"), wiz.NEUTRAL_SWATCH)
+  assert.match(wiz.swatchColour("Constructor"), /^hsl\(\d+, 14%, 72%\)$/)
+  assert.equal(wiz.modelZipName("x", "iphone-18-pro-max", null), "x_iphone-18-pro-max_mockups.zip", "several colours")
+  assert.equal(wiz.zipFolder("iphone-18-pro-max", "Wine Red"), "iphone-18-pro-max_wine-red/")
+  assert.equal(wiz.plural(1521, "picture"), "1,521 pictures")
+})
+
+test("Update pictures: the mode keeps its URL, checks only the URL, and another URL is a new product again", () => {
+  let s = wiz.initialState()
+  s = wiz.reducer(s, { type: "details", patch: { name: "Muse", slug: "muse", slugTouched: true } })
+  s = wiz.reducer(s, { type: "details", patch: { mode: "update", slugTouched: true } })
+  assert.equal(s.details.mode, "update")
+  s = wiz.reducer(s, { type: "details", patch: { name: "" } })
+  assert.deepEqual(plain(wiz.fieldErrors(s, "taken")), {}, "an existing URL is what update needs; the title is the design's own")
+  assert.equal(wiz.fieldErrors(s, "free").slug, "No design uses this URL. Make a new product instead.")
+  const ctx = { chosen: [], metas: {}, slugState: "taken", deviceName: () => "", existingError: "Loading the design…" }
+  assert.equal(wiz.stepErrors(s, ctx).details, "Loading the design…")
+  assert.equal(wiz.stepErrors(s, { ...ctx, existingError: undefined }).details, undefined)
+  s = wiz.reducer(s, { type: "details", patch: { slug: "muse-2" } })
+  assert.equal(s.details.mode, "new", "another URL is another design")
+  assert.equal(wiz.stepErrors(s, ctx).details, "Enter the product title.")
 })
 
 test("validation names the first problem of each step", () => {
-  const set = { device: "iphone-18-pro-max", base_url: "https://x", colours: ["Black"], default_colour: "Black", enabled: true }
-  const ctx = (patch = {}) => ({ chosen: [set], metas: {}, colourOf: (x) => x.default_colour, slugState: "free", deviceName: () => "iPhone 18 Pro Max", ...patch })
+  const set = { device: "iphone-18-pro-max", base_url: "https://x", colours: ["Black", "Silver"], default_colour: "Black", enabled: true }
+  const ctx = (patch = {}) => ({ chosen: [set], metas: {}, slugState: "free", deviceName: () => "iPhone 18 Pro Max", ...patch })
   let s = wiz.initialState()
   let e = wiz.stepErrors(s, ctx({ chosen: [] }))
   assert.equal(e.design, "Add a design to continue.")
@@ -485,8 +664,11 @@ test("validation names the first problem of each step", () => {
   assert.equal(e.placement, undefined)
   assert.equal(wiz.blockedBy(e, 1), "design")
   assert.equal(wiz.blockedBy(e, 0), null)
-  e = wiz.stepErrors(s, ctx({ metas: { "iphone-18-pro-max|Black": { status: "error", message: "x" } } }))
-  assert.equal(e.models, "iPhone 18 Pro Max's mockups could not be loaded. Untick it or press Retry.")
+  // every ticked colour's layer info is checked (all colours are ticked by default)
+  e = wiz.stepErrors(s, ctx({ metas: { "iphone-18-pro-max|Black": { status: "ready" }, "iphone-18-pro-max|Silver": { status: "error", message: "x" } } }))
+  assert.equal(e.models, "iPhone 18 Pro Max · Silver: mockups couldn't be loaded. Untick it or press Retry.")
+  const mainOnly = wiz.reducer(wiz.reducer(s, { type: "pick/toggle", set }), { type: "pick/all-colours", on: false, sets: [set] })
+  assert.equal(wiz.stepErrors(mainOnly, ctx({ metas: { "iphone-18-pro-max|Silver": { status: "error", message: "x" } } })).models, undefined, "an unticked colour does not block")
   s = wiz.reducer(s, { type: "details", patch: { name: "Bloom", slug: "Bad Slug", slugTouched: true, stock: "-1", collection: wiz.NEW_COLLECTION } })
   assert.deepEqual(plain(wiz.fieldErrors(s, "invalid")), {
     slug: "Use lowercase letters, numbers and dashes in the URL.", newCollection: "Enter the new collection's name.", stock: "Enter a whole number, 0 or more.",
@@ -543,42 +725,57 @@ test("download names, swatches and the time left", () => {
   assert.equal(wiz.titleFromFile("Muse_Honey Glow-47.jpg"), "Muse Honey Glow 47")
 })
 
-// --- Publish: the same server path as before (POST /admin/designs/upload per picture, then /admin/designs/custom) ---
+// --- Publish: the Product Manager's server path (POST /admin/designs/upload per picture, then /admin/designs/custom
+// or, for Update pictures, manager-variants and /pairs; then one /admin/designs/:slug/colours per model) ---------
+// vm-made values (another realm): compare their JSON
+const same = (actual, expected, message) => assert.deepEqual(plain(actual), plain(expected), message)
 class ApiErrorStub extends Error { constructor(message, status) { super(message); this.status = status } }
 
+const BLACK = { name: "Black", slug: "black", main: true }
+const SILVER = { name: "Silver", slug: "silver", main: false }
+const GLACIER = { name: "Glacier", slug: "glacier", main: false }
+const model = (device, name, colours = [BLACK]) => ({ set: { device, base_url: `https://x/${device}` }, model: name, colours })
+const m18 = (colours) => model("iphone-18-pro-max", "iPhone 18 Pro Max", colours)
+const m17 = (colours) => model("iphone-17", "iPhone 17", colours)
+
 // One publishProduct run against recorded stubs: the URL check (fetch), the posts and the export worker.
-function publishHarness({ checkStatus = 404, sizes = [600, 1200, 2400], mime = "image/webp", stopAfter = Infinity, customError = null, patch = {}, models } = {}) {
-  const log = [], webps = []
+// shotsOf(colour): the meta shots of a colour; failPost(url, body, log): an error to throw for that post, if any.
+function publishHarness({ checkStatus = 404, checkBody = null, sizes = [600, 1200, 2400], shotsOf = () => [1, 2, 3, 13], mime = "image/webp", stopAfter = Infinity, stopWhen = null, customError = null, failPost = null, patch = {}, models } = {}) {
+  const log = [], webps = [], jobs = []
   let uploads = 0
   const post = async (url, body) => {
     log.push(["post", url, body])
+    const fail = failPost?.(url, body, log)
+    if (fail) throw fail
     if (url.endsWith("/custom") && customError) throw customError
     if (url.endsWith("/upload")) { uploads++; return { url: `u${uploads}` } }
-    return { result: { design: body.slug } }
+    if (url.endsWith("/custom")) return { result: { design: body.slug } }
+    return { ok: true }
   }
   const stubs = {
     "../../../api": { post, ApiError: ApiErrorStub },
     "../../../mockup/layers": {
-      loadMeta: async () => ({ sizes, shots: [1, 2, 3, 13].map((n) => ({ n, name: `${n} Shot` })) }),
+      loadMeta: async (base, colour) => ({ sizes, shots: shotsOf(colour).map((n) => ({ n, name: `${n} Shot` })) }),
       pickSize: layersLib.pickSize, designWidthFor: layersLib.designWidthFor, blobToBase64: async () => "x", shotLabel: layersLib.shotLabel,
     },
     "./engine": { cellKey: (d, c, s, v) => `${d}|${c}|${s}|${v}` },
-    "./state": { etaText: wiz.etaText, NEW_COLLECTION: wiz.NEW_COLLECTION },
+    "./state": wiz,
     "../../../ui": { toast() {} },
     "../../../mockup/zip": {},
   }
   const lib = load("console/src/pages/mockup-studio/wizard/export.ts", (name) => stubs[name] ?? assert.fail(`unexpected import ${name}`), {
-    fetch: async (url) => { log.push(["fetch", url]); return { ok: checkStatus === 200, status: checkStatus } }, performance,
+    fetch: async (url) => { log.push(["fetch", url]); return { ok: checkStatus === 200, status: checkStatus, json: async () => checkBody } }, performance,
   })
   const ex = { bump: () => 1, webp: async (job) => { webps.push(job); return { blob: new Blob(["a"]), mime } } }
   const run = () => lib.publishProduct({
     settings: { case_type: "signature", shots: [1, 2, 3], image_size: 1200, quality: 92, supersample: true, sets: [] },
-    models: models ?? [{ set: { device: "iphone-18-pro-max", base_url: "https://x" }, colour: "Black", model: "iPhone 18 Pro Max" }],
-    details: { name: " Bloom ", slug: "bloom", description: "d", status: "draft", collection: wiz.NEW_COLLECTION, newCollection: " Spring ", stock: "5" },
+    models: models ?? [m18()],
+    details: { name: " Bloom ", slug: "bloom", description: "d", status: "draft", collection: wiz.NEW_COLLECTION, newCollection: " Spring ", stock: "5", mode: "new" },
     placement: { zoom: 1, ox: 0, oy: 0 }, version: 1, hq: 4096, lowMemory: false, exporter: async () => ex,
-    stopped: () => uploads >= stopAfter, onJob() {}, onUploaded() {}, onMilestone() {}, ...patch,
+    stopped: () => (stopWhen ? stopWhen(log) : uploads >= stopAfter), onJob: (j) => jobs.push(j), onUploaded() {}, onMilestone() {}, ...patch,
   })
-  return { log, webps, run, uploads: () => log.filter((e) => e[1] === "/admin/designs/upload").map((e) => e[2]) }
+  const posts = (re) => log.filter((e) => e[0] === "post" && re.test(e[1]))
+  return { lib, log, webps, jobs, run, posts, uploads: () => posts(/\/admin\/designs\/upload$/).map((e) => e[2]) }
 }
 
 test("publishing checks the URL first, then uploads every gallery picture and creates the product with the same body", async () => {
@@ -587,27 +784,32 @@ test("publishing checks the URL first, then uploads every gallery picture and cr
   assert.equal(h.log[0][0], "fetch", "the URL check comes before any upload")
   const ups = h.uploads()
   assert.equal(ups.length, 3)
-  for (const body of ups) assert.deepEqual(Object.keys(body), ["designSlug", "caseTypeSlug", "deviceSlug", "index", "filename", "mimeType", "contentBase64"])
-  assert.deepEqual(ups.map((b) => [b.index, b.filename, b.mimeType]), [[1, "1.webp", "image/webp"], [2, "2.webp", "image/webp"], [3, "3.webp", "image/webp"]])
-  const custom = h.log.filter((e) => e[1] === "/admin/designs/custom")
+  for (const body of ups) same(Object.keys(body), ["designSlug", "caseTypeSlug", "deviceSlug", "colourSlug", "index", "filename", "mimeType", "contentBase64"])
+  same(ups.map((b) => [b.colourSlug, b.index, b.filename, b.mimeType]), [["black", 1, "1.webp", "image/webp"], ["black", 2, "2.webp", "image/webp"], ["black", 3, "3.webp", "image/webp"]])
+  const custom = h.posts(/\/custom$/)
   assert.equal(custom.length, 1)
-  assert.equal(h.log.at(-1), custom[0], "the product is created last")
-  assert.deepEqual(plain(custom[0][2]), {
+  same(custom[0][2], {
     name: "Bloom", slug: "bloom", description: "d", theme: "Spring", status: "draft", blankStock: 5,
     pairs: { signature: { "iphone-18-pro-max": ["u1", "u2", "u3"] } },
   })
+  // after the product: one colours call, even for a model in one colour (only the main colour marker)
+  const colours = h.posts(/\/colours$/)
+  assert.equal(h.log.indexOf(custom[0]) < h.log.indexOf(colours[0]), true, "the colours come after the product")
+  assert.equal(h.log.at(-1), colours[0])
+  assert.equal(colours[0][1], "/admin/designs/bloom/colours")
+  same(colours[0][2], { source: "mockup_studio", variants: [{ caseType: "signature", device: "iphone-18-pro-max", main: "black", galleries: {}, replace: true }] })
   // sharper shop images: the 2400 px renders with the full design width, shrunk to the image size
-  assert.deepEqual(h.webps.map((j) => [j.size, j.out, j.width, j.quality]), [[2400, 1200, 4096, 92], [2400, 1200, 4096, 92], [2400, 1200, 4096, 92]])
-  assert.deepEqual(plain(result), { slug: "bloom", perModel: 3 })
+  same(h.webps.map((j) => [j.size, j.out, j.width, j.quality]), [[2400, 1200, 4096, 92], [2400, 1200, 4096, 92], [2400, 1200, 4096, 92]])
+  same({ ...result, steps: result.steps.length }, { slug: "bloom", perModel: 3, pictures: 3, steps: 1, failure: null })
 })
 
 test("publishing makes the shop images at 1200 where 2400 is not uploaded or the device is short of memory", async () => {
-  const missing = publishHarness({ models: [{ set: { device: "iphone-17", base_url: "https://y" }, colour: "Black", model: "iPhone 17", full: false }] })
+  const missing = publishHarness({ models: [m17([{ ...BLACK, full: false }])] })
   await missing.run()
-  assert.deepEqual(missing.webps.map((j) => [j.size, j.width]), [[1200, 2048], [1200, 2048], [1200, 2048]])
+  same(missing.webps.map((j) => [j.size, j.width]), [[1200, 2048], [1200, 2048], [1200, 2048]])
   const phone = publishHarness({ patch: { lowMemory: true } })
   await phone.run()
-  assert.deepEqual(phone.webps.map((j) => [j.size, j.out, j.width]), [[1200, undefined, 2048], [1200, undefined, 2048], [1200, undefined, 2048]])
+  same(phone.webps.map((j) => [j.size, j.out, j.width]), [[1200, undefined, 2048], [1200, undefined, 2048], [1200, undefined, 2048]])
 })
 
 test("a taken URL or a failed check uploads nothing", async () => {
@@ -622,19 +824,166 @@ test("a taken URL or a failed check uploads nothing", async () => {
 test("Safari's JPEG shop images upload as .jpg, and Stop creates no product", async () => {
   const jpeg = publishHarness({ mime: "image/jpeg" })
   await jpeg.run()
-  assert.deepEqual(jpeg.uploads().map((b) => [b.filename, b.mimeType]), [["1.jpg", "image/jpeg"], ["2.jpg", "image/jpeg"], ["3.jpg", "image/jpeg"]])
+  same(jpeg.uploads().map((b) => [b.filename, b.mimeType]), [["1.jpg", "image/jpeg"], ["2.jpg", "image/jpeg"], ["3.jpg", "image/jpeg"]])
   for (const stopAfter of [0, 1, 3]) {
-    const h = publishHarness({ stopAfter })
+    const h = publishHarness({ stopAfter, models: [m18([BLACK, SILVER])] })
     await assert.rejects(h.run(), { name: "Stopped" })
-    assert.equal(h.log.filter((e) => e[1] === "/admin/designs/custom").length, 0, `stopped after ${stopAfter} uploads`)
+    assert.equal(h.posts(/\/(custom|colours)$/).length, 0, `stopped after ${stopAfter} uploads`)
   }
 })
 
 test("a create request that got no answer may have created the product; a refused one did not", async () => {
   const timeout = new Error("The server took too long. Refresh before retrying; the save may have completed.")
-  await assert.rejects(publishHarness({ customError: timeout }).run(), (e) => e === timeout && e.maybeCreated === true)
+  const h = publishHarness({ customError: timeout })
+  await assert.rejects(h.run(), (e) => e === timeout && e.maybeCreated === true)
+  assert.equal(h.posts(/\/colours$/).length, 0, "no colours for a product that may not exist")
   const gateway = new ApiErrorStub("Bad gateway", 502)
   await assert.rejects(publishHarness({ customError: gateway }).run(), (e) => e.maybeCreated === true)
   const refused = new ApiErrorStub("Invalid", 400)
   await assert.rejects(publishHarness({ customError: refused }).run(), (e) => e === refused && !e.maybeCreated)
+})
+
+test("several phone colours: main first, the shots every colour has, colour folders, /custom with the main only, one /colours per model", async () => {
+  // Glacier has no shot 3, so every colour of that model uses shots 1 and 2
+  const h = publishHarness({ shotsOf: (c) => (c === "Glacier" ? [1, 2, 13] : [1, 2, 3, 13]), models: [m18([SILVER, BLACK, GLACIER]), m17()] })
+  const result = await h.run()
+  same(h.uploads().map((b) => [b.deviceSlug, b.colourSlug, b.index]), [
+    ["iphone-18-pro-max", "black", 1], ["iphone-18-pro-max", "black", 2], ["iphone-18-pro-max", "silver", 1], ["iphone-18-pro-max", "silver", 2],
+    ["iphone-18-pro-max", "glacier", 1], ["iphone-18-pro-max", "glacier", 2], ["iphone-17", "black", 1], ["iphone-17", "black", 2], ["iphone-17", "black", 3],
+  ])
+  same(h.webps.map((j) => [j.colour, j.shot]).slice(0, 6), [["Black", 1], ["Black", 2], ["Silver", 1], ["Silver", 2], ["Glacier", 1], ["Glacier", 2]])
+  assert.ok(h.jobs.some((j) => j.label === "Making iPhone 18 Pro Max · Silver · picture 1 of 2"))
+  same(h.posts(/\/custom$/)[0][2].pairs, { signature: { "iphone-18-pro-max": ["u1", "u2"], "iphone-17": ["u7", "u8", "u9"] } }, "the same /custom body as before: main colours only")
+  same(h.posts(/\/colours$/).map((e) => plain(e[2])), [
+    { source: "mockup_studio", variants: [{ caseType: "signature", device: "iphone-18-pro-max", main: "black", galleries: { silver: ["u3", "u4"], glacier: ["u5", "u6"] }, replace: true }] },
+    { source: "mockup_studio", variants: [{ caseType: "signature", device: "iphone-17", main: "black", galleries: {}, replace: true }] },
+  ])
+  assert.ok(h.jobs.some((j) => j.phase === "colours" && j.label === "Saving phone colours 2 of 2…"))
+  same([result.perModel, result.pictures, result.failure, result.steps.every((x) => x.done)], [2, 9, null, true])
+  await assert.rejects(publishHarness({ shotsOf: (c) => (c === "Glacier" ? [13] : [1]), models: [m18([BLACK, GLACIER])] }).run(), /phone colours share none of the gallery shots/)
+})
+
+test("a phone colour call that fails or is stopped leaves the product, and Retry sends only the rest", async () => {
+  // a refused call: the product stays, the failure is returned, and a retry sends only the calls not done
+  const refused = publishHarness({ models: [m18(), m17()], failPost: (url, body) => (url.endsWith("/colours") && body.variants[0].device === "iphone-17" ? new ApiErrorStub("iPhone 17 has no phone colours. Add them in Mockup sets.", 400) : null) })
+  const r = await refused.run()
+  assert.equal(refused.posts(/\/custom$/).length, 1)
+  same(r.failure, { label: "the phone colours of iPhone 17", message: "iPhone 17 has no phone colours. Add them in Mockup sets.", stopped: false })
+  same(r.steps.map((x) => x.done), [true, false])
+  const retry = publishHarness()
+  assert.equal(await retry.lib.runSteps(r.steps, { stopped: () => false, onStep() {} }), null)
+  same(retry.posts(/./).map((e) => e[2].variants[0].device), ["iphone-17"], "only the call that was not saved")
+  same(r.steps.map((x) => x.done), [true, true])
+  // Stop in this phase: the current model's call finishes, the next is not sent
+  const stopped = publishHarness({ models: [m18(), m17()], stopWhen: (log) => log.some((e) => e[1].endsWith("/colours")) })
+  const s = await stopped.run()
+  assert.equal(stopped.posts(/\/colours$/).length, 1)
+  same([s.failure.stopped, s.failure.label, s.steps.map((x) => x.done)], [true, "the phone colours of iPhone 17", [true, false]])
+  // no answer or a gateway error: one more try (the call is idempotent)
+  let fails = 1
+  const flaky = publishHarness({ failPost: (url) => (url.endsWith("/colours") && fails-- > 0 ? new ApiErrorStub("Bad gateway", 502) : null) })
+  assert.equal((await flaky.run()).failure, null)
+  assert.equal(flaky.posts(/\/colours$/).length, 2)
+})
+
+const existingDesign = {
+  slug: "bloom", name: "Bloom", kind: "design", collection: null,
+  products: [{ id: "prod_1", form: "phone", status: "published", description: "", variants: [
+    { id: "variant_a", caseTypeSlug: "signature", deviceSlug: "iphone-18-pro-max" },
+    { id: "variant_b", caseTypeSlug: "armor-black", deviceSlug: "iphone-17" },
+  ] }],
+}
+const updating = { mode: "update", name: "", slug: "bloom", description: "", status: "draft", collection: "", newCollection: "", stock: "0" }
+
+test("one model's refused phone colours never hold back the other models; no answer still stops the run", async () => {
+  const m16 = () => model("iphone-16", "iPhone 16")
+  const devices = (h) => h.posts(/\/colours$/).map((e) => e[2].variants[0].device)
+  // the middle model is refused (e.g. its set was edited in another tab): the models after it still save
+  const refused = publishHarness({ models: [m18(), m17(), m16()], failPost: (url, body) => (url.endsWith("/colours") && body.variants[0].device === "iphone-17" ? new ApiErrorStub("Silver is not a phone colour of iPhone 17. Choose one from its Mockup set.", 400) : null) })
+  const r = await refused.run()
+  same(devices(refused), ["iphone-18-pro-max", "iphone-17", "iphone-16"], "a 4xx is not retried and the next model is sent")
+  same(r.failure, { label: "the phone colours of iPhone 17", message: "Silver is not a phone colour of iPhone 17. Choose one from its Mockup set.", stopped: false })
+  same(r.steps.map((x) => x.done), [true, false, true])
+  const retry = publishHarness()
+  assert.equal(await retry.lib.runSteps(r.steps, { stopped: () => false, onStep() {} }), null)
+  same(devices(retry), ["iphone-17"], "Retry sends only the refused model")
+  // the first refusal is the one reported; every refused model stays not done
+  const two = publishHarness({ models: [m18(), m17(), m16()], failPost: (url, body) => (url.endsWith("/colours") && body.variants[0].device !== "iphone-17" ? new ApiErrorStub(`No set for ${body.variants[0].device}`, 400) : null) })
+  const t = await two.run()
+  same([t.failure.label, t.steps.map((x) => x.done)], ["the phone colours of iPhone 18 Pro Max", [false, true, false]])
+  // no answer (a server error on both tries, a timeout), a lost session or a design that is gone: every later call
+  // would fail too, so the run stops at that model
+  for (const error of [new ApiErrorStub("Bad gateway", 502), new Error("The server took too long."), new ApiErrorStub("Sign in again.", 401), new ApiErrorStub("No design found.", 404)]) {
+    const h = publishHarness({ models: [m18(), m17(), m16()], failPost: (url, body) => (url.endsWith("/colours") && body.variants[0].device === "iphone-17" ? error : null) })
+    const s = await h.run()
+    same([s.failure.label, s.steps.map((x) => x.done)], ["the phone colours of iPhone 17", [true, false, false]], error.message)
+    assert.ok(!devices(h).includes("iphone-16"), error.message)
+  }
+  // the ordered Update pictures saves still stop at the first refusal
+  const ordered = publishHarness({ checkStatus: 200, checkBody: { design: existingDesign }, models: [m18(), m17()], patch: { details: updating },
+    failPost: (url) => (url.endsWith("/manager-variants") ? new ApiErrorStub("Unknown variant", 400) : null) })
+  const o = await ordered.run()
+  assert.equal(ordered.posts(/\/(pairs|colours)$/).length, 0, "a refused main-picture save sends nothing after it")
+  assert.equal(o.failure.stopped, false)
+})
+
+test("Update pictures: manager-variants for the models the design has, /pairs for the missing ones, then the colours; never /custom", async () => {
+  const h = publishHarness({ checkStatus: 200, checkBody: { design: existingDesign }, models: [m18([BLACK, SILVER]), m17()], patch: { details: updating } })
+  const result = await h.run()
+  assert.equal(h.posts(/\/custom$/).length, 0)
+  assert.equal(h.uploads().every((b) => b.designSlug === "bloom"), true)
+  const after = h.log.filter((e) => e[0] === "post" && !e[1].endsWith("/upload"))
+  same(after.map((e) => e[1]), ["/admin/products/prod_1/manager-variants", "/admin/designs/bloom/pairs", "/admin/designs/bloom/colours", "/admin/designs/bloom/colours"])
+  same(after[0][2], { variants: [{ id: "variant_a", images: ["u1", "u2", "u3"] }] }, "only images: the IDs, prices and stock stay")
+  same(after[1][2], { pairs: { signature: { "iphone-17": ["u7", "u8", "u9"] } }, blankStock: 0 }, "the missing model, never resetting stock")
+  same(after[2][2].variants, [{ caseType: "signature", device: "iphone-18-pro-max", main: "black", galleries: { silver: ["u4", "u5", "u6"] }, replace: true }])
+  assert.equal(after[3][2].variants[0].replace, true, "older colour pictures are cleared")
+  assert.ok(h.jobs.some((j) => j.phase === "saving"))
+  same([result.slug, result.failure, result.steps.length], ["bloom", null, 4])
+})
+
+test("Update pictures: a save that fails is reported, and Retry sends only the steps not confirmed, uploading nothing again", async () => {
+  const h = publishHarness({ checkStatus: 200, checkBody: { design: existingDesign }, models: [m18(), m17()], patch: { details: updating },
+    failPost: (url) => (url.endsWith("/pairs") ? new ApiErrorStub("Unknown device", 400) : null) })
+  const r = await h.run()
+  same(r.failure, { label: "1 new model", message: "Unknown device", stopped: false })
+  same(r.steps.map((x) => [x.path, x.done]), [["/admin/products/prod_1/manager-variants", true], ["/admin/designs/bloom/pairs", false], ["/admin/designs/bloom/colours", false], ["/admin/designs/bloom/colours", false]])
+  const retry = publishHarness()
+  assert.equal(await retry.lib.runSteps(r.steps, { stopped: () => false, onStep() {} }), null)
+  same(retry.log.map((e) => e[1]), ["/admin/designs/bloom/pairs", "/admin/designs/bloom/colours", "/admin/designs/bloom/colours"])
+})
+
+test("Update pictures: a design that is gone or not a Studio design changes nothing; batches stay at 20 models", async () => {
+  const gone = publishHarness({ checkStatus: 404, patch: { details: updating } })
+  await assert.rejects(gone.run(), /No design uses the URL "bloom" any more/)
+  assert.equal(gone.log.filter((e) => e[0] === "post").length, 0)
+  const regular = publishHarness({ checkStatus: 200, checkBody: { design: { ...existingDesign, kind: "regular" } }, patch: { details: updating } })
+  await assert.rejects(regular.run(), /can't update/)
+  assert.equal(regular.webps.length, 0)
+  // 45 models the design has and 25 it does not: manager-variants and /pairs in batches of at most 20
+  const have = Array.from({ length: 45 }, (_, i) => `have-${i}`), lack = Array.from({ length: 25 }, (_, i) => `lack-${i}`)
+  const d = { ...existingDesign, products: [{ ...existingDesign.products[0], variants: have.map((device, i) => ({ id: `variant_${i}`, caseTypeSlug: "signature", deviceSlug: device })) }] }
+  const models = [...have, ...lack].map((device) => model(device, device, [BLACK]))
+  const urls = Object.fromEntries(models.map((m) => [m.set.device, { black: ["https://img/x.webp"] }]))
+  const steps = gone.lib.updateSteps(d, "signature", models, urls)
+  const sizes = (re, key) => steps.filter((x) => re.test(x.path)).map((x) => (key === "pairs" ? Object.keys(x.body.pairs.signature).length : x.body.variants.length))
+  same(sizes(/manager-variants$/), [20, 20, 5])
+  same(sizes(/\/pairs$/, "pairs"), [20, 5])
+  assert.equal(sizes(/\/colours$/).length, 70, "one colours call per model")
+  assert.ok(Math.max(...steps.map((x) => JSON.stringify(x.body).length)) < 100_000)
+})
+
+test("ZIPs: one model in one colour is flat, several colours or models get a <device>_<colour>/ folder each", () => {
+  const { zipItems } = publishHarness().lib
+  const meta = { sizes: [600], shots: [{ n: 1, name: "01 Front - design" }, { n: 5, name: "05 Camera close-up" }] }
+  const one = [{ set: P18, model: "iPhone 18 Pro Max", colours: [{ name: "Black", meta }] }]
+  same(zipItems(one, [1], true).map((x) => x.entry(2400)), ["01-front-design_2400.png", "05-camera-close-up_2400.png"])
+  same(zipItems(one, [1], false).map((x) => x.entry(2400)), ["iphone-18-pro-max_black/01-front-design_2400.png", "iphone-18-pro-max_black/05-camera-close-up_2400.png"], "Download all keeps folders")
+  const two = [{ set: P18, model: "iPhone 18 Pro Max", colours: [{ name: "Black", meta }, { name: "Wine Red", meta, full: false }] }]
+  const items = zipItems(two, [5], true)
+  same(items.map((x) => [x.colour, x.shot, x.entry(1200)]), [
+    ["Black", 5, "iphone-18-pro-max_black/05-camera-close-up_1200.png"], ["Black", 1, "iphone-18-pro-max_black/01-front-design_1200.png"],
+    ["Wine Red", 5, "iphone-18-pro-max_wine-red/05-camera-close-up_1200.png"], ["Wine Red", 1, "iphone-18-pro-max_wine-red/01-front-design_1200.png"],
+  ])
+  assert.equal(items[2].full, false)
 })

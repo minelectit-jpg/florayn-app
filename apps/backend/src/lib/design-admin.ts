@@ -1,6 +1,8 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
+import { CATALOG_MODULE } from "../modules/catalog"
 import { mergeAudienceTags, readAudienceTag, type AudienceTag } from "./audience"
+import { colourSlug, readMockupSettings, setPalette, type PaletteColour } from "./mockup-settings"
 
 /**
  * Read helpers for the Design Manager admin screen. A "design" is one or more
@@ -127,7 +129,13 @@ export type DesignVariantDetail = {
   /** A simple product's colour can be for one mode only. */
   audience: AudienceTag
   inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[]
+  /** Phone colour pictures (PHONE_COLOURS.md). main: the colour metadata.images shows; null and {} without rows. */
+  phoneColours: VariantPhoneColours
 }
+
+export type VariantPhoneColours = { main: string | null; extra: Record<string, string[]> }
+/** device slug -> its Mockup set palette ([slug, name, hex], palette order), for this design's models that have one. */
+export type DesignPalette = Record<string, { default: string; colours: PaletteColour[] }>
 
 export type DesignProductDetail = {
   id: string
@@ -152,6 +160,7 @@ export type DesignDetail = {
   products: DesignProductDetail[]
   kind: "design" | "regular"
   audience: AudienceTag
+  palette: DesignPalette
 }
 
 /** One design's full shape (its products, options and variants) for the editor. */
@@ -191,6 +200,31 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
   const mine = (products ?? []).filter((p: any) => p.metadata?.design_slug === slug || (!p.metadata?.design_slug && p.handle === slug))
   if (!mine.length) return null
 
+  // Phone colour pictures: one bounded read of this design's rows, plus the palettes.
+  const [colourRows, { settings }] = await Promise.all([
+    container.resolve(CATALOG_MODULE).listPhoneColourGalleries(
+      { product_id: mine.map((p: any) => p.id) },
+      { select: ["variant_id", "colour_slug", "is_main", "images"], take: 20000 }
+    ) as Promise<{ variant_id: string; colour_slug: string; is_main: boolean; images: string[] | null }[]>,
+    readMockupSettings(container),
+  ])
+  const colourMap = new Map<string, VariantPhoneColours>()
+  for (const row of colourRows ?? []) {
+    const entry = colourMap.get(row.variant_id) ?? { main: null, extra: {} }
+    if (row.is_main) entry.main = row.colour_slug
+    else entry.extra[row.colour_slug] = row.images ?? []
+    colourMap.set(row.variant_id, entry)
+  }
+  const coloursOf = (variantId: string): VariantPhoneColours => colourMap.get(variantId) ?? { main: null, extra: {} }
+  const palette: DesignPalette = {}
+  for (const p of mine) {
+    for (const v of p.variants ?? []) {
+      const device = v.metadata?.device_slug
+      const set = typeof device === "string" && !palette[device] ? settings.sets.find((s) => s.device === device) : undefined
+      if (set) palette[device] = { default: colourSlug(set.default_colour), colours: setPalette(set) }
+    }
+  }
+
   const first = mine[0]
   const productDetails: DesignProductDetail[] = mine.map((p: any) => {
     const optTitleById = new Map<string, string>((p.options ?? []).map((o: any) => [o.id, o.title]))
@@ -222,6 +256,7 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
           shared: Boolean(link.inventory.metadata?.is_blank),
           levels: (link.inventory.location_levels ?? []).map((l: any) => ({ location_id: l.location_id, stocked: Number(l.stocked_quantity), reserved: Number(l.reserved_quantity) })),
         }] : []),
+        phoneColours: coloursOf(v.id),
       }
     })
     return {
@@ -248,5 +283,6 @@ export async function getDesignDetail(container: any, slug: string): Promise<Des
     audience: mergeAudienceTags(mine.map((p: any) => readAudienceTag(p.metadata))),
     collection: first.collection ? { id: first.collection.id, title: first.collection.title } : null,
     products: productDetails,
+    palette,
   }
 }

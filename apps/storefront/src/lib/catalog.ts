@@ -1,5 +1,13 @@
 import type { AudienceTag } from "./audience"
 import { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY } from "./medusa"
+import {
+  readProductPhoneColours,
+  readShopPhoneColours,
+  readVariantPhoneColours,
+  type ProductPhoneColours,
+  type ShopPhoneColours,
+  type VariantPhoneColours,
+} from "./phone-colours"
 
 /**
  * Thin client for the custom /store routes the catalog module exposes. These
@@ -20,9 +28,11 @@ async function storeFetch<T>(
       },
       next: {
         revalidate: 60,
+        // Phone colour reads follow product data: gallery writes refresh
+        // `products`, Mockup set saves refresh `catalog` (PHONE_COLOURS.md).
         tags: domain === "stock"
           ? ["stock"]
-          : ["shop-cards", "shop-catalog"].includes(domain)
+          : ["shop-cards", "shop-catalog", "phone-colours"].includes(domain)
             ? ["products", "catalog", `catalog:${domain}`]
             : ["catalog", `catalog:${domain}`],
       },
@@ -129,11 +139,17 @@ export type ShopCard = {
   image: string | null
   /** Case-type names for this device only, never the all-model image matrix. */
   imagesByCaseType: Record<string, string>
+  /** On a shop colour page: that phone colour's first picture, when the pair has one. */
+  colourImage?: string
 }
 
-/** Only this page's selected device renders and exact add-to-cart variants. */
+/**
+ * Only this page's selected device renders and exact add-to-cart variants.
+ * `colour` (a shop phone colour page) adds each card's colourImage; it never
+ * filters cards. It is sent only when set, so colour-less pages keep their URL.
+ */
 export async function getShopCards(
-  handles: string[], deviceName: string, caseTypeName: string
+  handles: string[], deviceName: string, caseTypeName: string, colour?: string | null
 ): Promise<ShopCard[] | null> {
   if (!handles.length) return []
   const query = new URLSearchParams({
@@ -141,8 +157,31 @@ export async function getShopCards(
     device: deviceName,
     case_type: caseTypeName,
   })
+  if (colour) query.set("colour", colour)
   const data = await storeFetch<{ cards: ShopCard[] }>(`/store/shop-cards?${query}`)
   return Array.isArray(data?.cards) ? data.cards : null
+}
+
+/**
+ * The product page's phone colours for one product, with the pictures of
+ * `deviceSlug` (the page's first model) inline. null for a product without
+ * colours (every legacy pair) or a failed read: the page then shows exactly
+ * what it showed before.
+ */
+export async function getProductPhoneColours(productId: string, deviceSlug: string): Promise<ProductPhoneColours | null> {
+  const query = new URLSearchParams({ product_id: productId, device: deviceSlug })
+  return readProductPhoneColours(await storeFetch<unknown>(`/store/phone-colours/product?${query}`))
+}
+
+/** One variant's extra phone colour pictures, for the product page's lazy route. */
+export async function getVariantPhoneColours(variantId: string): Promise<VariantPhoneColours | null> {
+  return readVariantPhoneColours(await storeFetch<unknown>(`/store/phone-colours/variant/${encodeURIComponent(variantId)}`))
+}
+
+/** The shop's phone colour palette for one model and case type, or null on a failed read. */
+export async function getShopPhoneColours(deviceSlug: string, caseTypeSlug: string): Promise<ShopPhoneColours | null> {
+  const query = new URLSearchParams({ device: deviceSlug, case_type: caseTypeSlug })
+  return readShopPhoneColours(await storeFetch<unknown>(`/store/phone-colours?${query}`))
 }
 
 export type ShopDesign = {

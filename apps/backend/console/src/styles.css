@@ -310,8 +310,14 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
 .ms-mcard-check svg { width: 14px; height: 14px; }
 .ms-mcard.is-on .ms-mcard-check { background: var(--purple); box-shadow: none; color: #fff; animation: ms-pop var(--t-fast) var(--ease); }
 .ms-mcard-name { height: 22px; padding: 0 4px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ms-mcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
-.ms-mcard-colour { height: 20px; padding-right: 4px; font-size: 13px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-mcard-foot { display: grid; gap: 2px; min-width: 0; }
+.ms-mcard-colour { display: -webkit-box; height: 40px; padding: 0 4px; font-size: 13px; line-height: 20px; color: var(--ink-muted); overflow: hidden; overflow-wrap: anywhere; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* phone colours to make: checkboxes, room under the dots for the Main pip */
+.ms-swatches.is-multi { padding-bottom: 6px; }
+.ms-swatch-main { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); height: 14px; padding: 0 4px; border-radius: 999px; background: var(--purple); color: #fff; font-size: 9px; font-weight: 700; line-height: 14px; letter-spacing: .02em; pointer-events: none; }
+.ms-cmode { gap: 8px; }
+.ms-cmode .segmented button { height: 30px; padding: 0 12px; font-size: 13px; }
+.ms-estimate { min-height: 20px; margin: -6px 0 12px; }
 .ms-mcard-status { height: 18px; padding: 0 4px; font-size: 12px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-mcard-status.is-ok { color: var(--success); } .ms-mcard-status.is-error { color: var(--danger); } .ms-mcard-status .linkbtn { padding: 0; }
 .ms-empty { display: grid; justify-items: center; gap: 10px; padding: 48px 16px; text-align: center; }
@@ -343,10 +349,14 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
 .ms-slug-state { min-height: 20px; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-muted); }
 .ms-slug-state svg { width: 14px; height: 14px; } .ms-slug-state .spin { width: 12px; height: 12px; }
 .ms-slug-state.is-free { color: var(--success); } .ms-slug-state.is-taken { color: var(--danger); }
+.ms-update-offer { margin-top: 8px; gap: 6px 10px; font-size: 14px; }
+.ms-update-note { display: grid; gap: 6px; justify-items: start; }
 .ms-panel .select, .ms-panel .input { min-height: 44px; }
 .ms-mini { grid-area: stage; display: none; align-items: center; gap: 12px; height: 72px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
 .ms-mini .thumb { position: relative; width: 56px; height: 56px; flex: none; overflow: hidden; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
 .ms-mini .thumb > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* the estimate wraps to two lines when the Studio is narrow: reserve both, so the grid does not jump when the first model is ticked */
+@container ms (max-width: 479px) { .ms-estimate { min-height: 3em; } }
 @container ms (max-width: 759px) {
   .ms-split[data-step="details"] .ms-stage-col { display: none; }
   .ms-split[data-step="details"] .ms-mini { display: flex; }
@@ -365,6 +375,13 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
 .ms-group-head { position: sticky; top: calc(var(--topbar-h) + var(--steps-h)); z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 52px; padding: 8px 0; background: linear-gradient(var(--canvas) 85%, transparent); }
 .ms-group-head .grow { flex: 1; }
 .ms-dot-sw { width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(26, 22, 37, .16); }
+/* a model's colour tabs (review): radio chips, main first */
+.ms-ctabs { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ms-ctab { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-size: 13px; font-weight: 600; cursor: pointer; }
+.ms-ctab:has(input:checked) { border-color: var(--purple); background: var(--purple-tint); color: var(--purple-deep); }
+.ms-ctab:has(input:focus-visible) { outline: 2px solid var(--purple); outline-offset: 2px; }
+.ms-ctab-main { margin-left: 6px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--purple); color: #fff; font-size: 10px; line-height: 18px; }
+@media (pointer: coarse) { .ms-ctab { min-height: 44px; } }
 .ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 .ms-tile { position: relative; display: grid; gap: 4px; min-width: 0; }
 .ms-tile-open { position: relative; display: block; width: 100%; aspect-ratio: 1; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; cursor: zoom-in; transition: border-color var(--t-fast), box-shadow var(--t-fast); }
@@ -404,6 +421,19 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
 .ms-done-strip > div > canvas, .ms-done-strip > div > .skel { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ms-done-actions { justify-content: center; } .ms-done-actions a.btn { text-decoration: none; }
 .ms-done-job { width: min(420px, 100%); text-align: left; }
+.ms-done-note { display: grid; gap: 8px; justify-items: start; width: min(520px, 100%); text-align: left; }
+
+/* Mockup sets: a model's phone colours, each with its dot colour */
+.ms-set { gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.ms-set-default { width: min(320px, 100%); }
+.ms-colours { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ms-colour { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 4px 4px 4px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+.ms-colour-pick { position: relative; display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 50%; cursor: pointer; }
+.ms-colour-pick i { width: 26px; height: 26px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(26, 22, 37, .16); }
+.ms-colour-pick:has(input:focus-visible) i { outline: 2px solid var(--purple); outline-offset: 3px; }
+.ms-colour-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.ms-hex.input { width: 92px; min-height: 32px; padding: 4px 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) { .ms-colour-pick { width: 44px; height: 44px; } .ms-hex.input { min-height: 44px; } }
 
 /* lightbox */
 .ms-lb { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--lb-bg); color: #fff; }

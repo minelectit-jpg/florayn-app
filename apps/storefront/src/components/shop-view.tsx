@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "@/components/audience-link"
 
+import ShopColourRow from "@/components/shop-colour-row"
 import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
 import {
@@ -8,6 +9,7 @@ import {
   getDeviceCatalog,
   getShopCatalog,
   getShopCards,
+  getShopPhoneColours,
   shopCardImage,
   type CaseTypeRecord,
   type DeviceRecord,
@@ -33,6 +35,12 @@ const PAGE_SIZE = 32
  *   /shop/iphone-17-pro-max                 -> one device
  *   /shop/iphone-17-pro-max/signature       -> device + case type
  *   /shop/iphone-17-pro-max/signature/2     -> page 2 of that
+ *   /shop/iphone-17-pro-max/signature/silver     -> that grid in Silver phone pictures
+ *   /shop/iphone-17-pro-max/signature/silver/2   -> page 2 of that
+ *
+ * A phone colour (PHONE_COLOURS.md 7) only chooses each card's picture: the
+ * cards, count, order, prices and Quick Add variants are those of the
+ * colour-less page, and a design without pictures in that colour keeps its own.
  */
 
 function formForFamily(family: string): string {
@@ -77,12 +85,15 @@ export async function shopMetadata({
 export default async function ShopView({
   deviceSlug,
   caseTypeSlug,
+  colourSlug,
   page = 1,
   routePath = "/shop/",
   audience = "women",
 }: {
   deviceSlug?: string
   caseTypeSlug?: string
+  /** A phone colour some published design has pictures in (the route checks it). */
+  colourSlug?: string
   page?: number
   routePath?: string
   /** Women or Men: only that mode's designs (and the ones for both) are listed. */
@@ -143,9 +154,11 @@ export default async function ShopView({
   // lookup is slow or missing; the card still links to the product page.
   const variantByHandle = new Map<string, string>()
   const cardsByHandle = new Map<string, ShopCard>()
+  // The phone colour row's palette, read beside the cards, never after them.
+  const palettePromise = device && caseType ? getShopPhoneColours(device.slug, caseSlug) : null
   if (device && pageDesigns.length) {
     const handles = pageDesigns.map((d) => handleFor(d.slug, targetForm))
-    const cards = await getShopCards(handles, device.name, caseType?.name ?? "")
+    const cards = await getShopCards(handles, device.name, caseType?.name ?? "", colourSlug)
     for (const card of cards ?? []) {
       cardsByHandle.set(card.handle, card)
       if (card.variantId) variantByHandle.set(card.handle, card.variantId)
@@ -191,10 +204,14 @@ export default async function ShopView({
   const price = caseType?.price ?? 0
   const products: StoreProduct[] = pageDesigns.map((d) => {
     const handle = handleFor(d.slug, targetForm)
+    const card = cardsByHandle.get(handle)
     const image = device
-      ? cardsByHandle.get(handle)?.image ??
-        shopCardImage(d.slug, caseSlug, device.slug)
+      ? card?.image ?? shopCardImage(d.slug, caseSlug, device.slug)
       : null
+    // Still one picture per card: the chosen phone colour's when this design
+    // has it, else its own (legacy pictures, or not re-uploaded yet). The
+    // product thumbnail stays the main colour.
+    const shown = (colourSlug && card?.colourImage) || image
     const variant = {
       // Empty when the id lookup missed, so QuickAdd hides rather than trying to
       // add a non-existent variant; the card still links to the product page.
@@ -205,7 +222,7 @@ export default async function ShopView({
         { value: caseType?.name ?? "" },
       ],
       calculated_price: { calculated_amount: price },
-      metadata: { images: image ? [image] : [] },
+      metadata: { images: shown ? [shown] : [] },
     } as unknown as StoreVariant
     return {
       id: `card-${d.slug}`,
@@ -216,6 +233,19 @@ export default async function ShopView({
       variants: [variant],
     } as unknown as StoreProduct
   })
+
+  // Under the toolbar, only with 2 or more colours some design has pictures in
+  // (nothing at all is sent otherwise: most models have no Mockup set).
+  const palette = await palettePromise
+  const colourRow = palette && device && palette.colours.filter((c) => c[3] === 1).length > 1 ? (
+    <ShopColourRow
+      palette={palette}
+      current={colourSlug ?? null}
+      deviceSlug={device.slug}
+      caseTypeSlug={caseSlug}
+      pageCaseTypeSlug={caseTypeSlug ?? null}
+    />
+  ) : undefined
 
   const heading = device
     ? `${device.name} Cases`
@@ -241,10 +271,15 @@ export default async function ShopView({
           deviceSlug={device?.slug ?? null}
           caseType={caseType?.name ?? null}
           caseTypeSlug={caseType ? caseSlug : null}
+          // Colour props only on colour pages and for models with colours: the
+          // other shop pages send no colour data at all.
+          {...(colourSlug ? { colourQuery: `&color=${colourSlug}` } : {})}
+          {...(colourRow ? { colourRow } : {})}
           totalCount={matching.length}
           currentPage={current}
           totalPages={totalPages}
           routePath={routePath}
+          pageBase={`${pathFor(device?.slug, caseType ? caseSlug : undefined)}${colourSlug ? `${colourSlug}/` : ""}`}
         />
       ) : (
         <div>

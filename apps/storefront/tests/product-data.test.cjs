@@ -135,6 +135,7 @@ test("projected data still selects valid fallback devices, null prices and fallb
     "@/lib/variant-matrix": { pairKey },
     "@/lib/product-view-data": productViewData,
     "@/lib/product-forms": { featuresGroup: () => undefined },
+    "@/lib/phone-colours": loadSource("lib/phone-colours.ts"),
     "@/lib/tracking/queue": { track() {} },
   })
   const product = fixture()

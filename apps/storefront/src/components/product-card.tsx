@@ -34,6 +34,7 @@ export default function ProductCard({
   deviceSlug,
   caseType,
   caseTypeSlug,
+  colourQuery = "",
   badges,
   priority,
   fetchPriority,
@@ -48,6 +49,8 @@ export default function ProductCard({
   caseType?: string | null
   /** Selected case type slug; carried into the PDP link so it opens on it. */
   caseTypeSlug?: string | null
+  /** A shop phone colour page's "&color=<slug>", added to the link so the product page opens on it. */
+  colourQuery?: string
   badges?: CardBadge[]
   /** Above-the-fold cards: load the main image eagerly so it is not lazy. */
   priority?: boolean
@@ -82,8 +85,9 @@ export default function ProductCard({
   })
 
   // A chosen device deep-links to that device's own page, preselected; a chosen
-  // case type rides along as ?case= so the PDP opens on the same construction.
-  const query = caseTypeSlug ? `?case=${caseTypeSlug}` : ""
+  // case type rides along as ?case= so the PDP opens on the same construction,
+  // and a shop colour page's phone colour as &color=.
+  const query = caseTypeSlug ? `?case=${caseTypeSlug + colourQuery}` : ""
   const href =
     device && deviceSlug
       ? `/product/${product.handle}-${deviceSlug}/${query}`
@@ -169,7 +173,10 @@ export default function ProductCard({
             productTitle={product.title}
             variantTitle={priced?.title ?? ""}
             unitPrice={priced?.calculated_price?.calculated_amount ?? 0}
-            thumbnail={image ?? null}
+            // The bag is always the main colour (PHONE_COLOURS.md): on a shop
+            // colour page the card shows the colour picture, but ShopView keeps
+            // product.thumbnail as the main one, so the drawer line never flips.
+            thumbnail={(colourQuery ? product.thumbnail : image) || null}
             disabled={soldOut}
           />
         </div>

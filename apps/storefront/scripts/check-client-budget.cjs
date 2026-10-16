@@ -20,7 +20,11 @@ const BUDGETS = Object.freeze({
     "/page": 32,
     "/shop/page": 32,
     "/collection/[slug]/page": 32,
-    "/product/[slug]/page": 300,
+    // Raised from 300 for the phone colour row, its state and the lazy colour
+    // load (PHONE_COLOURS.md, PERFORMANCE.md): fixture builds on 2026-10-16
+    // measured 203,962 -> 204,851 B (+889). Set it back to 300 once that
+    // change is the merge-base.
+    "/product/[slug]/page": 900,
     "/checkout/page": 800,
   }),
   runtime: 6000,

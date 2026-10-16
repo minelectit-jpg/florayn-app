@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import type { MatchingProduct } from "@/components/pack-selector"
 import FeaturesSection from "@/components/features-section"
 import LazyReveal from "@/components/lazy-reveal"
-import ProductBuyBox from "@/components/product-buy-box"
+import ProductBuyBox, { type PhoneColourControl } from "@/components/product-buy-box"
 import ProductDetailsSticky from "@/components/product-details-sticky"
 import YouWillLove from "@/components/you-will-love"
 import RecommendedForYou, {
@@ -20,6 +20,13 @@ import { featuresGroup } from "@/lib/product-forms"
 import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import {
+  colourFromQuery,
+  expandGalleries,
+  phoneColourView,
+  settleColour,
+  type ProductPhoneColours,
+} from "@/lib/phone-colours"
+import {
   expandProductViewDesigns,
   type ProductDesignData,
   type ProductVariantMatrix,
@@ -28,6 +35,8 @@ import { track } from "@/lib/tracking/queue"
 import { pairKey } from "@/lib/variant-matrix"
 
 export type ProductPick = { caseType: string; device: string }
+
+const NO_IMAGES: string[] = []
 
 /**
  * What the page's query asks for, read once after hydration so the page
@@ -112,6 +121,7 @@ export default function ProductView({
   featureBlocks,
   productForm,
   galleryVideos,
+  phoneColours,
   simple = false,
   optionLabel,
 }: {
@@ -163,6 +173,12 @@ export default function ProductView({
   /** Design gallery videos, keyed by case type; shown first when one matches. */
   galleryVideos?: GalleryVideoMap
   /**
+   * Phone colour pictures (PHONE_COLOURS.md): every variant's colours, with
+   * the first model's pictures inline. Absent for legacy pictures. The colour
+   * only changes the pictures, never the variant, price, stock or bag line.
+   */
+  phoneColours?: ProductPhoneColours | null
+  /**
    * Simple mode: a non-case product (e.g. a StickPad) rendered through this same
    * page. Its single option's values are the tiles (colours) and there is no
    * device selector or multi-buy widget, so the store keeps ONE product page.
@@ -185,13 +201,46 @@ export default function ProductView({
   const [caseType, setCaseType] = useState(initialCaseType)
   const [device, setDevice] = useState(initialDevice)
 
+  // Phone colour (PHONE_COLOURS.md): a preference that survives model and case
+  // switches. It starts null on the server and the client, so the first render
+  // is always the main colour: the same hero, no hydration mismatch. Nothing
+  // remembers it across visits (that would mean a second hero download).
+  const colourView = useMemo(() => phoneColourView(phoneColours), [phoneColours])
+  const [colourPref, setColourPref] = useState<string | null>(null)
+  /** Other models' extra colours: variant ID -> pictures by colour; 0 while loading, 1 after a failure. */
+  const [lazyColours, setLazyColours] = useState<Record<string, Record<string, string[]> | 0 | 1>>({})
+  /** Variants already asked for, so a timer from an earlier render never asks twice. */
+  const colourAsked = useRef<Record<string, 1>>({})
+  /** Set by the shopper's own model or case switch; the page's pair never loads. */
+  const switched = useRef(false)
+
+  /**
+   * Loads one variant's extra colours from the same-origin route, once. Only
+   * for a variant with colours that the page does not carry. A failure leaves
+   * the main colour showing; only a tap on a dot (`retry`) asks again, so a
+   * dead connection never loops.
+   */
+  function loadColours(id: string, retry?: boolean) {
+    const asked = colourAsked.current
+    if ((asked[id] && !(retry && lazyColours[id] === 1)) || colourView.hasInline(id) || !colourView.optionsFor(id).length) return
+    asked[id] = 1
+    const done = (value: Record<string, string[]> | 0 | 1) => setLazyColours((all) => ({ ...all, [id]: value }))
+    done(0)
+    fetch(`/api/phone-colours/${id}/`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => done(expandGalleries(data)))
+      .catch(() => done(1))
+  }
+
   // Snap to a valid pair when a change makes the current one impossible.
   function selectCaseType(ct: string) {
+    switched.current = true
     setCaseType(ct)
     const devs = matrix.devicesByCaseType[ct] ?? []
     if (!devs.includes(device) && devs[0]) setDevice(devs[0])
   }
   function selectDevice(d: string) {
+    switched.current = true
     setDevice(d)
     const cts = matrix.caseTypesByDevice[d] ?? []
     if (!cts.includes(caseType) && cts[0]) setCaseType(cts[0])
@@ -218,9 +267,19 @@ export default function ProductView({
   useEffect(() => {
     const devicePage = !!deviceName && deviceName === initialDevice
     const pick = pickFromQuery(window.location.search, matrix, caseTypeRecords, { caseType, device }, devicePage)
+    const at = pick || { caseType, device }
     if (!viewed.current) {
-      const id = trackView(pick?.caseType ?? caseType, pick?.device ?? device, true)
+      const id = trackView(at.caseType, at.device, true)
       if (id) viewed.current = { id, n: 0 }
+    }
+    // ?color=<slug> (a card on a shop colour page) is a preference: shown when
+    // the settled pair has that colour, silently ignored otherwise. It never
+    // changes the pair and the address is never rewritten.
+    const colour = colourFromQuery(window.location.search)
+    if (colour) {
+      setColourPref(colour)
+      const id = matrix.variantIdByPair[pairKey(at.caseType, at.device)]
+      if (colourView.optionsFor(id).some((option, i) => i > 0 && option[0] === colour)) loadColours(id)
     }
     if (!pick) return
     setCaseType(pick.caseType)
@@ -244,9 +303,45 @@ export default function ProductView({
     return () => clearTimeout(timer)
   }, [selectedId])
 
+  // Once a shopper's model or case switch settles, load that pair's extra
+  // colours when the page does not carry them. Nothing loads on page load.
+  useEffect(() => {
+    if (!switched.current || !colourView.optionsFor(selectedId).length) return
+    const timer = setTimeout(() => loadColours(selectedId), 250)
+    return () => clearTimeout(timer)
+  }, [selectedId])
+
+  const colourOptions = colourView.optionsFor(selectedId)
+  const mainColour = colourOptions.length ? colourOptions[0][0] : null
+  const wantedColour = settleColour(colourPref, colourOptions.map((option) => option[0]))
+  const lazy = lazyColours[selectedId]
+  const colourUrls = wantedColour && wantedColour !== mainColour
+    ? colourView.inlineGallery(selectedId, wantedColour) || (lazy && lazy !== 1 ? lazy[wantedColour] : undefined)
+    : undefined
+  // From a model or case switch until its pictures arrive (the 250 ms settle,
+  // then the request: lazy is undefined, then 0), the wanted extra colour's dot
+  // is pressed and busy and the main pictures stay. A failed load (1), or a
+  // loaded payload or inline pictures without that colour, show the main
+  // colour: never busy forever. (An inline variant never loads.)
+  const colourBusy = !colourUrls && wantedColour !== mainColour && !lazy && !colourView.hasInline(selectedId)
+  const shownColour = colourUrls || colourBusy ? wantedColour : mainColour
+  const colourControl: PhoneColourControl | null = mainColour ? {
+    options: colourOptions,
+    value: shownColour,
+    busy: colourBusy ? wantedColour : null,
+    onSelect: (slug) => {
+      setColourPref(slug)
+      if (slug !== mainColour) loadColours(selectedId, true)
+    },
+    onIntent: () => loadColours(selectedId),
+  } : null
+
+  /** The variant's own (main colour) pictures. */
+  const mainImages = (selected?.metadata?.images as string[] | undefined) ?? NO_IMAGES
   const items: GalleryItem[] = useMemo(() => {
-    const imgs = (selected?.metadata?.images as string[] | undefined) ?? []
-    const urls = imgs.length ? imgs : fallbackImages
+    // A phone colour swaps the pictures only. The item IDs stay
+    // `${variant}-${n}`, so the gallery keeps its angle and never remounts.
+    const urls = colourUrls || (mainImages.length ? mainImages : fallbackImages)
     const imageItems = urls.map((url, i) => ({
       id: `${selected?.id ?? "default"}-${i}`,
       url,
@@ -272,10 +367,11 @@ export default function ProductView({
       return [...imageItems.slice(0, at), videoItem, ...imageItems.slice(at)]
     }
     return imageItems
-  }, [selected?.id, selected?.metadata, fallbackImages, galleryVideos, caseType])
+  }, [selected?.id, mainImages, fallbackImages, galleryVideos, caseType, colourUrls])
 
   // The picture / price a case-type tile shows: that case type at the current
-  // device when it fits, otherwise at the case type's own first device.
+  // device when it fits, otherwise at the case type's own first device. The
+  // current case type's tile follows the phone colour.
   function variantForCaseType(ct: string): StoreVariant | undefined {
     const devs = matrix.devicesByCaseType[ct] ?? []
     // Simple products use one sentinel device "" (falsy), so guard on the list
@@ -286,6 +382,7 @@ export default function ProductView({
     return id ? variantById.get(id) : undefined
   }
   function imageForCaseType(ct: string): string | null {
+    if (ct === caseType && colourUrls) return colourUrls[0]
     const imgs =
       (variantForCaseType(ct)?.metadata?.images as string[] | undefined) ?? []
     return imgs[0] ?? null
@@ -345,13 +442,16 @@ export default function ProductView({
             packDesigns={packDesigns ?? []}
             caseTypeRecords={caseTypeRecords ?? []}
             matchingProduct={matchingProduct ?? null}
-            thumbnail={items[0]?.url ?? null}
+            // The bag, wishlist and pack picture is the main colour's, which
+            // is what the cart line, checkout and order show: nothing flips.
+            thumbnail={mainImages[0] || (items[0] ? items[0].url : null)}
             caseType={caseType}
             device={device}
             onSelectCaseType={selectCaseType}
             onSelectDevice={selectDevice}
             imageForCaseType={imageForCaseType}
             priceForCaseType={priceForCaseType}
+            phoneColours={colourControl}
             moreDesigns={
               moreDesignItems?.length ? (
                 <MoreDesigns
@@ -359,11 +459,7 @@ export default function ProductView({
                   device={device}
                   caseType={caseType}
                   currentName={designName}
-                  currentImage={
-                    (selected?.metadata?.images as string[] | undefined)?.[0] ??
-                    fallbackImages[0] ??
-                    null
-                  }
+                  currentImage={(colourUrls || mainImages)[0] || fallbackImages[0] || null}
                 />
               ) : null
             }

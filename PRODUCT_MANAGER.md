@@ -59,6 +59,13 @@ regular ecommerce products, the existing bulk uploader, and case-type pricing.
 10. Product Manager pickers use the shared Medusa `ManagerSelect`. Do not replace
     them with unthemed native select menus: Windows can paint white menus with
     inherited dark-theme text, making their options unreadable.
+11. Phone colour pictures are display only (PHONE_COLOURS.md). The phone colour
+    never becomes an option, variant, SKU, price, stock key, line-item metadata,
+    tracking dimension or feed item. `variant.metadata.images` stays the main
+    gallery; colour galleries live only in `phone_colour_gallery` and never go
+    into `product.images`, `product.metadata` or `variant.metadata`. Save them
+    through `POST /admin/designs/:slug/colours`; keep changing main galleries
+    through manager-variants.
 
 ## Product and shop presentation
 

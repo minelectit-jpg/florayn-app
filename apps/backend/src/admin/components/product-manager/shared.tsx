@@ -9,9 +9,15 @@ export const AUDIENCE_OPTIONS: { value: AudienceTag; label: string }[] = [
   { value: "men", label: "Men only" },
 ]
 export const audienceLabel = (value?: string | null) => AUDIENCE_OPTIONS.find((o) => o.value === value)?.label ?? "Women and Men"
-export type Variant = { id: string; title: string; audience?: AudienceTag; sku: string | null; caseType: string | null; device: string | null; caseTypeSlug: string | null; deviceSlug: string | null; image: string | null; images: string[]; price: number | null; options: Record<string, string>; inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[] }
+/** A case variant's phone colour pictures (PHONE_COLOURS.md): main is the colour `images` shows, extra the other colours' galleries. */
+export type PhoneColours = { main: string | null; extra: Record<string, string[]> }
+/** A colour of a model's Mockup set: web name, shopper-facing name, dot colour. */
+export type PaletteColour = [slug: string, name: string, hex: string]
+/** device slug -> its Mockup set palette, for this design's models that have one. */
+export type DesignPalette = Record<string, { default: string; colours: PaletteColour[] }>
+export type Variant = { id: string; title: string; audience?: AudienceTag; sku: string | null; caseType: string | null; device: string | null; caseTypeSlug: string | null; deviceSlug: string | null; image: string | null; images: string[]; price: number | null; options: Record<string, string>; inventory: { id: string; shared: boolean; levels: { location_id: string; stocked: number; reserved: number }[] }[]; phoneColours?: PhoneColours }
 export type Product = { id: string; handle: string; title: string; form: string; status: string; thumbnail: string | null; description: string; images: string[]; options: { title: string; values: string[] }[]; caseTypes: string[]; devices: string[]; variants: Variant[] }
-export type Detail = { slug: string; name: string; theme: string | null; kind: "design" | "regular"; audience?: AudienceTag; collection: { id: string; title: string } | null; products: Product[] }
+export type Detail = { slug: string; name: string; theme: string | null; kind: "design" | "regular"; audience?: AudienceTag; collection: { id: string; title: string } | null; products: Product[]; palette?: DesignPalette }
 export type CatalogOption = { slug: string; name: string; family?: string; price?: number }
 // Use Medusa's themed popup: Windows native option menus can inherit light
 // text from dark mode while painting their own white background.
@@ -55,7 +61,10 @@ export function useUnsaved(dirty: boolean) {
   }, [dirty])
 }
 
-export function Gallery({ images, onChange, slug, disabled = false, onBusy }: { images: string[]; onChange: (urls: string[]) => void; slug: string; disabled?: boolean; onBusy?: (busy: boolean) => void }) {
+/** Where an upload is filed on R2; without it, uploads go to designs/<slug>/gallery/product/. */
+export type UploadFolder = { caseTypeSlug: string; deviceSlug: string; colourSlug?: string }
+
+export function Gallery({ images, onChange, slug, disabled = false, onBusy, folder, label = "Upload product images", hint }: { images: string[]; onChange: (urls: string[]) => void; slug: string; disabled?: boolean; onBusy?: (busy: boolean) => void; folder?: UploadFolder; label?: string; hint?: string }) {
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState("")
   const lock = useRef(false)
@@ -77,7 +86,7 @@ export function Gallery({ images, onChange, slug, disabled = false, onBusy }: { 
           reader.onerror = () => reject(new Error("Could not read this image."))
           reader.readAsDataURL(file)
         })
-        const result = await post("/admin/designs/upload", { designSlug: slug || "new-product", caseTypeSlug: "gallery", deviceSlug: "product", index: next.length + 1, filename: file.name, mimeType: file.type, contentBase64: base64 })
+        const result = await post("/admin/designs/upload", { designSlug: slug || "new-product", caseTypeSlug: folder?.caseTypeSlug || "gallery", deviceSlug: folder?.deviceSlug || "product", ...(folder?.colourSlug ? { colourSlug: folder.colourSlug } : {}), index: next.length + 1, filename: file.name, mimeType: file.type, contentBase64: base64 })
         next.push(result.url)
         onChange([...next])
       }
@@ -92,8 +101,8 @@ export function Gallery({ images, onChange, slug, disabled = false, onBusy }: { 
         <Button size="small" variant="transparent" aria-label={`Remove image ${i + 1}`} disabled={disabled || busy} onClick={() => onChange(images.filter((_, n) => n !== i))}>×</Button>
       </div>
     </div>)}</div>
-    <input aria-label="Upload product images" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple disabled={disabled || busy} onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void upload(files) }} />
-    <Text size="xsmall" className="text-ui-fg-muted" role="status">{progress || "The first image is the cover. Upload replacements, then remove the old images and save."}</Text>
+    <input aria-label={label} type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" multiple disabled={disabled || busy} onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void upload(files) }} />
+    <Text size="xsmall" className="text-ui-fg-muted" role="status">{progress || hint || "The first image is the cover. Upload replacements, then remove the old images and save."}</Text>
   </div>
 }
 

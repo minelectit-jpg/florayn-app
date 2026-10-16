@@ -45,7 +45,11 @@ function catalogRoute() {
 }
 
 function cardsRoute() {
-  return load("api/store/shop-cards/route.ts", { "@medusajs/framework/utils": utils })
+  return load("api/store/shop-cards/route.ts", {
+    "@medusajs/framework/utils": utils,
+    "../../../modules/catalog": { CATALOG_MODULE: "catalog" },
+    "../../../lib/mockup-settings": load("lib/mockup-settings.ts", { "@medusajs/framework/utils": utils }),
+  })
 }
 
 async function requestCards(products, query) {

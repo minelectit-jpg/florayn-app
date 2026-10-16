@@ -1,8 +1,9 @@
 import { Button, Heading, Input, Label, Text, toast } from "@medusajs/ui"
 import { useEffect, useRef, useState } from "react"
-import { AUDIENCE_OPTIONS, Gallery, ManagerSelect, post, useUnsaved, type AudienceTag, type Product, type Variant } from "./shared"
+import PhoneColoursEditor from "./phone-colours-editor"
+import { AUDIENCE_OPTIONS, Gallery, ManagerSelect, post, useUnsaved, type AudienceTag, type DesignPalette, type Product, type Variant } from "./shared"
 
-export default function VariantEditor({ product, variants, slug, onSaved, onClose, onDirtyChange, onBusyChange }: { product: Product; variants: Variant[]; slug: string; onSaved: () => void; onClose: () => void; onDirtyChange: (value: boolean) => void; onBusyChange: (value: boolean) => void }) {
+export default function VariantEditor({ product, variants, slug, palette, onSaved, onClose, onDirtyChange, onBusyChange }: { product: Product; variants: Variant[]; slug: string; palette?: DesignPalette; onSaved: () => void; onClose: () => void; onDirtyChange: (value: boolean) => void; onBusyChange: (value: boolean) => void }) {
   const single = variants.length === 1 ? variants[0] : null
   const caseProduct = product.options.some((o) => o.title === "Case Type")
   const [sku, setSku] = useState(single?.sku ?? "")
@@ -13,15 +14,18 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
   const [audience, setAudience] = useState<AudienceTag | "">(single ? single.audience ?? "both" : "")
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // Phone colour pictures (one case variant) save on their own; they only hold the close and the other saves.
+  const [coloursDirty, setColoursDirty] = useState(false)
+  const [coloursBusy, setColoursBusy] = useState(false)
   const lock = useRef(false)
   const dirty = sku !== (single?.sku ?? "") || price !== (single?.price == null ? "" : String(single.price)) || JSON.stringify(images) !== JSON.stringify(single?.images ?? []) || (!caseProduct && audience !== (single ? single.audience ?? "both" : ""))
   const inventories = [...new Map(variants.flatMap((v) => v.inventory.map((item) => [item.id, item] as const))).values()]
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [allStock, setAllStock] = useState("")
-  const unsaved = dirty || Object.keys(quantities).length > 0
+  const unsaved = dirty || Object.keys(quantities).length > 0 || coloursDirty
   useUnsaved(unsaved)
   useEffect(() => { onDirtyChange(unsaved); return () => onDirtyChange(false) }, [unsaved, onDirtyChange])
-  useEffect(() => { onBusyChange(busy || uploading); return () => onBusyChange(false) }, [busy, uploading, onBusyChange])
+  useEffect(() => { onBusyChange(busy || uploading || coloursBusy); return () => onBusyChange(false) }, [busy, uploading, coloursBusy, onBusyChange])
   const shared = inventories.some((i) => i.shared)
   async function saveVariants() {
     if (lock.current) return
@@ -35,7 +39,7 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
         ...(!caseProduct && audience && audience !== (v.audience ?? "both") ? { audience } : {}),
       })) })
       toast.success("Variants saved."); onSaved()
-      if (!Object.keys(quantities).length) onClose()
+      if (!Object.keys(quantities).length && !coloursDirty) onClose()
     } catch (error: any) { toast.error(error.message) } finally { lock.current = false; setBusy(false) }
   }
   async function saveStock() {
@@ -59,8 +63,8 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
     finally { lock.current = false; setBusy(false) }
   }
   return <section className="grid gap-4 rounded-xl border-2 border-ui-border-interactive p-5" aria-label="Variant editor">
-    <div className="flex items-center justify-between"><Heading level="h2">{single ? single.title : `Edit ${variants.length} variants`}</Heading><Button variant="transparent" disabled={busy || uploading} onClick={() => { if (!unsaved || window.confirm("Discard unsaved variant or stock changes?")) onClose() }}>Close</Button></div>
-    <fieldset disabled={busy || uploading} className="grid gap-4">
+    <div className="flex items-center justify-between"><Heading level="h2">{single ? single.title : `Edit ${variants.length} variants`}</Heading><Button variant="transparent" disabled={busy || uploading || coloursBusy} onClick={() => { if (!unsaved || window.confirm("Discard unsaved variant, stock or phone colour changes?")) onClose() }}>Close</Button></div>
+    <fieldset disabled={busy || uploading || coloursBusy} className="grid gap-4">
       {single && <div><Label htmlFor="variant-sku">SKU</Label><Input id="variant-sku" value={sku} onChange={(e) => setSku(e.target.value)} /></div>}
       {caseProduct ? <Text size="small">Price is shared by case type across all designs. Use the Case-type pricing tab to change it.</Text> : <div><Label htmlFor="variant-price">{single ? "Price (BDT)" : "Set price for selected variants (optional)"}</Label><Input id="variant-price" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} /></div>}
       {!caseProduct && <div><Label htmlFor="variant-audience">{single ? "Shown for" : "Shown for (selected colours)"}</Label><ManagerSelect id="variant-audience" aria-label="Shown for" value={audience} onValueChange={(value) => setAudience(value as AudienceTag | "")}>{!single && <option value="">Keep each as it is</option>}{AUDIENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</ManagerSelect><Text size="xsmall" className="text-ui-fg-muted">Men only hides this colour on the Women site, and Women only hides it on the Men site (/men).</Text></div>}
@@ -68,12 +72,13 @@ export default function VariantEditor({ product, variants, slug, onSaved, onClos
       {replaceImages && <Gallery images={images} onChange={setImages} slug={slug} onBusy={setUploading} />}
       <div><Button onClick={saveVariants} isLoading={busy}>Save variant changes</Button></div>
     </fieldset>
+    {single && caseProduct && <PhoneColoursEditor variant={single} palette={palette} slug={slug} disabled={busy || uploading} onSaved={onSaved} onDirtyChange={setColoursDirty} onBusyChange={setColoursBusy} />}
     <div className="grid gap-3 border-t pt-4"><Heading level="h3">{shared ? "Shared blank stock" : "Inventory"}</Heading>
       <Text size="small" className="text-ui-fg-subtle">{shared ? "Changing this quantity affects every design using this case type and model. Each shared blank is updated once." : "Stock belongs to the selected variants."} Reserved quantities are shown separately.</Text>
       {!inventories.length && <Text size="small">No inventory is linked to this variant.</Text>}
       {inventories.length > 1 && <div className="flex gap-2"><Input aria-label="Bulk stock quantity" type="number" min={0} step={1} value={allStock} onChange={(e) => setAllStock(e.target.value)} /><Button variant="secondary" disabled={busy || !allStock.trim()} onClick={() => setQuantities(Object.fromEntries(inventories.flatMap((i) => i.levels.map((l) => [`${i.id}|${l.location_id}`, allStock]))))}>Apply to selected stock</Button></div>}
       {inventories.map((item) => <div key={item.id} className="rounded-lg border p-3"><Text size="small">{variants.filter((v) => v.inventory.some((i) => i.id === item.id)).map((v) => v.title).join(", ")}</Text>{!item.levels.length && <Text size="small">No warehouse stock level exists yet.</Text>}{item.levels.map((level) => <div key={level.location_id} className="mt-2 flex flex-wrap items-center gap-3"><Input className="max-w-32" aria-label={`Stock ${item.id} ${level.location_id}`} type="number" min={0} step={1} disabled={busy} value={quantities[`${item.id}|${level.location_id}`] ?? String(level.stocked)} onChange={(e) => setQuantities((current) => ({ ...current, [`${item.id}|${level.location_id}`]: e.target.value }))} /><Text size="small">Reserved: {level.reserved} · Available: {Math.max(0, level.stocked - level.reserved)}</Text></div>)}</div>)}
-      <div><Button variant="secondary" isLoading={busy} disabled={!Object.keys(quantities).length || uploading} onClick={saveStock}>{shared ? "Save shared stock" : "Save stock"}</Button></div>
+      <div><Button variant="secondary" isLoading={busy} disabled={!Object.keys(quantities).length || uploading || coloursBusy} onClick={saveStock}>{shared ? "Save shared stock" : "Save stock"}</Button></div>
     </div>
   </section>
 }

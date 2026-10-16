@@ -421,6 +421,11 @@ function routeScope({ fail = false, env = {} } = {}) {
       listProductCollections: async () => [{ id: "pcol_wild", handle: "wild", title: "Wild" }],
     },
     catalog: {
+      // Phone colour rows exist, but no colour data enters the index (PHONE_COLOURS.md).
+      listPhoneColourGalleries: async () => {
+        calls.colourRows = true
+        return [{ variant_id: "v1", device_slug: "iphone-17-pro-max", case_type_slug: "signature", colour_slug: "silver", is_main: false, images: ["https://img.test/silver.webp"] }]
+      },
       listDevices: async (filter, options) => {
         calls.devices = plain({ filter, options })
         return plain([
@@ -487,6 +492,8 @@ test("GET /store/search-index reads product-level rows only and serves a short-c
   assert.deepEqual(index.p, [["leopard", "Leopard", "leopard", "phone", 1, [0], 0, "leopard/signature/iphone-17-pro-max/1.webp", 1400, [1], 0, []]])
   assert.deepEqual(index.cat, [["StickPad", "/product/stickpad-pro/", "site/menu/stickpad.webp", 3]], "raw menu rows: image_url, and only the links kind")
   assert.equal(index.ph, "Find a case", "Admin > Search is read from the store")
+  assert.equal(calls.colourRows, undefined, "phone colour rows are never read")
+  assert.ok(!JSON.stringify(index).includes("silver"), "no colour data in the index")
 })
 
 test("the image base comes from IMAGE_BASE_URL, then R2_PUBLIC_URL", async () => {

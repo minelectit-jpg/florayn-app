@@ -123,7 +123,7 @@ test("native storefront data requests carry their invalidation domain tags", asy
   }
   const medusa = { MEDUSA_BACKEND_URL: "http://unused.invalid", MEDUSA_PUBLISHABLE_KEY: "test-public-key" }
   const content = load("lib/content.ts", { "./audience": audience, "./product-recommendations": load("lib/product-recommendations.ts"), "./storefront-presentation": load("lib/storefront-presentation.ts", {}, { URL }) }, globals)
-  const catalog = load("lib/catalog.ts", { "./medusa": medusa }, globals)
+  const catalog = load("lib/catalog.ts", { "./medusa": medusa, "./phone-colours": load("lib/phone-colours.ts") }, globals)
   const bundles = load("lib/bundles.ts", {}, globals)
   const seo = load("lib/seo-copy.ts", {}, globals)
   await content.getSiteContent()

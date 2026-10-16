@@ -135,6 +135,10 @@ Read `MOCKUP_STUDIO.md` before changing Mockup Studio, its compositor or the
 mockup layer encoding. It only makes images and calls the Product Manager
 endpoints; run the Blender-finals comparison after compositor changes.
 
+Read `PHONE_COLOURS.md` before changing phone colour pictures, the
+`phone_colour_gallery` table, the Mockup set palette or the colour selectors.
+The phone colour only changes the pictures, never what is sold.
+
 Read `TRACKING.md` before changing ad tracking, `/api/t/*`, the tracking
 module, the Live dashboard, the Privacy page or the catalog feed. Nothing
 reaches an ad platform without the Cloudflare edge header, and no contact data

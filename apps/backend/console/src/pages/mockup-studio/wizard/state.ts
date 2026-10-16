@@ -16,18 +16,27 @@ export const NEW_COLLECTION = "__new__"
  * all); reduced: scale < 1; preview: long side <= 640.
  */
 export type DesignFile = { file: File; url: string; w: number; h: number; across: number; scale: number; reduced: boolean; version: number; preview: ImageBitmap }
-export type Pick = { on: boolean; colour: string }
+/**
+ * One model's choice. colours: the ticked phone colours (never empty while on; [] only for a model never chosen);
+ * stage: the colour its card and the stage show, ticked or not. Read it through pickOf, which checks it against the set.
+ */
+export type Pick = { on: boolean; colours: string[]; stage: string }
+/** What a newly chosen model starts with: its main colour only, or every colour (the default). */
+export type ColourMode = "main" | "all"
 export type Details = {
   name: string; nameTouched: boolean; slug: string; slugTouched: boolean; slugOpen: boolean
   /** "" (none) | an existing collection's title | NEW_COLLECTION */
   collection: string; newCollection: string
   stock: string; description: string; status: "draft" | "published"
+  /** new: create a product; update: replace the pictures of the existing design at slug (MOCKUP_STUDIO.md) */
+  mode: "new" | "update"
 }
 export type State = {
   step: StepId; reached: number; dir: 1 | -1; fromReview: boolean; showErrors: boolean
   design: DesignFile | null; reading: string | null; designError: string
   /** device slug -> choice; picks of sets that are no longer enabled are ignored */
   picks: Record<string, Pick>
+  colourMode: ColourMode
   /** what the stage shows */
   focus: { device: string | null; shot: number }
   /** past: undo stack (30); anchor: the placement when the current gesture began */
@@ -42,14 +51,14 @@ export type SlugState = "idle" | "checking" | "free" | "taken" | "invalid" | "un
 
 const EMPTY_DETAILS: Details = {
   name: "", nameTouched: false, slug: "", slugTouched: false, slugOpen: false,
-  collection: "", newCollection: "", stock: "0", description: "", status: "draft",
+  collection: "", newCollection: "", stock: "0", description: "", status: "draft", mode: "new",
 }
 
 export function initialState(): State {
   return {
     step: "design", reached: 0, dir: 1, fromReview: false, showErrors: false,
     design: null, reading: null, designError: "",
-    picks: {}, focus: { device: null, shot: 0 },
+    picks: {}, colourMode: "all", focus: { device: null, shot: 0 },
     placement: CENTERED, past: [], anchor: null,
     details: { ...EMPTY_DETAILS }, background: "white",
   }
@@ -58,14 +67,20 @@ export function initialState(): State {
 export type Action =
   | { type: "go"; step: StepId; fromReview?: boolean }
   | { type: "design/reading"; name: string }
-  | { type: "design/ready"; design: DesignFile; firstDevice?: { device: string; colour: string } | null }
+  /** firstDevice: chosen when no model is yet */
+  | { type: "design/ready"; design: DesignFile; firstDevice?: MockupSet | null }
   | { type: "design/error"; message: string }
   /** the same design sent to the workers again: new picture keys, so nothing made from another image is reused */
   | { type: "design/version"; version: number }
   | { type: "design/remove" }
-  | { type: "pick/toggle"; device: string; colour: string }
-  | { type: "pick/all"; on: boolean; devices: { device: string; colour: string }[] }
-  | { type: "pick/colour"; device: string; colour: string }
+  | { type: "pick/toggle"; set: MockupSet }
+  | { type: "pick/all"; on: boolean; sets: MockupSet[] }
+  /** ticks or unticks one colour (the last ticked one stays) and shows it; chooses the model if it was not */
+  | { type: "pick/colour"; set: MockupSet; colour: string }
+  /** on: every colour of each set; off: its main colour only. Also what newly chosen models start with. */
+  | { type: "pick/all-colours"; on: boolean; sets: MockupSet[] }
+  /** shows a colour on the stage and the card without ticking it */
+  | { type: "pick/stage"; set: MockupSet; colour: string }
   | { type: "focus"; device?: string; shot?: number }
   | { type: "place/begin" }
   | { type: "place/set"; p: Placement }
@@ -108,7 +123,7 @@ export function reducer(s: State, a: Action): State {
       const d = { ...s.details }
       if (!d.nameTouched) d.name = titleFromFile(a.design.file.name)
       if (!d.slugTouched) d.slug = autoSlug(d.name)
-      const picks = a.firstDevice ? { ...s.picks, [a.firstDevice.device]: { on: true, colour: a.firstDevice.colour } } : s.picks
+      const picks = a.firstDevice ? { ...s.picks, [a.firstDevice.device]: chooseOn(s, a.firstDevice) } : s.picks
       return { ...s, design: a.design, reading: null, designError: "", placement: CENTERED, past: [], anchor: null, details: d, picks }
     }
     case "design/error":
@@ -118,16 +133,45 @@ export function reducer(s: State, a: Action): State {
     case "design/remove":
       return { ...s, design: null, reading: null, reached: 0, placement: CENTERED, past: [], anchor: null }
     case "pick/toggle": {
-      const cur = s.picks[a.device] ?? { on: false, colour: a.colour }
-      return { ...s, picks: { ...s.picks, [a.device]: { ...cur, on: !cur.on } } }
+      const cur = pickOf(s, a.set)
+      return { ...s, picks: { ...s.picks, [a.set.device]: cur.on ? { ...cur, on: false } : chooseOn(s, a.set) } }
     }
     case "pick/all": {
       const picks = { ...s.picks }
-      for (const d of a.devices) picks[d.device] = { colour: picks[d.device]?.colour ?? d.colour, on: a.on }
+      for (const set of a.sets) {
+        if (a.on) picks[set.device] = pickOf(s, set).on ? pickOf(s, set) : chooseOn(s, set)
+        else if (picks[set.device]) picks[set.device] = { ...pickOf(s, set), on: false }
+      }
       return { ...s, picks }
     }
-    case "pick/colour":
-      return { ...s, picks: { ...s.picks, [a.device]: { on: true, colour: a.colour } }, focus: { ...s.focus, device: a.device } }
+    case "pick/colour": {
+      const { set, colour: c } = a
+      if (!set.colours.includes(c)) return s
+      const cur = pickOf(s, set)
+      let colours: string[]
+      let stage = c
+      if (!cur.on) colours = set.colours.filter((x) => x === c || cur.colours.includes(x))
+      else if (cur.colours.includes(c)) {
+        if (cur.colours.length === 1) return s // the last ticked colour stays (its chip is disabled)
+        colours = cur.colours.filter((x) => x !== c)
+        stage = cur.stage === c ? mainColourOf(set, { colours }) : cur.stage
+      } else colours = set.colours.filter((x) => x === c || cur.colours.includes(x))
+      return { ...s, picks: { ...s.picks, [set.device]: { on: true, colours, stage } }, focus: { ...s.focus, device: set.device } }
+    }
+    case "pick/all-colours": {
+      const picks = { ...s.picks }
+      for (const set of a.sets) {
+        const cur = pickOf(s, set)
+        const colours = a.on ? [...set.colours] : [mainColourOf(set, cur)]
+        picks[set.device] = { on: cur.on, colours, stage: colours.includes(cur.stage) ? cur.stage : mainColourOf(set, { colours }) }
+      }
+      return { ...s, picks, colourMode: a.on ? "all" : "main" }
+    }
+    case "pick/stage": {
+      if (!a.set.colours.includes(a.colour)) return s
+      const p = s.picks[a.set.device]
+      return { ...s, picks: { ...s.picks, [a.set.device]: p ? { ...p, stage: a.colour } : { on: false, colours: [], stage: a.colour } } }
+    }
     case "focus":
       return { ...s, focus: { device: a.device ?? s.focus.device, shot: a.shot ?? s.focus.shot } }
     case "place/begin":
@@ -149,6 +193,8 @@ export function reducer(s: State, a: Action): State {
     case "details": {
       const d = { ...s.details, ...a.patch }
       if (a.patch.name !== undefined && !d.slugTouched) d.slug = autoSlug(d.name)
+      // another URL is another design: back to making a new product
+      if (s.details.mode === "update" && a.patch.mode === undefined && d.slug !== s.details.slug) d.mode = "new"
       return { ...s, details: d }
     }
     case "errors/show":
@@ -202,6 +248,12 @@ export const slugValid = (slug: string) => SLUG.test(slug)
 
 export function fieldErrors(s: State, slugState: SlugState): { name?: string; slug?: string; newCollection?: string; stock?: string } {
   const d = s.details, out: { name?: string; slug?: string; newCollection?: string; stock?: string } = {}
+  if (d.mode === "update") {
+    // title, collection, stock and description are the design's own: only its URL is checked
+    if (!SLUG.test(d.slug)) out.slug = "Use lowercase letters, numbers and dashes in the URL."
+    else if (slugState === "free") out.slug = "No design uses this URL. Make a new product instead."
+    return out
+  }
   if (!d.name.trim()) out.name = "Enter the product title."
   if (!SLUG.test(d.slug)) out.slug = "Use lowercase letters, numbers and dashes in the URL."
   else if (d.slug.length > SLUG_MAX) out.slug = "Keep the URL to 150 characters or fewer."
@@ -212,16 +264,25 @@ export function fieldErrors(s: State, slugState: SlugState): { name?: string; sl
   return out
 }
 
-export function stepErrors(s: State, ctx: { chosen: MockupSet[]; metas: Record<string, MetaState>; colourOf: (set: MockupSet) => string; slugState: SlugState; deviceName: (slug: string) => string }): Partial<Record<StepId, string>> {
+/**
+ * existingError: in update mode, why the existing design cannot be used yet (loading, failed, not a Studio design);
+ * it blocks Details.
+ */
+export function stepErrors(s: State, ctx: { chosen: MockupSet[]; metas: Record<string, MetaState>; slugState: SlugState; deviceName: (slug: string) => string; existingError?: string }): Partial<Record<StepId, string>> {
   const out: Partial<Record<StepId, string>> = {}
   if (!s.design) out.design = "Add a design to continue."
   if (!ctx.chosen.length) out.models = "Choose at least one model to continue."
   else {
-    const failed = ctx.chosen.find((set) => ctx.metas[`${set.device}|${ctx.colourOf(set)}`]?.status === "error")
-    if (failed) out.models = `${ctx.deviceName(failed.device)}'s mockups could not be loaded. Untick it or press Retry.`
+    outer: for (const set of ctx.chosen) {
+      for (const c of pickOf(s, set).colours) {
+        if (ctx.metas[`${set.device}|${c}`]?.status !== "error") continue
+        out.models = `${ctx.deviceName(set.device)} · ${c}: mockups couldn't be loaded. Untick it or press Retry.`
+        break outer
+      }
+    }
   }
   const f = fieldErrors(s, ctx.slugState)
-  const first = f.name ?? f.slug ?? f.newCollection ?? f.stock
+  const first = f.name ?? f.slug ?? f.newCollection ?? f.stock ?? (s.details.mode === "update" ? ctx.existingError : undefined)
   if (first) out.details = first
   return out
 }
@@ -240,12 +301,80 @@ export const SWATCH: Record<string, string> = {
   "green": "#c7d6c0", "yellow": "#f3e5a7", "purple": "#d9cfe6", "red": "#c41e3a", "lavender": "#cfc4e6", "sage": "#b9c3a6", "mist blue": "#b7c7d8",
   "teal": "#8fc4bf", "ultramarine": "#6f7fe0", "gold": "#f4e2c7", "deep purple": "#594f63", "starlight": "#f9f3ee",
 }
+/** The SWATCH suggestion for a colour name: own keys only ("Constructor" is a valid colour name). */
+const suggestedHex = (name: string): string | undefined => {
+  const key = name.trim().toLowerCase()
+  return Object.prototype.hasOwnProperty.call(SWATCH, key) ? SWATCH[key] : undefined
+}
 export function swatchColour(name: string) {
-  const known = SWATCH[name.trim().toLowerCase()]
+  const known = suggestedHex(name)
   if (known) return known
   let h = 0
   for (const c of name.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0
   return `hsl(${h % 360}, 14%, 72%)`
+}
+/** The shop's dot for a colour without a saved hex or a SWATCH suggestion (backend NEUTRAL_SWATCH). */
+export const NEUTRAL_SWATCH = "#c9c9cf"
+export const HEX = /^#[0-9a-f]{6}$/i
+const savedHex = (set: MockupSet, name: string) => {
+  const v = set.swatches && Object.prototype.hasOwnProperty.call(set.swatches, name) ? set.swatches[name] : undefined
+  return typeof v === "string" && HEX.test(v) ? v.toLowerCase() : null
+}
+/** The hex the shop shows (backend swatchHex): the saved one, else the SWATCH suggestion, else neutral grey. */
+export function swatchHex(set: MockupSet, name: string) {
+  return savedHex(set, name) ?? suggestedHex(name) ?? NEUTRAL_SWATCH
+}
+/** The dot the studio draws: the saved hex, else swatchColour. */
+export const dotColour = (set: MockupSet, name: string) => savedHex(set, name) ?? swatchColour(name)
+
+/** The colours a newly chosen model starts with. */
+export const modeColours = (set: MockupSet, mode: ColourMode) => (mode === "all" ? [...set.colours] : [set.default_colour])
+/** The main colour (the one the shop grid, bag and ads show): the model's default when ticked, else the first ticked. */
+export function mainColourOf(set: MockupSet, pick: { colours: string[] }) {
+  return pick.colours.includes(set.default_colour) ? set.default_colour : set.colours.find((c) => pick.colours.includes(c)) ?? set.default_colour
+}
+/**
+ * A model's pick checked against the live set: ticked colours in palette order (never empty: a model never chosen gets
+ * the colour mode's, one whose colours are all gone gets the default) and a stage colour of the set.
+ */
+export function pickOf(s: { picks: Record<string, Pick>; colourMode: ColourMode }, set: MockupSet): Pick {
+  const p = s.picks[set.device]
+  const ticked = p ? set.colours.filter((c) => p.colours.includes(c)) : []
+  const colours = ticked.length ? ticked : p?.colours.length ? [set.default_colour] : modeColours(set, s.colourMode)
+  return { on: p?.on ?? false, colours, stage: p && set.colours.includes(p.stage) ? p.stage : mainColourOf(set, { colours }) }
+}
+/** A model being chosen: its earlier colours if it had some, else the colour mode's, showing the default colour. */
+function chooseOn(s: State, set: MockupSet): Pick {
+  if (s.picks[set.device]?.colours.length) return { ...pickOf(s, set), on: true }
+  return { on: true, colours: modeColours(set, s.colourMode), stage: set.default_colour }
+}
+/** Publishing order: the main colour first, then palette order. */
+export function colourOrder(set: MockupSet, pick: { colours: string[] }) {
+  const main = mainColourOf(set, pick)
+  return [main, ...set.colours.filter((c) => c !== main && pick.colours.includes(c))]
+}
+/** Every meta shot: the gallery ones in gallery order, then the rest. */
+export function anglesOf(meta: { shots: { n: number }[] } | null, gallery: number[]) {
+  if (!meta) return []
+  const have = new Set(meta.shots.map((x) => x.n))
+  return [...gallery.filter((n) => have.has(n)), ...meta.shots.map((x) => x.n).filter((n) => !gallery.includes(n))]
+}
+/** The gallery shots every chosen colour of a model has, in gallery order: every colour uses the same shots. */
+export function sharedShots(gallery: number[], metas: { shots: { n: number }[] }[]) {
+  return gallery.filter((n) => metas.every((m) => m.shots.some((x) => x.n === n)))
+}
+/** "Black (main) · Silver · Glacier" */
+export const colourList = (colours: string[]) => colours.map((c, i) => (i ? c : `${c} (main)`)).join(" · ")
+
+/** About 47 KB per 1200 px shop picture at quality 92 (MOCKUP_STUDIO.md), scaled by area for other sizes. */
+export const PICTURE_BYTES = 47_000
+/** About one second per shop picture made and uploaded (desktop, Sharper on; the pipeline overlaps the two). */
+export const PICTURE_MS = 1000
+/** "39 models · 117 colour sets · 1,521 pictures · about 72 MB · about 25 min" */
+export function publishEstimate(o: { models: number; colourSets: number; pictures: number; imageSize: number }) {
+  const mb = Math.max(1, Math.round((o.pictures * PICTURE_BYTES * (o.imageSize / 1200) ** 2) / 1e6))
+  const min = Math.round((o.pictures * PICTURE_MS) / 60_000)
+  return `${plural(o.models, "model")} · ${plural(o.colourSets, "colour set")} · ${plural(o.pictures, "picture")} · about ${mb.toLocaleString("en-US")} MB · ${min < 1 ? "under a minute" : `about ${min.toLocaleString("en-US")} min`}`
 }
 
 // --- file names -----------------------------------------------------------------------------------
@@ -257,8 +386,11 @@ export function baseName(d: { slug: string; name: string }, fileName?: string) {
 export const entryName = (n: number, shotName: string, size: number) => `${tag(n)}-${angleSlug(shotName)}_${size}.png`
 /** "muse-honey-glow_iphone-18-pro-max_glacier_05-camera-close-up_2400.png" */
 export const pngName = (base: string, device: string, colour: string, n: number, shotName: string, size: number) => `${base}_${device}_${slugify(colour)}_${entryName(n, shotName, size)}`
-export const modelZipName = (base: string, device: string, colour: string) => `${base}_${device}_${slugify(colour)}_mockups.zip`
+/** colour null: a model ZIP with several colours, one <device>_<colour>/ folder each */
+export const modelZipName = (base: string, device: string, colour: string | null) => `${base}_${device}${colour === null ? "" : `_${slugify(colour)}`}_mockups.zip`
 export const allZipName = (base: string) => `${base}_mockups.zip`
+/** "iphone-18-pro-max_glacier/": a colour's folder inside a ZIP */
+export const zipFolder = (device: string, colour: string) => `${device}_${slugify(colour)}/`
 
 /** "About 3 min left" / "Less than a minute left" */
 export function etaText(msEach: number, left: number) {
@@ -266,4 +398,4 @@ export function etaText(msEach: number, left: number) {
   return ms < 60_000 ? "Less than a minute left" : `About ${Math.round(ms / 60_000)} min left`
 }
 
-export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+export const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`

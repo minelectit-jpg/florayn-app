@@ -18,11 +18,13 @@ import {
   getCaseTypes,
   getDeviceCatalog,
   getDeviceFamilyMap,
+  getProductPhoneColours,
   getShopCatalog,
+  type DeviceRecord,
 } from "@/lib/catalog"
 import { getGalleryVideos, getProductSections } from "@/lib/content"
 import { pickDefaultPhone } from "@/lib/default-device"
-import { resolveProductPage } from "@/lib/device-page"
+import { resolveProductPage, type ResolvedProductPage } from "@/lib/device-page"
 import {
   applyCaseTypePrices,
   listProducts,
@@ -31,7 +33,7 @@ import {
 } from "@/lib/medusa"
 import { fitCopy, getSeoConfig, resolveSeo } from "@/lib/seo-copy"
 import { designHandle, productForm, recommendationItem, recommendationVariants } from "@/lib/product-recommendations"
-import { buildVariantMatrix } from "@/lib/variant-matrix"
+import { buildVariantMatrix, pairKey, type VariantMatrix } from "@/lib/variant-matrix"
 import { buildSimpleMatrix, productViewDesigns, productViewMatrix, productViewVariants } from "@/lib/product-view-data"
 import { fitsAudience, forAudience, readAudienceTag, withAudience, type Audience } from "@/lib/audience"
 
@@ -91,6 +93,23 @@ function hydratePoolVariantsFromCard(p: StoreProduct): void {
     }
   })
   ;(p as unknown as { variants: unknown }).variants = variants
+}
+
+const isCaseMatrix = (matrix: VariantMatrix) => matrix.caseTypes.length > 0 && matrix.devices.length > 0
+
+/**
+ * The pair a case product's page opens on. The base page opens on the newest
+ * phone (lib/default-device.ts); a device page on its own device. Its first
+ * case type; a ?case=<slug> from a filtered shop card is honoured on the
+ * client (ProductView reads it after hydration), which keeps this page
+ * static/cacheable.
+ */
+function initialPair(resolved: ResolvedProductPage & { matrix: VariantMatrix }, deviceCatalog: DeviceRecord[]) {
+  const { matrix, device } = resolved
+  const defaultDevice = pickDefaultPhone(matrix.devices, matrix.caseTypesByDevice, matrix.caseTypes.length, deviceCatalog)!
+  const initialDevice = device && matrix.devices.includes(device.name) ? device.name : defaultDevice
+  const initialCaseType = (matrix.caseTypesByDevice[initialDevice] ?? matrix.caseTypes)[0] ?? matrix.caseTypes[0]
+  return { initialDevice, initialCaseType }
 }
 
 export async function productMetadata({ params }: ProductRouteParams): Promise<Metadata> {
@@ -183,6 +202,19 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
     return handles
       .map((handle) => byHandle.get(handle))
       .filter((p): p is StoreProduct => Boolean(p))
+  })
+  // Phone colour pictures (PHONE_COLOURS.md), next to the related reads: one
+  // small request for a case product, with the first model's pictures inline.
+  // Simple products and legacy pictures get nothing (null), so the page is
+  // exactly as before. The product data and its cache entry are unchanged.
+  const coloursPromise = Promise.all([productPromise, getDeviceCatalog()]).then(([resolved, catalog]) => {
+    if (!resolved || !isCaseMatrix(resolved.matrix)) return null
+    const { initialDevice, initialCaseType } = initialPair(resolved, catalog)
+    const variantId = resolved.matrix.variantIdByPair[pairKey(initialCaseType, initialDevice)]
+    const variant = resolved.product.variants?.find((v) => v.id === variantId)
+    const deviceSlug = variant?.metadata?.device_slug
+    const slug = typeof deviceSlug === "string" && deviceSlug ? deviceSlug : catalog.find((d) => d.name === initialDevice)?.slug
+    return slug ? getProductPhoneColours(resolved.product.id, slug) : null
   })
   const [
     resolved,
@@ -310,25 +342,15 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
     )
   }
 
-  const [[poolResult, galleryVideos], pickedProducts, matchingProducts] = await Promise.all([
+  const [[poolResult, galleryVideos], pickedProducts, matchingProducts, phoneColours] = await Promise.all([
     relatedPromise,
     picksPromise,
     matchingPromise,
+    coloursPromise,
   ])
 
-  // The base page opens on the newest phone (lib/default-device.ts); a device
-  // page opens on its own device instead.
-  const defaultDevice = pickDefaultPhone(matrix.devices, matrix.caseTypesByDevice, matrix.caseTypes.length, deviceCatalog)!
-
-  const initialDevice =
-    device && matrix.devices.includes(device.name) ? device.name : defaultDevice
-
-  // The device's first construction. A ?case=<slug> from a filtered shop card
-  // is honoured on the client (ProductView reads it after hydration), which
-  // keeps this page static/cacheable.
-  const initialCaseType =
-    (matrix.caseTypesByDevice[initialDevice] ?? matrix.caseTypes)[0] ??
-    matrix.caseTypes[0]
+  // The newest phone on the base page, the page's own device on a device page.
+  const { initialDevice, initialCaseType } = initialPair(resolved, deviceCatalog)
 
   // Fit sentence, generated from the device's own attributes (device pages only).
   let deviceCopy: string | null = null
@@ -441,6 +463,8 @@ export default async function ProductPage({ params, audience }: ProductRoutePara
         featureBlocks={featureBlocks}
         productForm={(product.metadata?.form as string) ?? null}
         galleryVideos={galleryVideos}
+        // Left out entirely without colours: no "$undefined" in the RSC payload.
+        {...(phoneColours ? { phoneColours } : {})}
       />
     </article>
   )

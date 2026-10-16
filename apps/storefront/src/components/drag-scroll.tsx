@@ -22,11 +22,14 @@ export default function DragScroll({
   className,
   children,
   indicator = false,
+  role,
   "aria-label": ariaLabel,
 }: {
   className?: string
   children: ReactNode
   indicator?: boolean
+  /** e.g. "radiogroup", with role="none" on each <li> (the phone colour dots). */
+  role?: string
   "aria-label"?: string
 }) {
   const ref = useRef<HTMLUListElement>(null)
@@ -161,6 +164,7 @@ export default function DragScroll({
   const list = (
     <ul
       ref={ref}
+      role={role}
       aria-label={ariaLabel}
       className={className}
       draggable={false}

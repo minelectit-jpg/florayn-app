@@ -8,6 +8,8 @@ export function storefrontWriteTags(path: string): string[] {
   if (/^\/admin\/devices(?:\/|$)/.test(route)) return ["catalog", "products"]
   if (/^\/admin\/case-types(?:\/|$)/.test(route)) return ["catalog", "products"]
   if (route === "/admin/designs/upload") return []
+  // The phone colour palette (names, dots, default colour) lives in the Mockup sets.
+  if (/^\/admin\/mockups(?:\/|$)/.test(route)) return ["catalog"]
   if (/^\/admin\/(designs|products|product-variants|product-collections|product-categories|price-lists|price-preferences|prices|media|wire-images|rebuild-cards)(?:\/|$)/.test(route)) {
     return ["products", "catalog"]
   }

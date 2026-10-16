@@ -217,6 +217,7 @@ function productHarness(search = "") {
     "@/lib/variant-matrix": variantMatrix,
     "@/lib/product-view-data": { expandProductViewDesigns: () => ({}) },
     "@/lib/product-forms": { featuresGroup: () => undefined },
+    "@/lib/phone-colours": loadSource("lib/phone-colours.ts"),
     "@/lib/tracking/queue": { track: (name, data, id) => events.push({ name, data: plain(data), id }) },
   }, { window, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout })
   const open = (props = productFixture(), options) => mount(ProductView, props, options)

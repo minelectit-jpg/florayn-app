@@ -152,3 +152,36 @@ test("write domains match base and nested endpoints without treating raw uploads
   assert.deepEqual(tags("/admin/case-types/case1"), ["catalog", "products"])
   assert.deepEqual(tags("/admin/inventory-items/item1/location-levels"), ["stock", "products"])
 })
+
+test("phone colours: Mockup sets refresh the catalog, /colours refreshes products and catalog, uploads stay silent", () => {
+  const { storefrontWriteTags } = load("storefront-write-domains.ts")
+  const tags = (route) => plain(storefrontWriteTags(route))
+  assert.deepEqual(tags("/admin/mockups"), ["catalog"])
+  assert.deepEqual(tags("/admin/mockups/"), ["catalog"])
+  assert.deepEqual(tags("/admin/mockups?x=1"), ["catalog"])
+  assert.deepEqual(tags("/admin/mockups-other"), [])
+  assert.deepEqual(tags("/admin/designs/muse-honey-glow/colours"), ["products", "catalog"])
+  assert.deepEqual(tags("/admin/designs/upload"), [])
+  // Without the middleware prefix the rule above would never run.
+  const filename = path.join(__dirname, "../src/api/middlewares.ts")
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2021, module: ts.ModuleKind.CommonJS } }).outputText
+  const exports = {}
+  const revalidate = []
+  vm.runInNewContext(code, { exports, require: (name) => ({
+    "@medusajs/framework/http": { authenticate: () => () => undefined, defineMiddlewares: (config) => config },
+    "../lib/revalidate-storefront": { queueStorefrontRevalidation: async (input) => { revalidate.push(input) } },
+    "../lib/storefront-write-domains": { storefrontWriteTags },
+  })[name] }, { filename })
+  const routes = exports.default.routes
+  for (const matcher of ["/admin/mockups", "/admin/mockups/*", "/admin/designs/*"]) {
+    const entry = routes.find((route) => route.matcher === matcher)
+    assert.ok(entry, matcher)
+    assert.deepEqual(plain(entry.method), ["POST", "PUT", "PATCH", "DELETE"])
+  }
+  // A successful save queues the catalog refresh after the response finishes.
+  const entry = routes.find((route) => route.matcher === "/admin/mockups")
+  let finish
+  entry.middlewares[0]({ originalUrl: "/admin/mockups" }, { statusCode: 200, on: (_event, fn) => { finish = fn } }, () => {})
+  finish()
+  assert.deepEqual(plain(revalidate), [{ tags: ["catalog"] }])
+})

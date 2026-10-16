@@ -190,6 +190,25 @@
 .fl-more-designs, .fl-case-tiles, .fl-pdp-rail, .fl-swatches, .fl-gallery-thumbs { padding-bottom:2px; scrollbar-width:none; }
 .fl-more-designs::-webkit-scrollbar, .fl-case-tiles::-webkit-scrollbar, .fl-pdp-rail::-webkit-scrollbar, .fl-swatches::-webkit-scrollbar, .fl-gallery-thumbs::-webkit-scrollbar { display:none; }
 
+/* ---- Phone colour dots (PHONE_COLOURS.md): the product page's PHONE COLOR
+   row and the shop's Phone color links. A 28px dot in a 44px target, six fit
+   at 320px; the inset line keeps Silver and White visible on white. */
+.fl-colour-dots { display:flex; gap:4px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+.fl-colour-dots::-webkit-scrollbar { display:none; }
+.fl-colour-dots > li { flex:none; }
+.fl-colour-dot { position:relative; display:grid; place-items:center; width:44px; height:44px; border-radius:50%; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.fl-colour-dot > span { display:block; width:28px; height:28px; border-radius:50%; box-shadow:inset 0 0 0 1px rgb(0 0 0 / .15); transition:box-shadow .15s; }
+.fl-colour-dot:hover > span { box-shadow:inset 0 0 0 1px rgb(0 0 0 / .15), 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-line-strong); }
+.fl-colour-dot :checked + span, .fl-colour-dot[aria-current] > span { box-shadow:inset 0 0 0 1px rgb(0 0 0 / .15), 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-purple); }
+.fl-colour-dot:focus-visible { outline:2px solid var(--color-purple); outline-offset:-2px; }
+.fl-colour-dot :focus-visible + span { outline:2px solid var(--color-purple); outline-offset:5px; }
+.fl-colour-note { margin-top:2px; font-size:12px; line-height:1.5; color:var(--color-ink-muted); }
+.fl-colour-dots + .fl-scrollbar { margin-top:6px; }
+@media (prefers-reduced-motion:no-preference) {
+  .fl-colour-dot [aria-busy='true'] + span { animation:fl-colour-busy 1s ease-in-out infinite alternate; }
+  @keyframes fl-colour-busy { to { opacity:.55; } }
+}
+
 /* ---- Buy buttons (product-buy-box.tsx, product-buy-bar.tsx) -------------
    Purple means only the buy action: Buy it now is the one filled button;
    Add to cart is outlined (or ink, Admin > Buy buttons). Working states keep

@@ -4,7 +4,8 @@
 import { denoiseBlur, prepareDesign, type PreparedDesign, type ShotLayers, type ShotMeta } from "./compositor"
 
 export type SetMeta = ShotMeta & { size: [number, number]; sizes: number[]; shots: { n: number; name: string }[] }
-export type MockupSet = { device: string; base_url: string; colours: string[]; default_colour: string; enabled: boolean }
+/** swatches: optional colour name -> "#rrggbb", the shop's phone colour dots (PHONE_COLOURS.md). */
+export type MockupSet = { device: string; base_url: string; colours: string[]; default_colour: string; enabled: boolean; swatches?: Record<string, string> }
 export type Settings = { case_type: string; shots: number[]; image_size: number; quality: number; supersample: boolean; sets: MockupSet[] }
 /** Where the design sits on the template: zoom >= 1 over a cover fit, offsets as a fraction of the template. */
 export type Placement = { zoom: number; ox: number; oy: number }

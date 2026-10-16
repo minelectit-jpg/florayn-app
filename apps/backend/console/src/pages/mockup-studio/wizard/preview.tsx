@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, ty
 import { downscale, shotLabel, shotTitle, type MockupSet, type Placement, type SetMeta, type UvPick } from "../../../mockup/layers"
 import { Button, Icon, IconButton, Skeleton } from "../../../ui"
 import type { ShotResult, StageState } from "./engine"
-import { clamp, swatchColour, zoomAbout, type MetaState, type StepId } from "./state"
+import { clamp, dotColour, zoomAbout, type MetaState, type StepId } from "./state"
 
 /** One picture drawn at the box's device pixels (contained, centred, high-quality smoothing). Never blanked. */
 export function ShotCanvas({ bitmap, stale, label, className }: { bitmap: ImageBitmap | null | undefined; stale?: boolean; label?: string; className?: string }) {
@@ -65,13 +65,38 @@ export const leaveDrop = (set: (over: boolean) => void) => (e: DragEvent<HTMLEle
   if (!e.currentTarget.contains(e.relatedTarget as Node | null)) set(false)
 }
 
-export function Swatches({ set, value, model, onChange, disabled }: { set: MockupSet; value: string; model: string; onChange: (colour: string) => void; disabled?: boolean }) {
+/** One phone colour to show (the stage's chip row): radio chips over colours (default: every colour of the set). */
+export function Swatches({ set, colours, value, model, label, onChange, disabled }: {
+  set: MockupSet; colours?: string[]; value: string; model: string; label?: string; onChange: (colour: string) => void; disabled?: boolean
+}) {
   const id = useId()
-  if (set.colours.length < 2) return null
-  return <div className="ms-swatches" role="radiogroup" aria-label={`Phone colour for ${model}`}>
-    {set.colours.map((c) => <label key={c} className="ms-swatch" title={c} style={{ "--sw": swatchColour(c) } as CSSProperties}>
+  const list = colours ?? set.colours
+  if (list.length < 2) return null
+  return <div className="ms-swatches" role="radiogroup" aria-label={label ?? `Phone colour for ${model}`}>
+    {list.map((c) => <label key={c} className="ms-swatch" title={c} style={{ "--sw": dotColour(set, c) } as CSSProperties}>
       <input type="radio" className="sr-only" name={`sw${id}`} checked={c === value} disabled={disabled} aria-label={c} onChange={() => onChange(c)} /><i />
     </label>)}
+  </div>
+}
+
+/**
+ * The phone colours to make pictures in (model cards): checkbox chips, a ring when ticked, a "Main" pip on the main
+ * colour. The last ticked chip is disabled, so a chosen model always has a colour.
+ */
+export function ColourChecks({ set, on, colours, main, model, disabled, onToggle }: {
+  set: MockupSet; on: boolean; colours: string[]; main: string; model: string; disabled?: boolean; onToggle: (colour: string) => void
+}) {
+  if (set.colours.length < 2) return null
+  return <div className="ms-swatches is-multi" role="group" aria-label={`Phone colours for ${model}`}>
+    {set.colours.map((c) => {
+      const ticked = on && colours.includes(c)
+      const isMain = on && c === main
+      const locked = ticked && colours.length === 1
+      return <label key={c} className="ms-swatch" title={locked ? `${c} (at least one colour stays ticked)` : c} style={{ "--sw": dotColour(set, c) } as CSSProperties}>
+        <input type="checkbox" className="sr-only" checked={ticked} disabled={disabled || locked} aria-label={`${c}${isMain ? ", main colour" : ""}`} onChange={() => onToggle(c)} />
+        <i />{isMain && <b className="ms-swatch-main" aria-hidden>Main</b>}
+      </label>
+    })}
   </div>
 }
 
@@ -125,7 +150,10 @@ export type PreviewProps = {
   step: StepId
   list: MockupSet[]
   focusSet: MockupSet | null
+  /** the colour the stage shows */
   colour: string
+  /** the colours its chip row switches between: the focused model's ticked ones (all of a model not chosen) */
+  stageColours: string[]
   deviceName: (slug: string) => string
   meta: SetMeta | null
   metaState: MetaState | undefined
@@ -343,7 +371,7 @@ export function Preview(props: PreviewProps) {
           </select></label>
         : <strong className="ms-stage-model">{model}</strong>}
       {focusSet && <div className="ms-stage-colour">
-        <Swatches set={focusSet} value={colour} model={model} onChange={(c) => props.onColour(focusSet.device, c)} />
+        <Swatches set={focusSet} colours={props.stageColours} value={colour} model={model} label={`Phone colour shown for ${model}`} onChange={(c) => props.onColour(focusSet.device, c)} />
         <span className="muted">{colour}</span>
       </div>}
     </div>

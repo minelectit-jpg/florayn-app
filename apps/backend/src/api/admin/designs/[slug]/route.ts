@@ -1,6 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { Modules } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 
+import { CATALOG_MODULE } from "../../../../modules/catalog"
 import { getDesignDetail } from "../../../../lib/design-admin"
 import { editDesignMeta, type DesignMetaPatch } from "../../../../lib/edit-design"
 import { isAudienceTag } from "../../../../lib/audience"
@@ -110,6 +111,14 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
 
   try {
     await productModule.deleteProducts(ids)
+    // Phone colour pictures have no module link, so remove them with the
+    // products. A failure here only leaves inert rows (readers ignore rows of
+    // deleted variants), so the delete still succeeds.
+    try {
+      await req.scope.resolve(CATALOG_MODULE).deletePhoneColourGalleries({ product_id: ids })
+    } catch (cleanup: any) {
+      req.scope.resolve(ContainerRegistrationKeys.LOGGER).warn(`[delete-design ${slug}] phone colour rows were not removed: ${cleanup?.message ?? cleanup}`)
+    }
     res.json({ ok: true, deleted: ids.length })
   } catch (error: any) {
     const logger = req.scope.resolve("logger")

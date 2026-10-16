@@ -18,10 +18,69 @@ import type { CaseTypeRecord } from "@/lib/catalog"
 import type { StoreVariant } from "@/lib/medusa"
 import type { ProductVariantMatrix } from "@/lib/product-view-data"
 import { formatPrice } from "@/lib/money"
+import type { PhoneColour } from "@/lib/phone-colours"
 import type { BuyBoxPresentation } from "@/lib/storefront-presentation"
 import { pairKey } from "@/lib/variant-matrix"
 
 type AddState = "idle" | "adding" | "added" | "error"
+
+/** The PHONE COLOR row's state, owned by ProductView (it also drives the gallery). */
+export type PhoneColourControl = {
+  /** This pair's colours, main first (2 or more). */
+  options: PhoneColour[]
+  /** The colour shown. */
+  value: string | null
+  /** The colour whose pictures are loading, shown pressed and busy. */
+  busy: string | null
+  onSelect: (slug: string) => void
+  /** Pointer, touch or focus on a dot: load this model's colours if needed. */
+  onIntent: () => void
+}
+
+/**
+ * PHONE COLOR, under MODEL (PHONE_COLOURS.md 6.4): one 28px dot per colour in a
+ * 44px target, a group of native radios. It only changes the pictures:
+ * the case, price, stock and what goes in the bag are the same for every
+ * colour, which the note under it says. Never the simple mode's COLOR (that
+ * is StickPad's real, sellable option).
+ */
+function PhoneColourRow({ options, value, busy, onSelect, onIntent }: PhoneColourControl) {
+  const current = options.find((option) => option[0] === value) || options[0]
+  return (
+    <div className="mt-3">
+      <p className="fl-pdp-label">PHONE COLOR <span className="font-normal normal-case text-ink-muted">{current[1]}</span></p>
+      {/* Six dots fit at 320px: a slider bar only when the row can scroll, so the
+          server HTML has no bar that hydration then removes (layout shift). */}
+      <DragScroll className="fl-colour-dots" role="radiogroup" aria-label="Phone color" indicator={options.length > 6}>
+        {options.map(([slug, name, hex]) => (
+          <li key={slug} role="none">
+            {/* Native radios: arrow keys and one tab stop come with them. */}
+            <label className="fl-colour-dot" title={name} onPointerEnter={onIntent} onTouchStart={onIntent}>
+              <input
+                type="radio"
+                name="phone-colour"
+                value={slug}
+                checked={slug === current[0]}
+                // onClick, not onChange: a tap on the dot already shown as checked
+                // (the main colour after a failed load or an unmatched ?color=)
+                // must still set the preference. A click also comes with a label
+                // tap, Space and the arrow keys; only this handler calls onSelect.
+                onClick={() => onSelect(slug)}
+                onChange={() => {}}
+                onFocus={onIntent}
+                aria-label={name}
+                aria-busy={busy === slug || undefined}
+                className="sr-only"
+              />
+              <span style={{ backgroundColor: hex }} />
+            </label>
+          </li>
+        ))}
+      </DragScroll>
+      <p className="fl-colour-note">Only changes the pictures. The case is the same for every phone colour.</p>
+    </div>
+  )
+}
 
 /**
  * Family group order in the device drawer, matching the shop's SELECT MODEL.
@@ -75,6 +134,7 @@ export default function ProductBuyBox({
   onSelectDevice,
   imageForCaseType,
   priceForCaseType,
+  phoneColours = null,
   moreDesigns,
   buyBox,
   deliveryEstimate,
@@ -108,6 +168,8 @@ export default function ProductBuyBox({
   onSelectDevice: (device: string) => void
   imageForCaseType: (caseType: string) => string | null
   priceForCaseType: (caseType: string) => number | null
+  /** PHONE COLOR under MODEL; ProductView passes it only when this pair has 2 or more phone colours. */
+  phoneColours?: PhoneColourControl | null
   moreDesigns?: ReactNode
   /** Admin > Buy buttons: labels, style, the quick-buy bar and the sold-out slot. */
   buyBox: BuyBoxPresentation
@@ -401,6 +463,7 @@ export default function ProductBuyBox({
         </button>
 
         </div>
+        {phoneColours ? <PhoneColourRow {...phoneColours} /> : null}
         <ModelDrawer
           open={openModel}
           onOpenChange={setOpenModel}
