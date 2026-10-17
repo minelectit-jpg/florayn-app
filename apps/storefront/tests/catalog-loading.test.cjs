@@ -29,6 +29,7 @@ function loadSource(relativePath, dependencies, globals = {}) {
       if (Object.hasOwn(dependencies, name)) return dependencies[name]
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx }
       if (name === "@/lib/audience") return audienceLib()
+      if (name === "@/lib/phone-colours") return phoneColoursLib()
       if (name.startsWith("@/components/")) return { __esModule: true, default: name }
       throw new Error(`Unexpected dependency: ${name}`)
     },
@@ -37,6 +38,10 @@ function loadSource(relativePath, dependencies, globals = {}) {
 }
 
 const uncachedReact = { cache: (fn) => fn }
+let phoneColoursModule
+function phoneColoursLib() {
+  return phoneColoursModule ??= loadSource("lib/phone-colours.ts", {})
+}
 let audienceModule
 function audienceLib() {
   return (audienceModule ??= loadSource("lib/audience.ts", {}))

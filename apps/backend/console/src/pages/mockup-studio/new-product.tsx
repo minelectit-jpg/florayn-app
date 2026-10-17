@@ -1,8 +1,8 @@
-// Mockup Studio > New product: a five-step wizard from one flat design to a
+// Mockup Studio > New product: a four-step wizard from one flat design to a
 // Product Manager design product, draft or published (MOCKUP_STUDIO.md). The
 // pictures are made in Web Workers; downloads are lossless 2400 px PNGs, and only
 // the shop images are compressed, when they are uploaded.
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react"
 
 import { api, ApiError } from "../../api"
 import { designScale, rendererOptions, type Renderer } from "../../mockup/client"
@@ -33,7 +33,7 @@ const AGAIN_MSG = `${COLOURS_NOTE} Press Retry first to save them. Make another 
 // the product exists in these phases: leaving does not lose it, only the saves still to come
 const COLOURS_JOB_MSG = "The product is created; its phone colour pictures are still saving. If you leave now, it shows its main pictures only. Leave anyway?"
 const SAVING_MSG = "The new pictures are being saved. If you leave now, some models may keep their old pictures. Leave anyway?"
-const STAGE_STEPS: StepId[] = ["design", "placement", "details"]
+const STAGE_STEPS: StepId[] = ["design", "details"]
 const MAX_BYTES = 60e6
 const MAX_SIDE = 12000
 
@@ -65,7 +65,7 @@ function Stepper({ step, reached, errors, busy, onGo }: { step: StepId; reached:
       const disabled = busy || (i !== cur && blocked)
       return <li key={st.id} className={i === cur ? "is-current" : done ? "is-done" : "is-todo"}>
         <button type="button" className="ms-step" aria-current={i === cur ? "step" : undefined} aria-disabled={disabled || undefined}
-          aria-label={`Step ${i + 1} of 5, ${st.label}${done ? ", done" : ""}`}
+          aria-label={`Step ${i + 1} of ${STEPS.length}, ${st.label}${done ? ", done" : ""}`}
           title={busy ? "Wait until the pictures are made." : disabled ? "Finish the earlier steps first." : undefined}
           onClick={() => { if (!disabled && i !== cur) onGo(st.id) }}>
           <span className="ms-dot">{done ? Icon.check : i + 1}</span><span className="ms-step-label">{st.label}</span>
@@ -110,7 +110,8 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   const shotNow = angles.includes(s.focus.shot) ? s.focus.shot : angles[0] ?? 0
   const version = s.design?.version ?? 0
   const A = meta ? meta.template_mm[1] / meta.template_mm[0] : A_DEFAULT
-  const asKey = chosen.map((x) => { const m = readyMeta(x); return m ? m.template_mm[1] / m.template_mm[0] : 0 }).filter(Boolean).join(",")
+  // before any model is chosen (placing the design in step 1) the position must suit every model
+  const asKey = (chosen.length ? chosen : sets).map((x) => { const m = readyMeta(x); return m ? m.template_mm[1] / m.template_mm[0] : 0 }).filter(Boolean).join(",")
   const As = useMemo(() => (asKey ? asKey.split(",").map(Number) : [A_DEFAULT]), [asKey])
 
   const [interacting, setInteracting] = useState(false)
@@ -165,6 +166,15 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   }, [])
   useEffect(() => { loadCollections() }, [loadCollections])
 
+  // the blank cases that exist ("<case type>|<device>"): stock is asked for only for a model that has none yet. null: unknown
+  const [blanks, setBlanks] = useState<Set<string> | null>(null)
+  const loadBlanks = useCallback(() => {
+    api<{ blanks?: { case_type_slug: string | null; device_slug: string | null }[] }>("/admin/stock")
+      .then((d) => setBlanks(new Set((d.blanks ?? []).map((b) => `${b.case_type_slug}|${b.device_slug}`))))
+      .catch(() => setBlanks(null))
+  }, [])
+  useEffect(() => { loadBlanks() }, [loadBlanks])
+
   const slugOk = slugValid(s.details.slug)
   const slugState = useSlugCheck(s.details.slug, slugOk, active && !done && (s.step === "details" || s.step === "review"))
   const update = s.details.mode === "update"
@@ -190,7 +200,10 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   const existingDesign = existing.status === "ready" ? existing.design : null
   const existingError = existing.status === "ready" ? undefined : existing.status === "error" ? existing.message : "Loading the design…"
 
-  const errors = stepErrors(s, { chosen, metas, slugState, deviceName, existingError })
+  // "Signature · iPhone 18 Pro Max" for each chosen model whose blank case does not exist yet (null: blanks unknown)
+  const newBlanks = blanks ? chosen.filter((x) => !blanks.has(`${settings.case_type}|${x.device}`)).map((x) => `${caseTypeName} · ${deviceName(x.device)}`) : null
+  const stockShown = newBlanks === null || newBlanks.length > 0
+  const errors = stepErrors(s, { chosen, metas, slugState, deviceName, existingError, stockShown })
   const dirty = Boolean(s.design || s.details.name.trim()) && !done
   const jobMsg = job?.kind === "publish" && job.phase === "colours" ? COLOURS_JOB_MSG : job?.kind === "publish" && job.phase === "saving" ? SAVING_MSG : JOB_MSG
   useLeaveGuard(job ? jobMsg : dirty ? DIRTY_MSG : done?.colours ? COLOURS_MSG : null)
@@ -242,7 +255,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   }), [sets, metas, s.picks, settings.shots])
   const [cards, retryCard] = useShots(R, ready, "cards", 2, cardItems, { placement: s.placement, version, out: cardOut, active: active && !done && s.step === "models" })
 
-  const uvPick = useUvPick(focusSet, colour, shotNow, active && s.step === "placement" && hasDesign)
+  const uvPick = useUvPick(focusSet, colour, shotNow, active && s.step === "design" && hasDesign)
 
   // --- design file --------------------------------------------------------------------------------------
   // the object URL and preview go with the file (a new version of the same design keeps them)
@@ -354,7 +367,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   const zoomPct = Math.round(s.placement.zoom * 100)
   const zoomSeen = useRef(zoomPct)
   useEffect(() => {
-    if (zoomSeen.current === zoomPct || s.step !== "placement") { zoomSeen.current = zoomPct; return }
+    if (zoomSeen.current === zoomPct || s.step !== "design") { zoomSeen.current = zoomPct; return }
     const t = setTimeout(() => { zoomSeen.current = zoomPct; if (!rangeFocused()) announce(`Size ${zoomPct} percent`) }, 500)
     return () => clearTimeout(t)
   }, [zoomPct])
@@ -363,7 +376,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   const posKey = `${oxPct},${oyPct}`
   const posSeen = useRef(posKey)
   useEffect(() => {
-    if (posSeen.current === posKey || s.step !== "placement") { posSeen.current = posKey; return }
+    if (posSeen.current === posKey || s.step !== "design") { posSeen.current = posKey; return }
     const t = setTimeout(() => {
       posSeen.current = posKey
       if (!rangeFocused()) announce(`Position: ${way(oxPct, "left", "right")}, ${way(oyPct, "up", "down")}`)
@@ -382,11 +395,11 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
     if (f.shot !== undefined) focusShot(f.shot)
   }
 
-  // on entering Placement, an angle that shows little print gives way to the main picture
+  // when a design arrives, an angle that shows little print gives way to the main picture
   const enteredPlacement = useRef(false)
-  useEffect(() => { if (s.step === "placement") enteredPlacement.current = true }, [s.step])
+  useEffect(() => { if (s.design) enteredPlacement.current = true }, [version])
   useEffect(() => {
-    if (!enteredPlacement.current || s.step !== "placement" || !uvPick) return
+    if (!enteredPlacement.current || s.step !== "design" || !uvPick) return
     enteredPlacement.current = false
     const first = angles.find((n) => settings.shots.includes(n))
     if (uvPick.print < 400 && first !== undefined && first !== shotNow) dispatch({ type: "focus", shot: first })
@@ -397,7 +410,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   const focusInvalid = (step: StepId) => {
     let id = step === "design" ? "ms-choose" : step === "models" ? "ms-all" : ""
     if (step === "details") {
-      const f = fieldErrors(s, slugState)
+      const f = fieldErrors(s, slugState, stockShown)
       id = update ? "ms-h" : f.name ? "ms-f-name" : f.slug ? "ms-f-slug" : f.newCollection ? "ms-f-newcol" : f.stock ? "ms-f-stock" : ""
     }
     if (id) requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.focus()))
@@ -428,7 +441,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
     window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" })
     requestAnimationFrame(() => document.getElementById("ms-h")?.focus({ preventScroll: true }))
     const i = stepIndex(s.step)
-    announce(`Step ${i + 1} of 5: ${STEPS[i].label}`)
+    announce(`Step ${i + 1} of ${STEPS.length}: ${STEPS[i].label}`)
   }, [s.step])
 
   // the done screen replaces the stepper, frame and footer (and the button that was pressed): its heading takes focus
@@ -522,7 +535,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "z") {
         // text fields keep their own undo; a slider, radio or checkbox has none, so the placement is undone
         if (t?.closest?.("input:not([type=range]):not([type=radio]):not([type=checkbox]), select, textarea, [contenteditable='true']")) return
-        if (k.s.step === "placement" && k.s.design) { e.preventDefault(); dispatch({ type: "place/undo" }) }
+        if (k.s.step === "design" && k.s.design) { e.preventDefault(); dispatch({ type: "place/undo" }) }
         return
       }
       if (t?.closest?.("input, select, textarea, [contenteditable='true']")) return
@@ -625,7 +638,8 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
       resume.current = null
       setUploaded(new Set())
       const result = await publishProduct({
-        settings, models: publishModels(), details, placement: s.placement, version,
+        // no stock field (every blank exists): nothing new to stock, and a value typed before the models changed is not sent
+        settings, models: publishModels(), details: stockShown ? details : { ...details, stock: "0" }, placement: s.placement, version,
         hq: R.hq, lowMemory, exporter: () => R.exporter(design.file), stopped: () => stop.current,
         onJob: setJob, onUploaded: (cell) => setUploaded((u) => new Set(u).add(cell)),
         onMilestone: (pct) => announce(`${pct} percent of the pictures are made and uploaded.`),
@@ -730,12 +744,21 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
   if (s.step === "design") {
     // keyed siblings, so React moves them instead of remounting: with no design the dropzone comes first in the
     // DOM, as it does on the phone layout, so the tab order follows what is seen
-    const preview = <Preview key="preview" {...previewCommon} mode={s.design ? "static" : "placeholder"} />
-    const panel = <DesignPanel key="panel" design={s.design} reading={s.reading} error={s.designError || (s.showErrors && errors.design) || ""} A={A}
+    // with a design the step also places it (owner, 2026-10-17): the stage is editable and the controls follow the file
+    const preview = <Preview key="preview" {...previewCommon} mode={s.design ? "editable" : "placeholder"} />
+    const file = <DesignPanel design={s.design} reading={s.reading} error={s.designError || (s.showErrors && errors.design) || ""} A={A}
       maxAcross={rendererOptions("detail", lowMemory).maxAcross} disabled={busy}
       onChoose={chooseClick} onFile={(f) => { void chooseFile(f) }} onRemove={() => { void removeDesign() }} />
-    body = <div className={`ms-split${s.design ? "" : " is-empty"}`} data-step="design">
-      <StepHead step="design" title="Upload your design" sub="One flat image. It is printed over the back and sides of the case." />
+    const panel = s.design
+      ? <div key="panel" className="ms-panels">{file}
+        <PlacementPanel placement={s.placement} canUndo={s.past.length > 0} design={s.design} As={As} A={A} placer={placer} angles={angles} meta={meta} onFocusShot={focusShot} /></div>
+      : <Fragment key="panel">{file}</Fragment>
+    body = <div className={`ms-split${s.design ? " is-placing" : " is-empty"}`} data-step="design">
+      {s.design
+        ? <StepHead step="design" title="Place your design" sub={coarse
+          ? "Drag it on the phone or pinch to zoom. One position is used for every model."
+          : "Drag it on the phone, scroll to zoom, or use the controls. One position is used for every model."} />
+        : <StepHead step="design" title="Upload your design" sub="One flat image. It is printed over the back and sides of the case." />}
       {s.design ? [preview, panel] : [panel, preview]}
     </div>
   } else if (s.step === "models") {
@@ -748,14 +771,6 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
         onColour={(x, c) => dispatch({ type: "pick/colour", set: x, colour: c })}
         onAllColours={(on) => dispatch({ type: "pick/all-colours", on, sets: chosen })} onRetryMeta={retryMetas} onCardRetry={retryCard} />
     </>
-  } else if (s.step === "placement" && s.design) {
-    body = <div className="ms-split" data-step="placement">
-      <StepHead step="placement" title="Place your design" sub={coarse
-        ? "Drag it on the phone or pinch to zoom. One position is used for every model."
-        : "Drag it on the phone, scroll to zoom, or use the controls. One position is used for every model."} />
-      <Preview {...previewCommon} mode="editable" />
-      <PlacementPanel placement={s.placement} canUndo={s.past.length > 0} design={s.design} As={As} A={A} placer={placer} angles={angles} meta={meta} onFocusShot={focusShot} />
-    </div>
   } else if (s.step === "details") {
     const firstShot = angles.find((n) => settings.shots.includes(n))
     const mini = firstShot !== undefined ? film[String(firstShot)] : undefined
@@ -763,7 +778,7 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
       <StepHead step="details" title={update ? "Update pictures" : "Product details"} sub={update ? "The design keeps its title, URL and everything else; only its pictures are replaced." : "The title is the design name customers see."} />
       <Preview {...previewCommon} mode="static" />
       <MiniSummary bitmap={mini && "bitmap" in mini ? mini.bitmap : null} title={(update ? existingDesign?.name : s.details.name.trim()) || s.design?.file.name || ""} models={chosen.length} colour={colourSets > chosen.length ? plural(colourSets, "colour set") : colour} />
-      <DetailsForm s={s} slugState={slugState} collections={collections} existing={existing} caseTypeName={caseTypeName} onRetryCollections={loadCollections} onSubmit={next}
+      <DetailsForm s={s} slugState={slugState} collections={collections} existing={existing} caseTypeName={caseTypeName} newBlanks={newBlanks} blankModels={chosen.length} onRetryCollections={loadCollections} onSubmit={next}
         onPatch={(patch) => dispatch({ type: "details", patch })} onUpdateMode={toUpdateMode} onNewMode={toNewMode} onRetryExisting={() => loadExisting(s.details.slug)} />
     </div>
   } else if (s.step === "review") {
@@ -808,10 +823,9 @@ export default function NewProduct({ settings, devices, caseTypeName, active, on
     ? `${plural(chosen.length, "model")} × ${plural([...colourCounts][0], "colour")} × ${plural([...shotCounts][0], "picture")} = ${plural(pictures, "picture")} · ${minutes}`
     : `${plural(chosen.length, "model")} · ${plural(colourSets, "colour set")} · ${plural(pictures, "picture")} · ${minutes}`
   const hint = s.step === "design"
-    ? (s.showErrors && errors.design) || (s.design ? `${s.design.w} × ${s.design.h} px` : "PNG, JPG or WebP")
+    ? (s.showErrors && errors.design) || (s.design ? "One position is used for every model." : "PNG, JPG or WebP")
     : s.step === "models" ? (s.showErrors && errors.models) || `${chosen.length} of ${sets.length} models chosen`
-      : s.step === "placement" ? "One position is used for every model."
-        : s.step === "details" ? (s.showErrors && errors.details ? (update ? errors.details : "Fill in the highlighted fields.") : slugState === "checking" ? "Checking the URL…" : "")
+      : s.step === "details" ? (s.showErrors && errors.details ? (update ? errors.details : "Fill in the highlighted fields.") : slugState === "checking" ? "Checking the URL…" : "")
           : reviewHint
   const hintError = s.showErrors && Boolean(errors[s.step])
 

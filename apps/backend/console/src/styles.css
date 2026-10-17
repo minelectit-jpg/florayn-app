@@ -208,6 +208,9 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
 .ms-split { display: grid; gap: 20px; align-items: start; grid-template-areas: "head" "shead" "stage" "film" "panel"; grid-template-columns: minmax(0, 1fr); }
 .ms-split.is-empty { grid-template-areas: "head" "panel" "shead" "stage" "film"; }
 .ms-sh { grid-area: head; } .ms-panel { grid-area: panel; }
+/* step 1 with a design: the file card and the placement controls stack in the panel column */
+.ms-panels { grid-area: panel; display: grid; gap: 16px; align-content: start; min-width: 0; }
+.ms-panels > .ms-panel { grid-area: auto; }
 .ms-stage-col, .ms-stage-wrap { display: contents; }
 .ms-stage-head { grid-area: shead; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: 44px; min-width: 0; }
 .ms-stage-head .select.sm { width: auto; min-height: 36px; padding-top: 6px; padding-bottom: 6px; background-position: calc(100% - 18px) 15px, calc(100% - 13px) 15px; }
@@ -361,9 +364,9 @@ body:has(.ms-tab:not([hidden]) .ms-foot) .shell > .toasts { bottom: calc(var(--f
   .ms-split[data-step="details"] .ms-stage-col { display: none; }
   .ms-split[data-step="details"] .ms-mini { display: flex; }
   /* svh, not dvh: the stage keeps its size while the phone's address bar shows and hides during the scroll */
-  .ms-split[data-step="placement"] .ms-stage { position: sticky; top: calc(var(--topbar-h) + var(--steps-h) + 8px); z-index: 5; width: min(100%, 44svh); box-shadow: 0 0 0 16px var(--canvas), var(--shadow-lg); }
+  .ms-split.is-placing .ms-stage { position: sticky; top: calc(var(--topbar-h) + var(--steps-h) + 8px); z-index: 5; width: min(100%, 44svh); box-shadow: 0 0 0 16px var(--canvas), var(--shadow-lg); }
   /* panel and film controls clear the sticky stage as well */
-  .ms-split[data-step="placement"] :is(.ms-film, .ms-panel) :is(button, input, select, summary) { scroll-margin-top: calc(var(--ms-clear-top) + min(100cqi, 44svh) + 28px); }
+  .ms-split.is-placing :is(.ms-film, .ms-panel) :is(button, input, select, summary) { scroll-margin-top: calc(var(--ms-clear-top) + min(100cqi, 44svh) + 28px); }
 }
 
 /* review */

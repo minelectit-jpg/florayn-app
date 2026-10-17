@@ -1,4 +1,4 @@
-// Mockup Studio > New product: step 5 (every picture, downloads, publishing) and the
+// Mockup Studio > New product: the last step (every picture, downloads, publishing) and the
 // done screen (MOCKUP_STUDIO.md).
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
@@ -175,7 +175,7 @@ export function SummaryCard({ design, models, details, placement, slugState, exi
   const rows: [string, ReactNode, StepId][] = [
     ["Design", design ? <span className="row ms-sum-file"><img src={design.url} alt="" /><span className="ms-ellipsis">{design.file.name}</span></span> : "None", "design"],
     ["Models", models.map(modelSummary).join(", ") || "None", "models"],
-    ["Position", moved ? `Size ${Math.round(placement.zoom * 100)}%, moved` : "Centred", "placement"],
+    ["Position", moved ? `Size ${Math.round(placement.zoom * 100)}%, moved` : "Centred", "design"],
     ...(update ? [
       ["Updating", existing ? `“${existing.name}”, pictures only` : "…", "details"],
       ["URL", <span className="row ms-sum-url">/product/{details.slug}/</span>, "details"],

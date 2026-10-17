@@ -204,6 +204,41 @@ export function shopRowColours(palette: ShopPhoneColours | null): ShopPhoneColou
   return palette?.colours.filter((c) => c[3] === 1) ?? []
 }
 
+/** The shop toolbar's Phone color menu (shop-grid.tsx): the selected colour and one link per available colour. */
+export type ShopColourMenu = {
+  name: string
+  hex: string
+  options: { slug: string; label: string; hex: string; href: string; current: boolean }[]
+}
+
+/**
+ * The Phone color menu of a shop page, or null with fewer than 2 available
+ * colours (AirPods, wallets, models without a Mockup set, other case types).
+ * Each colour opens /shop/<device>/<case type>/<colour>/ and the model's
+ * default colour opens the colour-less (canonical) page. Page 1 always: a
+ * colour only changes the pictures, not which designs are listed.
+ */
+export function shopColourMenu({ palette, current, deviceSlug, caseTypeSlug, pageCaseTypeSlug }: {
+  palette: ShopPhoneColours | null
+  /** The colour of this page, or null on the colour-less page (the default). */
+  current: string | null
+  deviceSlug: string
+  /** The case type in view, for the colour links. */
+  caseTypeSlug: string
+  /** The case type in this page's path, for the default colour's link. */
+  pageCaseTypeSlug: string | null
+}): ShopColourMenu | null {
+  const colours = shopRowColours(palette)
+  if (!palette || colours.length < 2) return null
+  const selected = current ?? palette.default
+  const options = colours.map(([slug, label, hex]) => ({
+    slug, label, hex, current: slug === selected,
+    href: slug === palette.default ? shopPath(deviceSlug, pageCaseTypeSlug) : shopPath(deviceSlug, caseTypeSlug, slug),
+  }))
+  const shown = options.find((o) => o.current)
+  return { name: shown?.label ?? "", hex: shown?.hex ?? "", options }
+}
+
 /**
  * What a shop colour path does with its colour: "show" it, "redirect" the
  * default colour to the canonical colour-less path, "missing" (404) for an

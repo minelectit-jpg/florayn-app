@@ -14,7 +14,7 @@ import {
 export function StepHead({ step, title, sub }: { step: StepId; title: string; sub: ReactNode }) {
   const i = STEPS.findIndex((s) => s.id === step) + 1
   return <header className="ms-sh">
-    <span className="ms-eyebrow">Step {i} of 5</span>
+    <span className="ms-eyebrow">Step {i} of {STEPS.length}</span>
     <h2 className="ms-title" id="ms-h" tabIndex={-1}>{title}</h2>
     <p className="ms-sub">{sub}</p>
   </header>
@@ -97,7 +97,7 @@ export function DesignPanel({ design, reading, error, A, maxAcross, disabled, on
         : `Very large file. The studio uses ${Math.round(design.w * k)} × ${Math.round(design.h * k)} px of it, more than any picture needs.`}</p>}
       <div className="ms-sharp"><span className="lbl">Sharpness</span><Meter level={level} /><span className="ms-small">{SHARP_TEXT[level]}</span></div>
     </div>
-    {Math.abs(r - 1) > 0.06 && <p className="note warn">Your design is {r > 1 ? "wider" : "taller"} than the case. The {r > 1 ? "left and right" : "top and bottom"} edges are trimmed. You can move it in Placement.</p>}
+    {Math.abs(r - 1) > 0.06 && <p className="note warn">Your design is {r > 1 ? "wider" : "taller"} than the case. The {r > 1 ? "left and right" : "top and bottom"} edges are trimmed. Move it below.</p>}
     {errorNote}
   </div>
 }
@@ -307,7 +307,7 @@ export function PlacementPanel({ placement, canUndo, design, As, A, placer, angl
   </div>
 }
 
-// --- step 4 ------------------------------------------------------------------------------------------
+// --- step 3 ------------------------------------------------------------------------------------------
 export type Collections = { status: "loading" | "ready" | "error"; items: { id: string; title: string }[] }
 
 function FieldBox({ id, label, hint, error, children }: { id: string; label: string; hint?: ReactNode; error?: string; children: ReactNode }) {
@@ -355,8 +355,10 @@ function UpdateDetails({ s, existing, caseTypeName, onNewMode, onRetryExisting, 
 /** Update pictures' existing design: GET /admin/designs/:slug. */
 export type ExistingState = { status: "idle" } | { status: "loading" } | { status: "ready"; design: ExistingDesign } | { status: "error"; message: string }
 
-export function DetailsForm({ s, slugState, collections, existing, caseTypeName, onPatch, onRetryCollections, onSubmit, onUpdateMode, onNewMode, onRetryExisting }: {
+export function DetailsForm({ s, slugState, collections, existing, caseTypeName, newBlanks, blankModels, onPatch, onRetryCollections, onSubmit, onUpdateMode, onNewMode, onRetryExisting }: {
   s: State; slugState: SlugState; collections: Collections; existing: ExistingState; caseTypeName: string
+  /** "Signature · iPhone 18 Pro Max" for each chosen model without a blank case yet; null: unknown (asked anyway) */
+  newBlanks: string[] | null; blankModels: number
   onPatch: (patch: Partial<Details>) => void; onRetryCollections: () => void; onSubmit: () => void
   /** the URL is taken: switch to updating that design's pictures; and back */
   onUpdateMode: () => void; onNewMode: () => void; onRetryExisting: () => void
@@ -364,7 +366,7 @@ export function DetailsForm({ s, slugState, collections, existing, caseTypeName,
   const d = s.details
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   if (d.mode === "update") return <UpdateDetails s={s} existing={existing} caseTypeName={caseTypeName} onNewMode={onNewMode} onRetryExisting={onRetryExisting} onSubmit={onSubmit} />
-  const errs = fieldErrors(s, slugState)
+  const errs = fieldErrors(s, slugState, newBlanks === null || newBlanks.length > 0)
   const show = (k: keyof typeof errs) => (s.showErrors || touched[k] ? errs[k] : undefined)
   const blur = (k: string) => () => setTouched((t) => ({ ...t, [k]: true }))
   const slugOpen = d.slugOpen || slugState === "invalid" || slugState === "taken" || Boolean(show("slug"))
@@ -414,10 +416,17 @@ export function DetailsForm({ s, slugState, collections, existing, caseTypeName,
     }}>Choose an existing one instead</button></div>}
     {!isNew && collections.status === "error" && <p className="note error row" role="alert">Couldn't load collections. <button type="button" className="linkbtn" onClick={onRetryCollections}>Retry</button></p>}
 
-    <FieldBox id="ms-f-stock" label="Starting stock" hint="For new blank cases only. Stock that already exists is kept." error={show("stock")}>
-      <input id="ms-f-stock" className="input" type="number" min={0} max={10000000} step={1} inputMode="numeric" value={d.stock} {...aria("stock", "ms-f-stock")}
-        onChange={(e) => onPatch({ stock: e.target.value })} onBlur={blur("stock")} />
-    </FieldBox>
+    {/* Stock belongs to a blank case (case type x model), shared by every design on it: it is asked for only when this
+        product makes a blank that does not exist yet. newBlanks null: the blanks couldn't be read, so it is asked anyway. */}
+    {newBlanks === null || newBlanks.length > 0
+      ? <FieldBox id="ms-f-stock" label={newBlanks ? "Stock for the new models" : "Starting stock"} error={show("stock")}
+        hint={newBlanks
+          ? `${newBlanks.join(", ")} ${newBlanks.length === 1 ? "is" : "are"} new. This many blank cases are added for ${newBlanks.length === 1 ? "it" : "each"}, shared by every design. Change it later in Admin > Stock.`
+          : "For new blank cases only. Stock that already exists is kept."}>
+        <input id="ms-f-stock" className="input" type="number" min={0} max={10000000} step={1} inputMode="numeric" value={d.stock} {...aria("stock", "ms-f-stock")}
+          onChange={(e) => onPatch({ stock: e.target.value })} onBlur={blur("stock")} />
+      </FieldBox>
+      : <p className="muted ms-small">Stock: {caseTypeName} cases for {plural(blankModels, "chosen model")} already have stock, shared by every design. Change it in Admin &gt; Stock.</p>}
     <FieldBox id="ms-f-desc" label="Description (optional)">
       <textarea id="ms-f-desc" className="textarea" rows={4} maxLength={20000} value={d.description} onChange={(e) => onPatch({ description: e.target.value })} />
     </FieldBox>

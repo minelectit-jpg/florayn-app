@@ -3,9 +3,10 @@
 import { angleSlug, CENTERED, tag, type MockupSet, type Placement, type SetMeta } from "../../../mockup/layers"
 import { slugify } from "../../../ui"
 
-export type StepId = "design" | "models" | "placement" | "details" | "review"
+// Placing the design is part of step 1 (owner, 2026-10-17): it is uploaded and positioned together.
+export type StepId = "design" | "models" | "details" | "review"
 export const STEPS: { id: StepId; label: string }[] = [
-  { id: "design", label: "Design" }, { id: "models", label: "Models" }, { id: "placement", label: "Placement" },
+  { id: "design", label: "Design" }, { id: "models", label: "Models" },
   { id: "details", label: "Details" }, { id: "review", label: "Review & publish" },
 ]
 export const stepIndex = (id: StepId) => STEPS.findIndex((s) => s.id === id)
@@ -246,7 +247,8 @@ export const sharpness = (acr: number, zoom: number) => { const e = (acr / zoom)
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 export const slugValid = (slug: string) => SLUG.test(slug)
 
-export function fieldErrors(s: State, slugState: SlugState): { name?: string; slug?: string; newCollection?: string; stock?: string } {
+/** stockShown: false when every chosen model's blank case already exists, so Details has no stock field to check. */
+export function fieldErrors(s: State, slugState: SlugState, stockShown = true): { name?: string; slug?: string; newCollection?: string; stock?: string } {
   const d = s.details, out: { name?: string; slug?: string; newCollection?: string; stock?: string } = {}
   if (d.mode === "update") {
     // title, collection, stock and description are the design's own: only its URL is checked
@@ -259,6 +261,7 @@ export function fieldErrors(s: State, slugState: SlugState): { name?: string; sl
   else if (d.slug.length > SLUG_MAX) out.slug = "Keep the URL to 150 characters or fewer."
   else if (slugState === "taken") out.slug = "This URL is already used by another design."
   if (d.collection === NEW_COLLECTION && !d.newCollection.trim()) out.newCollection = "Enter the new collection's name."
+  if (!stockShown) return out
   if (!/^\d+$/.test(d.stock.trim())) out.stock = "Enter a whole number, 0 or more."
   else if (Number(d.stock.trim()) > STOCK_MAX) out.stock = "Enter a whole number from 0 to 10,000,000."
   return out
@@ -268,7 +271,7 @@ export function fieldErrors(s: State, slugState: SlugState): { name?: string; sl
  * existingError: in update mode, why the existing design cannot be used yet (loading, failed, not a Studio design);
  * it blocks Details.
  */
-export function stepErrors(s: State, ctx: { chosen: MockupSet[]; metas: Record<string, MetaState>; slugState: SlugState; deviceName: (slug: string) => string; existingError?: string }): Partial<Record<StepId, string>> {
+export function stepErrors(s: State, ctx: { chosen: MockupSet[]; metas: Record<string, MetaState>; slugState: SlugState; deviceName: (slug: string) => string; existingError?: string; stockShown?: boolean }): Partial<Record<StepId, string>> {
   const out: Partial<Record<StepId, string>> = {}
   if (!s.design) out.design = "Add a design to continue."
   if (!ctx.chosen.length) out.models = "Choose at least one model to continue."
@@ -281,7 +284,7 @@ export function stepErrors(s: State, ctx: { chosen: MockupSet[]; metas: Record<s
       }
     }
   }
-  const f = fieldErrors(s, ctx.slugState)
+  const f = fieldErrors(s, ctx.slugState, ctx.stockShown ?? true)
   const first = f.name ?? f.slug ?? f.newCollection ?? f.stock ?? (s.details.mode === "update" ? ctx.existingError : undefined)
   if (first) out.details = first
   return out

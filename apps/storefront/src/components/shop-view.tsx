@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "@/components/audience-link"
 
-import ShopColourRow from "@/components/shop-colour-row"
+import { shopColourMenu } from "@/lib/phone-colours"
 import ShopGrid from "@/components/shop-grid"
 import ShopSelectors from "@/components/shop-selectors"
 import {
@@ -234,18 +234,18 @@ export default async function ShopView({
     } as unknown as StoreProduct
   })
 
-  // Under the toolbar, only with 2 or more colours some design has pictures in
-  // (nothing at all is sent otherwise: most models have no Mockup set).
+  // The toolbar's Phone color menu, only with 2 or more colours some design has
+  // pictures in (nothing at all is sent otherwise: most models have no Mockup set).
   const palette = await palettePromise
-  const colourRow = palette && device && palette.colours.filter((c) => c[3] === 1).length > 1 ? (
-    <ShopColourRow
-      palette={palette}
-      current={colourSlug ?? null}
-      deviceSlug={device.slug}
-      caseTypeSlug={caseSlug}
-      pageCaseTypeSlug={caseTypeSlug ?? null}
-    />
-  ) : undefined
+  const colourMenu = device
+    ? shopColourMenu({
+      palette,
+      current: colourSlug ?? null,
+      deviceSlug: device.slug,
+      caseTypeSlug: caseSlug,
+      pageCaseTypeSlug: caseTypeSlug ?? null,
+    })
+    : null
 
   const heading = device
     ? `${device.name} Cases`
@@ -274,7 +274,7 @@ export default async function ShopView({
           // Colour props only on colour pages and for models with colours: the
           // other shop pages send no colour data at all.
           {...(colourSlug ? { colourQuery: `&color=${colourSlug}` } : {})}
-          {...(colourRow ? { colourRow } : {})}
+          {...(colourMenu ? { colourMenu } : {})}
           totalCount={matching.length}
           currentPage={current}
           totalPages={totalPages}

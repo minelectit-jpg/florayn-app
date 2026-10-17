@@ -7,6 +7,7 @@ import ProductCard from "@/components/product-card"
 import { useShopImageLoading } from "@/components/use-shop-image-loading"
 import type { StoreProduct } from "@/lib/medusa"
 import { priceRange } from "@/lib/money"
+import type { ShopColourMenu } from "@/lib/phone-colours"
 import { SHOP_PRIORITY_IMAGES } from "@/lib/shop-image-loading"
 
 type SortKey = "featured" | "name-asc" | "price-asc" | "price-desc"
@@ -49,7 +50,7 @@ export default function ShopGrid({
   pageBase,
   selectors,
   colourQuery,
-  colourRow,
+  colourMenu,
 }: {
   products: StoreProduct[]
   device?: string | null
@@ -58,8 +59,8 @@ export default function ShopGrid({
   caseTypeSlug?: string | null
   /** A shop phone colour page's "&color=<slug>" for the cards' product links (built on the server). */
   colourQuery?: string
-  /** The server-rendered Phone color row, shown under the toolbar. */
-  colourRow?: ReactNode
+  /** The toolbar's Phone color menu (built on the server), only for a model with 2 or more colours. */
+  colourMenu?: ShopColourMenu
   /** Total designs across all pages, for the "N designs" count. */
   totalCount?: number
   currentPage?: number
@@ -73,6 +74,8 @@ export default function ShopGrid({
   const [sort, setSort] = useState<SortKey>("featured")
   const [open, setOpen] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
+  const [colourOpen, setColourOpen] = useState(false)
+  const colourRef = useRef<HTMLDivElement>(null)
 
   // Sort acts on the current page; "Featured" keeps the catalogue order.
   const sorted = useMemo(() => {
@@ -108,8 +111,57 @@ export default function ShopGrid({
 
   return (
     <div className="space-y-5">
-      <div className={selectors ? "fl-shop-toolbar" : "flex justify-end"}>
+      <div className={selectors ? `fl-shop-toolbar${colourMenu ? " fl-shop-toolbar--colour" : ""}` : "flex justify-end"}>
         {selectors}
+
+        {colourMenu ? (
+          // Phone color, like BURGA: a fourth control, under Model on phones and in the same row on desktop
+          <div
+            ref={colourRef}
+            className="relative min-w-0"
+            onBlur={(e) => {
+              if (!colourRef.current?.contains(e.relatedTarget as Node)) setColourOpen(false)
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setColourOpen((v) => !v)}
+              aria-label={`Phone color: ${colourMenu.name}`}
+              aria-haspopup="true"
+              aria-expanded={colourOpen}
+              className="fl-shop-filter h-full w-full"
+            >
+              <span className="min-w-0">
+                <span className="fl-shop-filter__label">Phone color</span>
+                <span className="fl-shop-filter__value">
+                  <span className="fl-shop-swatch" style={{ backgroundColor: colourMenu.hex }} aria-hidden="true" />
+                  {colourMenu.name}
+                </span>
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`shrink-0 transition-transform ${colourOpen ? "rotate-180" : ""}`}>
+                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {colourOpen ? (
+              <ul className="absolute left-0 z-30 mt-2 min-w-[200px] overflow-hidden rounded-[12px] border border-line bg-paper py-1 shadow-[0_18px_40px_-12px_rgba(26,22,37,0.28)]">
+                {colourMenu.options.map((o) => (
+                  <li key={o.slug}>
+                    <Link
+                      href={o.href}
+                      prefetch={false}
+                      aria-current={o.current ? "true" : undefined}
+                      onClick={() => setColourOpen(false)}
+                      className={`flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-surface ${o.current ? "font-semibold text-purple" : "text-ink"}`}
+                    >
+                      <span className="fl-shop-swatch" style={{ backgroundColor: o.hex }} aria-hidden="true" />
+                      {o.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         <div
           ref={boxRef}
@@ -179,8 +231,6 @@ export default function ShopGrid({
           <p className="fl-shop-count">{count} {count === 1 ? "design" : "designs"}</p>
         ) : null}
       </div>
-
-      {colourRow}
 
       {!selectors ? <p className="text-[12px] text-ink-muted sm:text-sm">{count} {count === 1 ? "design" : "designs"}</p> : null}
 

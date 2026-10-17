@@ -699,6 +699,7 @@ function shopView({ cards, colourPalette = palette }) {
   const { default: ShopView } = load(path.join(src, "components/shop-view.tsx"), (name) => {
     if (name === "react/jsx-runtime") return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) }
     if (name === "@/lib/audience") return audience
+    if (name === "@/lib/phone-colours") return lib
     if (name.startsWith("@/components/")) return { __esModule: true, default: name }
     if (name === "@/lib/catalog") return {
       getDeviceCatalog: async () => [device],
@@ -730,61 +731,39 @@ test("shop cards: the colour's picture when a design has it, its own otherwise; 
   assert.equal(grid.totalCount, 2, "a colour never filters")
   assert.equal(grid.colourQuery, "&color=silver")
   assert.equal(grid.pageBase, "/shop/iphone-17-pro-max/signature/silver/", "page links keep the colour")
-  assert.equal(grid.colourRow.type, "@/components/shop-colour-row")
-  assert.deepEqual(plain(grid.colourRow.props), { palette, current: "silver", deviceSlug: "iphone-17-pro-max", caseTypeSlug: "signature", pageCaseTypeSlug: "signature" })
+  assert.deepEqual(plain(grid.colourMenu), plain(lib.shopColourMenu({ palette, current: "silver", deviceSlug: "iphone-17-pro-max", caseTypeSlug: "signature", pageCaseTypeSlug: "signature" })))
+  assert.equal(grid.colourMenu.name, "Silver")
 
   const colourless = await shopView({ cards }).ShopView({ deviceSlug: "iphone-17-pro-max" })
   const plainGrid = colourless.props.children[1].props
   assert.equal(plainGrid.products[0].variants[0].metadata.images[0], "https://img.florayn.com/muse/main.webp", "colourImage only counts on a colour page")
   assert.equal(plainGrid.colourQuery, undefined)
   assert.equal(plainGrid.pageBase, "/shop/iphone-17-pro-max/signature/", "page links as before: the case type in view")
-  assert.equal(plainGrid.colourRow.props.current, null)
-  assert.equal(plainGrid.colourRow.props.pageCaseTypeSlug, null)
+  assert.equal(plainGrid.colourMenu.name, "Deep Blue", "the colour-less page is the default colour")
+  assert.equal(plainGrid.colourMenu.options[0].href, "/shop/iphone-17-pro-max/", "the default links to this page's colour-less path")
   const down = await shopView({ cards, colourPalette: null }).ShopView({ deviceSlug: "iphone-17-pro-max", caseTypeSlug: "signature" })
-  assert.equal(down.props.children[1].props.colourRow, undefined, "a failed palette read: no row")
+  assert.equal(down.props.children[1].props.colourMenu, undefined, "a failed palette read: no menu")
   const noSet = await shopView({ cards, colourPalette: { caseType: "signature", default: null, colours: [] } }).ShopView({ deviceSlug: "iphone-17-pro-max" })
-  assert.equal(noSet.props.children[1].props.colourRow, undefined, "a model without a Mockup set sends no row at all")
+  assert.equal(noSet.props.children[1].props.colourMenu, undefined, "a model without a Mockup set sends no menu at all")
   const single = { ...palette, colours: palette.colours.map((c, i) => [c[0], c[1], c[2], i === 0 ? 1 : 0]) }
-  assert.equal((await shopView({ cards, colourPalette: single }).ShopView({ deviceSlug: "iphone-17-pro-max" })).props.children[1].props.colourRow, undefined, "one available colour is no choice")
+  assert.equal((await shopView({ cards, colourPalette: single }).ShopView({ deviceSlug: "iphone-17-pro-max" })).props.children[1].props.colourMenu, undefined, "one available colour is no choice")
 })
 
-function renderColourRow(props, mode = "women") {
-  const audience = load(path.join(src, "lib/audience.ts"), none("lib/audience.ts"))
-  const { default: ShopColourRow } = load(path.join(src, "components/shop-colour-row.tsx"), (name) => {
-    if (name === "react/jsx-runtime") return require(name)
-    if (name === "@/lib/phone-colours") return lib
-    if (name === "@/components/audience-link") return {
-      __esModule: true,
-      default: ({ href, prefetch, ...rest }) => React.createElement("a", { ...rest, href: audience.withAudience(href, mode), "data-prefetch": String(prefetch) }),
-    }
-    throw new Error(`Unexpected dependency ${name}`)
-  })
-  return renderToStaticMarkup(React.createElement(ShopColourRow, props))
-}
-
-test("the shop row: plain links for available colours, the default to the colour-less page, page 1, no prefetch", () => {
+test("the shop Phone color menu: available colours only, the default to the colour-less page, page 1", () => {
   const props = { palette, current: "silver", deviceSlug: "iphone-17-pro-max", caseTypeSlug: "signature", pageCaseTypeSlug: "signature" }
-  const html = renderColourRow(props)
-  const links = [...html.matchAll(/<a ([^>]*)>/g)].map(([, attrs]) => Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k, v]) => [k, v])))
-  assert.deepEqual(links.map((a) => [a["aria-label"], a.href]), [
-    ["Deep Blue", "/shop/iphone-17-pro-max/signature/"],
-    ["Silver", "/shop/iphone-17-pro-max/signature/silver/"],
-    ["Sage", "/shop/iphone-17-pro-max/signature/sage/"],
-  ], "Cosmic Orange has no pictures yet, so no link")
-  assert.deepEqual(links.map((a) => a["aria-current"]), [undefined, "true", undefined])
-  assert.ok(links.every((a) => a["data-prefetch"] === "false"))
-  assert.match(html, /Phone color<span class="fl-shop-colours__name">Silver<\/span>/)
-  assert.match(html, /<ul class="fl-colour-dots" aria-label="Phone color">/)
-  assert.match(html, /background-color:#b9c3a6/)
-
-  const home = renderColourRow({ ...props, current: null, pageCaseTypeSlug: null }, "men")
-  assert.match(home, /aria-current="true"[^>]*aria-label="Deep Blue"|aria-label="Deep Blue"[^>]*aria-current="true"/, "the colour-less page is the default colour")
-  assert.match(home, /href="\/men\/shop\/iphone-17-pro-max\/"/, "the default links to this page's colour-less path, in the mode")
-  assert.match(home, /href="\/men\/shop\/iphone-17-pro-max\/signature\/silver\/"/)
-
+  const menu = plain(lib.shopColourMenu(props))
+  assert.deepEqual(menu.options.map((o) => [o.label, o.href, o.current]), [
+    ["Deep Blue", "/shop/iphone-17-pro-max/signature/", false],
+    ["Silver", "/shop/iphone-17-pro-max/signature/silver/", true],
+    ["Sage", "/shop/iphone-17-pro-max/signature/sage/", false],
+  ], "Cosmic Orange has no pictures yet, so no option")
+  assert.deepEqual([menu.name, menu.hex], ["Silver", "#e3e4e5"])
+  const home = plain(lib.shopColourMenu({ ...props, current: null, pageCaseTypeSlug: null }))
+  assert.equal(home.name, "Deep Blue", "the colour-less page is the default colour")
+  assert.equal(home.options[0].href, "/shop/iphone-17-pro-max/")
   const one = { ...palette, colours: palette.colours.map((c, i) => [c[0], c[1], c[2], i === 0 ? 1 : 0]) }
-  assert.equal(renderColourRow({ ...props, palette: one }), "", "fewer than 2 available colours: no row")
-  assert.doesNotMatch(fs.readFileSync(path.join(src, "components/shop-colour-row.tsx"), "utf8"), /"use client"/, "a server component: no client code")
+  assert.equal(lib.shopColourMenu({ ...props, palette: one }), null, "fewer than 2 available colours: no menu")
+  assert.equal(lib.shopColourMenu({ ...props, palette: null }), null)
 })
 
 function loadShopGrid() {
@@ -818,7 +797,7 @@ test("a colour page keeps its colour in the page links and the card links; Quick
   })
   const html = renderToStaticMarkup(React.createElement(ShopGrid, {
     products: [product(0)], device: P17, deviceSlug: "iphone-17-pro-max", caseType: "Signature", caseTypeSlug: "signature",
-    colourQuery: "&color=silver", colourRow: React.createElement("div", { "data-colour-row": "" }), selectors: React.createElement("div", { "data-selectors": "" }),
+    colourQuery: "&color=silver", colourMenu: lib.shopColourMenu({ palette, current: "silver", deviceSlug: "iphone-17-pro-max", caseTypeSlug: "signature", pageCaseTypeSlug: "signature" }), selectors: React.createElement("div", { "data-selectors": "" }),
     totalCount: 70, currentPage: 1, totalPages: 3, routePath: "/shop/iphone-17-pro-max/signature/silver/", pageBase: "/shop/iphone-17-pro-max/signature/silver/",
   }))
   assert.match(html, /href="\/shop\/iphone-17-pro-max\/signature\/silver\/2\/"/)
@@ -827,7 +806,11 @@ test("a colour page keeps its colour in the page links and the card links; Quick
   assert.match(html, /data-variant="variant-0"/, "the same variant as the colour-less page")
   assert.match(html, /data-thumbnail="\/audit\/design-0\/main\.webp"/, "Quick Add puts the main colour in the bag, so the drawer line never flips")
   assert.doesNotMatch(html, /data-thumbnail="\/audit\/design-0\/silver\.webp"/)
-  assert.ok(html.indexOf("data-selectors") < html.indexOf("data-colour-row") && html.indexOf("data-colour-row") < html.indexOf('class="fl-grid"'), "the row sits directly under the toolbar")
+  assert.match(html, /class="fl-shop-toolbar fl-shop-toolbar--colour"/, "a fourth control: 2 x 2 on phones, one row on desktop")
+  const colourAt = html.indexOf('aria-label="Phone color: Silver"')
+  assert.ok(colourAt > 0, "the Phone color menu shows the page's colour")
+  assert.ok(html.indexOf("data-selectors") < colourAt && colourAt < html.indexOf("Sort designs on this page") && colourAt < html.indexOf('class="fl-grid"'), "Model and Case type, then Phone color, then Sort")
+  assert.ok(!html.includes("/signature/sage/"), "the menu's links render only when it is opened")
 
   const colourless = renderToStaticMarkup(React.createElement(ShopGrid, {
     products: [product(0)], device: P17, deviceSlug: "iphone-17-pro-max", caseType: "Signature", caseTypeSlug: "signature",

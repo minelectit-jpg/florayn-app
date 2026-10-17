@@ -269,10 +269,13 @@ model's default colour redirects (307) to the colour-less page, and a failed
 palette read shows the colour-less pictures. The canonical URL never has the
 colour; colour paths are not in the sitemap or the warm job.
 
-- `ShopColourRow` (a server component of plain links, `prefetch={false}`) sits
-  under the toolbar when 2 or more colours have pictures; the default colour
-  links to the colour-less page. Models without a set get no row and no extra
-  RSC data.
+- The toolbar's **Phone color** menu appears when 2 or more colours have
+  pictures. `shopColourMenu` (`lib/phone-colours.ts`) builds it on the server
+  and `shop-grid.tsx` shows it, with links set to `prefetch={false}`. The
+  default colour links to the colour-less page. It follows BURGA (owner,
+  2026-10-17): on phones, Model + Case type sit on the first row and Phone
+  color + Sort on the second; on desktop all four share one row. Models
+  without a set get no menu and no extra RSC data.
 - Each card still gets one picture: `colourImage` when the design has that
   colour, else its own. Count, order, prices and Quick Add variants are those
   of the colour-less page. Card links add `&color=<slug>`; page links keep the

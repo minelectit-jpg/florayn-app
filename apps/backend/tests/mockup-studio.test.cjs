@@ -519,10 +519,10 @@ test("the reducer: one gesture is one undo step, and undo walks back", () => {
 test("the reducer: steps, picks and Make another", () => {
   let s = wiz.initialState()
   s = wiz.reducer(s, { type: "go", step: "details" })
-  assert.equal(s.dir, 1); assert.equal(s.reached, 3)
+  assert.equal(s.dir, 1); assert.equal(s.reached, 2) // Design (with placement), Models, Details
   s = wiz.reducer(s, { type: "errors/show" })
   s = wiz.reducer(s, { type: "go", step: "models", fromReview: true })
-  assert.equal(s.dir, -1); assert.equal(s.reached, 3); assert.equal(s.fromReview, true); assert.equal(s.showErrors, false)
+  assert.equal(s.dir, -1); assert.equal(s.reached, 2); assert.equal(s.fromReview, true); assert.equal(s.showErrors, false)
   const A = { device: "a", colours: ["Black"], default_colour: "Black" }
   const B = { device: "b", colours: ["Black", "Silver", "Glacier"], default_colour: "Black" }
   s = wiz.reducer(s, { type: "pick/toggle", set: A })
@@ -986,4 +986,15 @@ test("ZIPs: one model in one colour is flat, several colours or models get a <de
     ["Wine Red", 5, "iphone-18-pro-max_wine-red/05-camera-close-up_1200.png"], ["Wine Red", 1, "iphone-18-pro-max_wine-red/01-front-design_1200.png"],
   ])
   assert.equal(items[2].full, false)
+})
+
+test("four steps: the design is placed in step 1, and stock is checked only when Details asks for it", () => {
+  assert.equal(JSON.stringify(wiz.STEPS.map((x) => x.id)), JSON.stringify(["design", "models", "details", "review"]))
+  let s = wiz.initialState()
+  s = wiz.reducer(s, { type: "details", patch: { name: "Bloom", slug: "bloom", slugTouched: true, stock: "x" } })
+  assert.equal(wiz.fieldErrors(s, "free").stock, "Enter a whole number, 0 or more.")
+  assert.equal(wiz.fieldErrors(s, "free", false).stock, undefined, "every blank exists: no stock field, nothing to check")
+  const ctx = { chosen: [], metas: {}, slugState: "free", deviceName: (x) => x }
+  assert.match(wiz.stepErrors(s, ctx).details, /whole number/)
+  assert.equal(wiz.stepErrors(s, { ...ctx, stockShown: false }).details, undefined)
 })

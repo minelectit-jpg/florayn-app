@@ -113,11 +113,17 @@ exact, not a resized image.
   colours are the shop's phone colour palette (PHONE_COLOURS.md), so saving
   refreshes the storefront. Nothing is uploaded here (the owner: designs are
   the only upload).
-- **New product**: a five-step wizard with a sticky stepper and a sticky
-  Back / Continue footer:
+- **New product**: a four-step wizard with a sticky stepper and a sticky
+  Back / Continue footer (placing the design moved into step 1, owner
+  2026-10-17):
   1. **Design**: one flat image (PNG, JPG or WebP, up to 60 MB and 12,000 px;
      also drop or paste). The stage shows the real case at once, with a
-     placeholder design until the upload.
+     placeholder design until the upload. Once it is in, the same step places
+     it: drag on the phone on any angle (the shot's `uv` layer says which
+     artwork point is under the pointer), scroll or pinch to zoom, or use the
+     sliders and the flat print preview. One position for every model and
+     colour; the design always covers the whole print of every model in the
+     Mockup sets (of the chosen ones once models are picked).
   2. **Models**: one, several or all, each with the phone colours to make
      pictures in (the colour only changes the pictures, not what is sold).
      A model's chips are checkboxes: a ring when ticked, a "Main" pip on the
@@ -130,14 +136,14 @@ exact, not a resized image.
      sets · 1,521 pictures · about 71 MB · about 25 min" (about 47 KB and one
      second per 1200 px shop picture). The stage's chip row on the other steps
      only switches the colour shown, it ticks nothing.
-  3. **Placement**: drag on the phone on any angle (the shot's `uv` layer says
-     which artwork point is under the pointer), scroll or pinch to zoom, or
-     use the sliders and the flat print preview. One position for every model
-     and colour; the design always covers the whole print.
-  4. **Details**: title (= design name), URL (checked as you type), collection
-     (existing or new), starting stock, description. When the URL is taken:
+  3. **Details**: title (= design name), URL (checked as you type), collection
+     (existing or new), description, and stock only when a chosen model has no
+     blank case yet for the case type. Stock is per case type × model and
+     shared by every design: `GET /admin/stock` says which blanks exist (if
+     that read fails the field is shown anyway), and Admin > Stock changes it
+     later. When the URL is taken:
      "This design already exists. Update its pictures instead" (below).
-  5. **Review & publish**: every picture of every model, full-size view,
+  4. **Review & publish**: every picture of every model, full-size view,
      downloads, then Create draft / Publish product (Update pictures). A
      model with several colours has colour tabs (main first, badged); only the
      shown tab's tiles are made. Every colour of a model uses the gallery
